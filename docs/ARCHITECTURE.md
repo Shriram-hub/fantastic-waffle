@@ -1,53 +1,58 @@
-# Orbit v0.1: implementation and next milestones
+# Orbit v0.2 architecture
 
-## Product boundary
+## Running topology
 
-The first prototype is a working personal workspace with explicit sample data and optional external adapters. It validates the job-seeker journey before building a multi-user SaaS product. User data remains on the app server; browsers receive only public workspace fields. Provider credentials are never committed or returned by the API.
+React/Vite calls a same-origin Node 24 API. The API validates input and writes durable relational records and outbox tasks to SQLite. A separate worker processes CPU-heavy résumé extraction, HTTP provider imports, model requests, inbox sync/classification, verification, and paced email delivery. BullMQ/Redis can dispatch those same durable task IDs; SQLite remains the source of task/domain state.
 
-## Architecture
+| Module                       | Responsibility                                                                                                                   |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `web/src/App.jsx`            | React workspace views, forms, previews and visible task state.                                                                   |
+| `server/index.mjs`           | HTTP boundary, authentication, origin controls, static build, core profile/tracker APIs.                                         |
+| `server/upgrades.mjs`        | Queue-oriented APIs, OAuth routes, authenticated webhooks, extension pairing, private/public file routes.                        |
+| `server/store.mjs`           | Migration, relational entities/indexes, request-local snapshots, per-record compare-and-swap.                                    |
+| `server/queue.mjs`           | Durable tasks, atomic claims, leases, retry/cancel rules, logs, ambiguous-send holds.                                            |
+| `server/worker.mjs`          | Task registry, separate worker, optional BullMQ dispatcher, inbox watch renewal.                                                 |
+| `server/providers/jobs/`     | Core ATS/public feeds, Ashby/Arbeitnow/Adzuna adapters, canonical deduplication.                                                 |
+| `server/providers/contacts/` | Current Apollo search/enrichment; Hunter work-email verification and role targeting.                                             |
+| `server/providers/mail/`     | Encrypted OAuth tokens, native MIME/Graph sends, history/delta cursors, watches; optional Resend.                                |
+| `server/services/`           | Structured model operations, semantic vectors, fact-preserving tailoring, inbox state machine, outreach, private résumé objects. |
+| `extension/`                 | Chrome MV3 pairing and user-initiated form filling.                                                                              |
+| `server/db/`                 | Drizzle PostgreSQL/pgvector target schema; export preparation, not runtime cutover.                                              |
 
-| Layer       | Implementation                                                   | Why                                                                     |
-| ----------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| Interface   | HTML, responsive CSS, browser ES modules, hash navigation        | No bundler, framework, client dependencies, or external asset services. |
-| API         | Node 24 HTTP server, fixed routes, JSON validation               | One start command; no separate frontend/backend deployment.             |
-| Persistence | Native `node:sqlite`, one versioned workspace document           | Durable state with atomic document updates; no database provisioning.   |
-| Files       | Original résumé bytes in the private database                    | No public upload directory; file download is authenticated.             |
-| Job sources | Fixed provider hosts and validated company-board slugs           | No arbitrary server fetch endpoints or job-board scraping.              |
-| Contacts    | Manual/CSV input plus separate Apollo search/enrichment          | Distinguishes finding people from paying for and verifying an email.    |
-| Messaging   | Personalized preview snapshots, Resend, durable recipient states | Approval binds to the actual content and recipients.                    |
+## Persistence and concurrency
 
-## State transitions
+Profiles, résumés, jobs, applications, contacts, campaigns, and inbox updates each have their own relational table. Each record retains a JSON body for evolving metadata; application job references, unique job tracking, email indexes, stages, and queue scheduling have explicit columns/indexes. This is no longer a single JSON workspace row.
 
-The workspace holds a profile, résumé, jobs, applications, contacts, campaigns, email updates, settings, source refresh records, and expiring previews. User-created records use UUIDs; job IDs include the provider and company slug.
+Each API request and worker handler receives a snapshot in AsyncLocalStorage. Saves write only changed records and reject a stale edit to the same row. Independent edits in separate processes do not overwrite one another. Queue claims use an immediate transaction and unique lease token; stale workers cannot finish another worker’s claim.
 
-An application has a job, stage, notes, timestamps, and history. Batch preparation only changes Saved/Ready stages. It never overwrites Applied, Interview, Offer, Rejected, or Withdrawn. Users record actual submission after completing the employer’s form.
+The durable outbox and campaign approval are committed atomically. Outbound jobs are not automatically reclaimed and resent after an expired lease. Accepted/sending/unknown recipient attempts block duplicates. Retryable read-only work has bounded backoff. Unknown sends require provider reconciliation rather than blind retries.
 
-Campaigns move from Draft to Reviewed and, if configured and approved, to Accepted by provider or Needs attention. Per-recipient states are `sending`, `accepted`, `failed`, or `unknown`. A record is saved before each request. On restart, `sending` becomes `unknown`. Accepted/sending/unknown recipients are not automatically repeated. Explicit provider rejections can be retried with the stable idempotency key. Campaigns with delivery attempts cannot be edited.
+## Application assistance
 
-Email import creates a suggestion. Users explicitly link the message to an application and approve or dismiss the suggested stage.
+The API only queues allowlisted ATS/job-page destinations. A paired extension receives an expiring task lease and the approved profile/answer bank. It fills recognized standard controls, can attach the résumé, and reports missing fields or a challenge. It never presses Submit or invents an eligibility answer. The owner records an employer receipt/reference after submitting. Generic headless submission workers are not implemented.
 
-## Controls implemented
+## Inbox state machine
 
-Local binding is the default. Remote binding requires a workspace password, and optional `ALLOWED_HOSTS` is supported. Writes require JSON and reject cross-origin/cross-site requests. Static paths are allowlisted, uploaded files are not served as web content, and user text is escaped under a restrictive Content Security Policy. CSV exports neutralize leading spreadsheet formula characters.
+Authenticated provider notifications are wake-ups. Gmail history IDs and Graph delta links retrieve message data incrementally. Initial Gmail sync captures its starting history cursor before paging, avoiding the loss of messages received during that scan. Notifications and stored message IDs are deduplicated.
 
-Résumé uploads have size, type, and signature checks. DOCX extraction reads a bounded ZIP entry without extracting paths. PDF extraction invokes an installed executable with fixed arguments, a timeout, and no shell. No uploaded code or macros execute.
+Outreach reply detection runs even when a message is not a status update. Application classification is prefiltered by ATS/subject signals or known company/role context. Optional model classification uses a strict schema and exact evidence quote, and is separately enabled because it transmits email content to the model provider.
 
-## Known limits
+Automatic stage updates are opt-in. They require a unique role match, current timestamp, a nonterminal existing state, and a supported forward transition. Ambiguous, old, or terminal-stage messages remain in review. The model does not choose an arbitrary application ID.
 
-SQLite stores one workspace per database, so migrate before large datasets or concurrent users. Single-process locks do not coordinate multiple server instances. Sends happen within a request rather than a durable queue. Daily limits use UTC. Connection statuses indicate configuration, not verified credentials. Greenhouse/Lever cover selected company boards, not every employer. Work mode may be inferred from location text and must be checked on the original posting.
+## Résumé matching and generation
 
-No real browser visual/interaction pass or credentialed provider verification was available in this environment. Automated rendering checks run in Node, not a browser. Adapter tests use documented response shapes rather than your provider plan access.
+Keyword scores explain their inputs. Optional embedding requests compute real cosine similarity, cache model/content fingerprints, and invalidate displayed scores when the résumé or job text changes. SQLite stores vectors for this first stage. The PostgreSQL target defines a pgvector cosine index with 1536 dimensions and must be adapted to the selected model before migration.
 
-## Next implementation milestones
+Structured extraction produces suggestions, never an automatic profile overwrite. The Tailor action highlights and reorders relevant existing bullets verbatim and retains the original text. It creates a printable HTML version rather than inventing missing skills or experience. A reviewed browser print can save it as PDF.
 
-| Milestone                         | Deliverable                                                                                       | Completion check                                                                             |
-| --------------------------------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Browser and provider verification | Desktop/mobile QA, read-only job/Apollo smoke tests, one controlled email to an owned test inbox  | Record screenshots, API access results, attachment delivery, and errors.                     |
-| Accounts and private storage      | Sign-in, per-user relational records, private file storage, deletion                              | Two accounts cannot read one another’s data.                                                 |
-| Wider job coverage                | Licensed aggregator APIs, cross-source deduplication, freshness checks, saved searches            | Listings have source URLs, timestamps, and explicit eligibility information.                 |
-| Inbox connections                 | Gmail/Microsoft OAuth, encrypted tokens, incremental sync, reviewed role matching                 | A real email yields a reviewable update for the correct role.                                |
-| Durable outreach                  | Background queue, verified provider webhooks, unsubscribe/bounce processing, pause/reconciliation | Restarts cannot duplicate a send; acceptance, delivery, bounce, and reply remain distinct.   |
-| Assisted application completion   | Supported per-ATS adapters, field mapping, tailoring, review before submission                    | Missing screening/eligibility answers block submission; a confirmation ID proves submission. |
-| Production operations             | Deployment, backups/restore, migrations, monitoring, quotas and billing, accessibility review     | Restore a workspace and complete the journey with an independent account.                    |
+## Outreach lifecycle
 
-Automatic job application support depends on employer/ATS access and variable screening questions. Implement and verify it per provider rather than claiming universal one-click submission.
+Campaign previews include the sender account, each personalized message, attachment, and follow-up text. Approval binds to those inputs. Sending is opt-in at the server and campaign levels. A durable queue enforces caps, business windows, and paced dispatch, with a shared account budget/lease so multiple workers do not burst sends together.
+
+One approved follow-up uses native thread identifiers, checks the inbox before dispatch, and stops on a detected reply, suppression, pause, invalid approval, missing account, or unknown original send. Recipient verification provenance remains visible: imported labels are not independent Orbit verification. Link-request counts are not presented as recruiter reads.
+
+## Production work still required
+
+Multi-user account sign-in, tenant isolation, async PostgreSQL repositories and runtime cutover, paginated SQL queries for large datasets, bounce/delivery webhooks, comprehensive unsubscribe handling, file-retention/deletion, real provider acceptance tests, Chrome/form QA, Redis/Docker validation, and operational backup/restore remain required before offering a public SaaS service.
+
+Mailbox OAuth is account authorization for a personal workspace. Basic Authentication is retained for the workspace owner; it is not presented as Clerk/NextAuth or a multi-user login system.

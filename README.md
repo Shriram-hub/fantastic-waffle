@@ -1,140 +1,140 @@
-# Orbit · Your next chapter
+# Orbit v0.2 · Career workspace
 
-A runnable first prototype for finding relevant jobs, preparing multiple applications, tracking progress, sourcing company contacts, and sending reviewed, personalized résumé outreach.
+A working personal workspace for job discovery, résumé preparation, application tracking, browser-assisted filling, inbox updates, company contacts, and reviewed outreach.
 
-The app opens with a **clearly labeled fictional sample workspace**. Choose **Start my workspace** to replace it with your own information. No API keys are needed to explore it.
+This upgrade follows the brief’s **SQLite-first implementation sequence**. It replaces the single JSON workspace row with relational tables, moves slow work into a separate process, and replaces the vanilla frontend with React + Vite + Tailwind. It includes a PostgreSQL/pgvector schema and a core-record export tool; **PostgreSQL is not the running API/worker database yet**. OAuth connects mailboxes; it is not multi-user application sign-in.
 
-## Run locally
+## Start locally
 
-Requires **Node.js 24 or newer**. The application has **no third-party runtime dependencies** and no build step.
+Requires **Node.js 24+**.
 
 ```bash
-git clone https://github.com/Shriram-hub/fantastic-waffle.git
+git clone -b codex/orbit-prototype https://github.com/Shriram-hub/fantastic-waffle.git
 cd fantastic-waffle
-# While the prototype pull request is open:
-git checkout codex/orbit-prototype
+npm ci
+npm run dev
+```
+
+Open **http://127.0.0.1:5173**. The development command starts the React development server, API on port 3000, and a separate worker. Close it with Ctrl+C. The initial workspace is prominently labeled fictional sample data. Choose **Start my workspace** for your own information.
+
+For a production build locally, use two terminals:
+
+```bash
+# Terminal 1: builds the frontend, then starts the API
 npm start
+
+# Terminal 2: processes queued work
+npm run worker
 ```
 
-Open **http://127.0.0.1:3000**. Data persists in `data/orbit.sqlite` across restarts. Keep this directory private and back it up if needed.
+Open **http://127.0.0.1:3000**. Without the worker, imports, parsing, matching, and sends remain visibly queued.
 
-For optional integrations, copy `.env.example` to `.env` and restart. On macOS/Linux use `cp .env.example .env`; on PowerShell use `Copy-Item .env.example .env`. Keys stay on the server; the browser sees only connection booleans.
+Copy `.env.example` to `.env` to configure optional services. No provider credentials are necessary for the sample workspace, manual tracking, TXT/DOCX parsing, printable résumé tailoring, or email draft downloads. PDF text extraction uses optional Poppler `pdftotext`; Docker includes it. Without Poppler, the PDF remains stored and attachable and you can paste its text.
 
-## Implemented workflows
+## What is implemented
 
-| Workflow        | What works in v0.1                                                                                                                                                               |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Profile         | Save personal details, skills, target roles, location, work style, portfolio, and work-authorization notes.                                                                      |
-| Résumé          | Upload PDF, DOCX, or TXT up to 5 MB. Review extracted text and detected email/skills before adding suggestions. Download the original.                                           |
-| Discovery       | Remotive public feed; selected Greenhouse and Lever company boards; search/filter; manual jobs from other boards.                                                                |
-| Recommendations | Explained keyword score: skills 60%, role-title terms 25%, location 5%, work style 10%. No score until you supply skills or roles.                                               |
-| Preparation     | Select up to 50 jobs, prepare them together, download personalized text packets, and open employer forms.                                                                        |
-| Tracker         | Board/list views; seven stages; notes and stage history; CSV export.                                                                                                             |
-| Email updates   | Paste an email, choose its application, review a rule-based suggestion, and explicitly apply or dismiss it.                                                                      |
-| Contacts        | Import up to 500 CSV rows with duplicate/error reporting; manual contacts; Apollo search; separate enrichment; suppression.                                                      |
-| Outreach        | Create/edit campaigns for up to 100 recipients, personalize variables, attach the uploaded résumé, review every message, download unsent `.eml` drafts.                          |
-| Sending         | Optional Resend adapter; separate enable switch, fresh preview, recipient-count approval, verified-address gating, suppression, per-recipient results, and duplicate protection. |
+| Area              | Working implementation                                                                                                                                                                                                                                  |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Interface         | React components, Vite production build, Tailwind + retained Orbit styles, responsive views, explicit connection/queue status.                                                                                                                          |
+| Persistence       | Relational SQLite tables, v1 migration, foreign keys and indexes, request-scoped snapshots, per-record conflict checks across API/worker processes.                                                                                                     |
+| Workers           | Durable SQLite task outbox, atomic claims, expiring leases, logs, cancellation, backoff for retryable tasks, separate worker process. Optional Redis + BullMQ dispatch.                                                                                 |
+| Job feeds         | Remotive, selected Greenhouse/Lever/Ashby boards, Arbeitnow, and optional Adzuna. Canonical company/title/location deduplication preserves application-linked IDs and source provenance.                                                                |
+| Résumé vault      | Background TXT/DOCX/PDF extraction, reviewed skill suggestions, optional schema-validated model extraction, private local/S3/R2 files, printable fact-preserving versions.                                                                              |
+| Matching          | Explained keyword scores plus optional real embedding/cosine matching. Scores retain model/content fingerprints and invalidate when source text changes.                                                                                                |
+| Browser assistant | Chrome MV3 extension, expiring/revocable pairing tokens, destination checks, approved-field filling, résumé attachment, unknown-question reporting, verification-challenge stop, user-confirmed submission reference.                                   |
+| Inbox             | Google/Microsoft OAuth with PKCE and encrypted tokens, Gmail history and Graph delta sync, push webhook handlers, watch renewals, rule-based classification and optional structured model classification.                                               |
+| Tracker           | Board/list views, notes/history, assessment stage and extracted deadlines, reviewed or opt-in conservative automatic updates, CSV export.                                                                                                               |
+| Contacts          | CSV/manual records, contextual Apollo targeting, separate paid enrichment, optional Hunter verification, catch-all/invalid blocking, suppression, evidence-checked AI opening lines for review.                                                         |
+| Outreach          | Saved/edited drafts, per-recipient previews and `.eml` downloads, native Gmail/Outlook sends or Resend, durable scheduled sends, 30/day default cap (maximum 50), business-hour pacing, one approved threaded follow-up, reply/suppression/pause stops. |
+| Résumé links      | Explicitly approved unlisted seven-day links, revocation, file-version binding, request counts labeled as requests rather than proof of human reading.                                                                                                  |
 
-**Not implemented:** automatic employer-site submission; LinkedIn/Indeed/Naukri/Wellfound imports or scraping; mailbox scanning and Gmail/Outlook OAuth; scheduled campaigns; delivery/open tracking; multi-user accounts; production send queue. These are presented as planned or external-link workflows, never connected services.
+**Still separate milestones:** multi-user sign-in/isolation, PostgreSQL runtime cutover, broader licensed aggregator coverage such as JSearch/SerpApi, generic headless auto-submit workers, a rich-text multi-step sequence builder, bounce/delivery webhooks and automatic unsubscribe parsing, file-retention cleanup, and production deployment/operations review. There is no universal ATS application-submission claim.
 
-## Five-minute walkthrough
+## Five-minute workflow
 
-1. Explore the overview, jobs, and tracker. All sample companies, vacancies, compensation, contacts, and activity are fictional.
-2. Choose **Start my workspace**. Save your profile, upload a résumé, review detected details, and enter your interests.
-3. In **Connections**, refresh Remotive or configure company board slugs for Greenhouse/Lever. Provider/network failures show an error and preserve existing data. You can always **Add a job** using a link found elsewhere.
-4. In **Find jobs**, select opportunities and choose **Prepare applications**. Download a packet in the tracker. Open the employer form, apply there, then update the stage to **Applied**.
-5. Import contacts or configure Apollo. In **Outreach**, select recipients, write your message, attach the résumé, and **Review campaign**. Download drafts without any email API configuration.
-6. In **Email updates**, paste an interview invitation. The tracker changes only when you accept the suggestion.
+1. Explore the fictional sample, then start a personal workspace. Save your real profile, target roles, skills, links, notice period, salary expectation, and exact approved screening answers.
+2. Upload a résumé. Watch extraction in **Automation**, review its text/suggestions, and optionally request structured extraction. Nothing inferred by a model silently replaces your profile.
+3. Save company board slugs in **Connections**. Refresh job sources in **Job feed**, choose jobs, and prepare multiple applications. Keyword matching works without a model key; semantic matching requires confirmation and an embedding model.
+4. Choose **Browser-assisted fill**, pair the extension, and open one queued form. Review all fields, complete unknown questions or verification directly, and submit yourself. Record the employer’s confirmation in Orbit.
+5. Connect a mailbox or paste email updates. Automatic stage changes are opt-in and require a unique role match. Assessment links and explicit dates appear in the dashboard.
+6. Find/import relevant contacts, enrich/verify selected work emails, and optionally draft an evidence-backed opening line. Preview initial and follow-up messages, attachments, sender account, and recipients before queueing.
 
-## Résumé extraction
+## Optional service configuration
 
-TXT and DOCX work out of the box. PDF extraction uses optional **Poppler `pdftotext`**. Install Poppler through your OS package manager or use the Docker image. Without it, the original PDF is saved and attachable; paste text in **Review extracted text**. Image-only PDFs need OCR, which is not included.
+See [provider setup](docs/SETUP.md) for exact callbacks, scopes, webhook authentication, and required infrastructure.
 
-Extraction produces reviewable suggestions using a small skill dictionary, not a full résumé assessment. Enter additional skills manually. Ranking uses your saved profile; there is no hidden model inference or hiring-probability claim.
+| Service                 | Environment values                                                                                    |
+| ----------------------- | ----------------------------------------------------------------------------------------------------- |
+| API hosting             | `HOST`, `PORT`, `DATA_DIR`, `WORKSPACE_PASSWORD`, `PUBLIC_BASE_URL`, optional `ALLOWED_HOSTS`         |
+| BullMQ dispatch         | `REDIS_URL`; API inserts into SQLite immediately, the worker publishes the outbox to Redis.           |
+| Apollo                  | `APOLLO_API_KEY`                                                                                      |
+| Work-email verification | `HUNTER_API_KEY`                                                                                      |
+| Adzuna                  | `ADZUNA_APP_ID`, `ADZUNA_APP_KEY`, `ADZUNA_COUNTRY`                                                   |
+| Model/embeddings        | `LLM_BASE_URL`, `LLM_API_KEY`, explicit `LLM_MODEL` and/or `EMBEDDING_MODEL`                          |
+| OAuth tokens            | `TOKEN_ENCRYPTION_KEY`: base64-encoded 32 bytes                                                       |
+| Google                  | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`; Pub/Sub values for push notifications                     |
+| Microsoft               | `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`                                                      |
+| Private object storage  | `S3_BUCKET`, `S3_REGION`, optional `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`          |
+| Optional Resend         | `RESEND_API_KEY`, plain verified `EMAIL_FROM`                                                         |
+| Real sending            | `ENABLE_LIVE_SEND=true`, configured sender, real verified recipients, and fresh per-campaign approval |
 
-## Job sources
+Model operations explicitly disclose that source text is sent to the configured provider and may incur usage charges. Mailbox model classification is separately opt-in. Apollo enrichment and Hunter verification each require confirmation. API configuration status is not proof that your credentials or provider plan have been validated.
 
-Remotive jobs retain source attribution and link to the original Remotive listing. Successful refreshes are cached for six hours. Do not run parallel instances to bypass refresh limits.
+## Browser extension
 
-For Greenhouse/Lever, enter the company slug from its public board URL. These adapters cover selected company boards, not every employer using a provider. Ten boards per provider are supported. A posting missing from a later successful sync is hidden from discovery and retained for application history.
+1. Open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select this repository’s `extension/` folder.
+2. Generate a pairing token in Orbit’s **Connections**. Enter the Orbit address and token in the extension popup. A deployed HTTPS origin requires a one-time browser permission for that origin.
+3. Queue supported opportunities and choose **Open & fill next application**. The extension operates one form per click in your actual browser session.
+4. After opening a multi-step form or completing a verification challenge yourself, use **Fill the current application again**. If the lease expires, requeue it in Automation.
+5. Review and submit manually. Only the owner’s explicit confirmation reference changes the browser task to confirmed/Applied. Revoke extension tokens when finished.
 
-Other major boards have external search links. No API partnership or universal job-market coverage is implied.
+Recognized fields on Greenhouse, Lever, Ashby, Workday and LinkedIn job pages are attempted; custom controls, embedded cross-origin frames, login walls, and multi-step flows can require manual completion. Tokens expire in 24 hours and are stored only in the extension’s session storage. CAPTCHA/verification challenges are never solved or bypassed.
 
-## Apollo contacts
+## Outreach behavior
 
-Set `APOLLO_API_KEY`. Search returns up to 25 people. Save selected results, then **Enrich** an individual contact to request a work email. **Enrichment may consume Apollo credits**; each lookup requires confirmation. Exact cost depends on your plan. Orbit does not request personal emails/phone numbers or guess missing addresses.
+Recipients receive individual messages. Sample, suppressed, missing, catch-all, invalid, and unverified addresses are blocked from real sending. **CSV “verified” labels are supplied by your source, not independently validated by Orbit**; use Hunter when independent verification is needed.
 
-Contact CSV format:
+Approved messages enter the durable outbox. The worker rechecks the contact, suppression, enabled sending, and approved content before dispatch. Default sending is 30 messages per account per UTC day, at most 50, with 3–8 minute pacing in the configured IANA time zone’s 09:00–11:00 weekday window. The time zone is explicit; the app does not guess a recipient’s location. Provider rules may require lower limits. Native OAuth and pacing do **not** guarantee primary-tab placement or prevent filtering.
 
-```csv
-name,email,company,title,email_status
-Jamie Chen,jamie@company.example,Example Company,Talent Partner,unverified
+One approved follow-up can be queued after four business days. Gmail uses the provider thread ID and reply headers; Outlook uses a reply draft. The worker synchronizes the inbox before a follow-up. A detected reply, suppression, pause, stale/disconnected account, or changed approved content cancels it. Automatic reply detection requires a functioning mailbox connection; Resend-only campaigns do not schedule follow-ups.
+
+Provider `accepted` means request acceptance, not confirmed delivery. Ambiguous network/provider outcomes and interrupted sends become `unknown` and are not automatically repeated. Reconcile them in the provider mailbox/dashboard. Automatic unsubscribe interpretation is not included; record those requests using Suppress.
+
+## Data and migration
+
+API and worker share `DATA_DIR` (default `./data`). On first v0.2 start, the legacy workspace is migrated transactionally into relational tables. Back up the directory before upgrading an existing personal workspace. Original résumé objects are moved out of the active résumé row by the worker into private local files or the configured S3/R2 bucket.
+
+The legacy source table is retained after migration for rollback inspection. Reset clears the active workspace and mailbox credentials, but retained legacy rows and orphaned local/S3 objects are not a complete data-erasure workflow; production retention/deletion remains a milestone. Running tasks block reset.
+
+PostgreSQL/pgvector targets are in `server/db/`. The optional, explicit **core-record export** is:
+
+```bash
+# Configure DATABASE_URL for the intended target, then:
+npm run db:export-postgres -- --confirm-export
 ```
 
-Only `email` is required. `verified` is the only value that marks a provider-verified email. **CSV verification labels are user-supplied, not independently validated by Orbit.** Manual contacts default to unverified. Sample addresses are preview-only. Quoted commas/newlines, doubled quotes, CRLF, and UTF-8 BOM are supported.
+This provisions the schema and exports profiles, jobs, applications, contacts, campaigns, résumé metadata, and compatible embeddings. It does not migrate mailbox secrets, task state, inbox history, public links, or file bytes, and does not switch the application runtime. The target embedding column is 1536 dimensions; select and validate your model before a real cutover.
 
-## Enable real email sending
+## Docker Compose
 
-Only configure this when you intend to send real campaigns:
-
-```dotenv
-RESEND_API_KEY=your-key
-EMAIL_FROM=you@your-verified-domain.com
-ENABLE_LIVE_SEND=true
+```bash
+cp .env.example .env
+# Set a long WORKSPACE_PASSWORD. Configure PUBLIC_BASE_URL for the intended origin.
+docker compose up --build
 ```
 
-Use a plain sender address on a Resend-verified domain. Save your real name/email in the profile. Live sending requires verified, non-sample recipients, a fresh preview, and explicit approval of the recipient count. Each person receives a separate message, not a shared To/CC list.
-
-Approval expires after ten minutes and is invalidated by profile, résumé, campaign, or contact changes. Messages include sender identity and an opt-out instruction. Use **Suppress** to record unsubscribe replies; automatic reply processing is not included.
-
-The prototype paces requests and caps sending at **100 messages per UTC day**. `accepted` means the provider accepted a request, not confirmed inbox delivery. Ambiguous network/provider failures become `unknown` and are never automatically resent. Reconcile these in Resend. Durable sends require the queue/webhook milestone described in the architecture document.
+Compose runs API, worker, and Redis with persistent volumes. The API is exposed only at `127.0.0.1:3000`; add an HTTPS reverse proxy for remote use. API and worker must share the SQLite database/private-file volume. This is a personal-workspace deployment, not horizontally scaled multi-user SaaS.
 
 ## Verification
 
 ```bash
 npm run check
+npm run build
 npm test
 ```
 
-Tests cover real HTTP routes, SQLite persistence, résumé parsing, CSV import, matching, adapter response shapes, previews and attachments, review invalidation, suppression, concurrent-send blocking, duplicate protection, crash recovery, and page rendering/escaping. Providers are mocked: tests never send email or consume Apollo credits.
+Tests exercise migration, actual HTTP routes, cross-connection updates/claims, a real separate worker process, private file storage, model/provider response handling, OAuth state/encryption, cursor safety, suppression and duplicate prevention, reply-stopped follow-ups, extension permissions/submission boundaries, and React server rendering/escaping.
 
-A read-only smoke test also fetched the live Remotive feed successfully.
+Credentialed provider tests, actual Chrome/form interaction and visual QA, Redis/Docker deployment, and PostgreSQL export were not available in this environment. Provider tests use mocks and do not send real email or consume credits. React rendering tests are not a browser test.
 
-**Limit:** no real browser visual/interaction pass or credentialed provider smoke test was available in this environment. Automated template checks run in Node, not a browser. CI runs the syntax and test suite on Node 24.
-
-## Docker
-
-```bash
-docker build -t orbit .
-# Set a long, unique WORKSPACE_PASSWORD in .env first.
-docker run --rm -p 127.0.0.1:3000:3000 --env-file .env -e HOST=0.0.0.0 -v orbit-data:/app/data orbit
-```
-
-Docker binds to `0.0.0.0` internally, so **WORKSPACE_PASSWORD is required**. Use `orbit` as the browser Basic Authentication username and your configured password. Poppler is included, and the volume preserves data.
-
-For remote access, use an HTTPS reverse proxy, a strong workspace password, and an `ALLOWED_HOSTS` list. This is a **single-user, single-process prototype**, not a multi-user hosted service. Do not run multiple writable replicas against the same data or use Basic Authentication as a production account system.
-
-## Project map
-
-| Path                   | Purpose                                         |
-| ---------------------- | ----------------------------------------------- |
-| `public/`              | Responsive buildless interface.                 |
-| `server/index.mjs`     | HTTP API, same-origin controls, static serving. |
-| `server/domain.mjs`    | Matching, CSV, templates, application packets.  |
-| `server/providers.mjs` | Job feeds, Apollo, and Resend adapters.         |
-| `server/resume.mjs`    | TXT/DOCX/optional PDF extraction.               |
-| `server/store.mjs`     | SQLite and interrupted-send recovery.           |
-| `server/fixtures.mjs`  | Explicitly fictional sample workspace.          |
-| `tests/`               | Node tests; no real campaigns.                  |
-
-See [architecture and milestones](docs/ARCHITECTURE.md) and [API reference](docs/API.md).
-
-## Primary API references
-
-- [Remotive public API](https://github.com/remotive-com/remote-jobs-api)
-- [Greenhouse Job Board API](https://docs.greenhouse.io/job-board.html)
-- [Lever Postings API](https://github.com/lever/postings-api)
-- [Apollo People Search](https://docs.apollo.io/reference/people-api-search) and [Enrichment](https://docs.apollo.io/reference/people-enrichment)
-- [Resend Send Email](https://resend.com/docs/api-reference/emails/send-email)
-
-The repository owner can choose the project license.
+See [architecture](docs/ARCHITECTURE.md), [API reference](docs/API.md), and [provider setup](docs/SETUP.md).

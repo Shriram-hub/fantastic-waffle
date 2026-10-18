@@ -178,33 +178,31 @@ export function initialState(demo = true) {
       }))
     : [];
   const applications = demo
-    ? jobs
-        .slice(0, 6)
-        .map((j, i) => ({
-          id: id(),
-          jobId: j.id,
-          stage: ["Saved", "Applied", "Interview", "Saved", "Ready", "Applied"][
-            i
-          ],
-          notes: "",
-          createdAt: now(),
-          updatedAt: now(),
-          isDemo: true,
-          history: [
-            {
-              stage: [
-                "Saved",
-                "Applied",
-                "Interview",
-                "Saved",
-                "Ready",
-                "Applied",
-              ][i],
-              at: now(),
-              source: "Sample",
-            },
-          ],
-        }))
+    ? jobs.slice(0, 6).map((j, i) => ({
+        id: id(),
+        jobId: j.id,
+        stage: ["Saved", "Applied", "Interview", "Saved", "Ready", "Applied"][
+          i
+        ],
+        notes: "",
+        createdAt: now(),
+        updatedAt: now(),
+        isDemo: true,
+        history: [
+          {
+            stage: [
+              "Saved",
+              "Applied",
+              "Interview",
+              "Saved",
+              "Ready",
+              "Applied",
+            ][i],
+            at: now(),
+            source: "Sample",
+          },
+        ],
+      }))
     : [];
   return {
     version: 1,

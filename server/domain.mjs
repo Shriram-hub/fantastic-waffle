@@ -5,6 +5,8 @@ export const STAGES = [
   "Ready",
   "Applied",
   "Interview",
+  "Assessment",
+  "Interview scheduled",
   "Offer",
   "Rejected",
   "Withdrawn",
@@ -12,7 +14,9 @@ export const STAGES = [
 export const id = () => randomUUID();
 export const now = () => new Date().toISOString();
 export const hash = (value) =>
-  createHash("sha256").update(JSON.stringify(value)).digest("hex");
+  createHash("sha256")
+    .update(JSON.stringify(value ?? null))
+    .digest("hex");
 export function fail(message, status = 400) {
   const e = new Error(message);
   e.status = status;
@@ -183,6 +187,8 @@ export function renderTemplate(value, contact, profile) {
     my_role: profile.headline || (profile.interests || [])[0] || "my next role",
     skills: (profile.skills || []).join(", "),
     portfolio: profile.portfolio || "",
+    resume_url: profile.resumeUrl || "",
+    icebreaker: contact.icebreaker || "",
   };
   const unknown = [...value.matchAll(/\{\{\s*([^{}]+?)\s*\}\}/g)]
     .map((m) => m[1])
@@ -250,13 +256,17 @@ export function previewCampaign(campaign, state) {
 }
 export function campaignFingerprint(campaign, state) {
   return hash({
+    accountId: campaign.accountId || null,
+    sequence: campaign.sequence || null,
     name: campaign.name,
     subject: campaign.subject,
     body: campaign.body,
     contactIds: campaign.contactIds,
     attachResume: campaign.attachResume,
     profile: state.profile,
-    resume: state.resume ? hash(state.resume.base64) : null,
+    resume: state.resume
+      ? state.resume.contentHash || hash(state.resume.base64)
+      : null,
     contacts: state.contacts,
   });
 }
@@ -270,6 +280,10 @@ export function suggestStage(subject, body) {
     return "Rejected";
   if (/offer (?:letter|of employment)|pleased to offer|extend.*offer/.test(t))
     return "Offer";
+  if (
+    /hackerrank|codesignal|coding (?:test|assessment)|online assessment/.test(t)
+  )
+    return "Assessment";
   if (
     /interview|schedule.*(?:call|conversation)|technical (?:round|assessment)/.test(
       t,

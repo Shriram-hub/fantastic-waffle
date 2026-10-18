@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Orbit Assistant</title>
+    <link rel="stylesheet" href="popup.css" />
+    <script type="module" src="popup.mjs"></script>
+  </head>
+  <body>
+    <h1>orbit <small>ASSISTANT</small></h1>
+    <p>
+      Fill from your saved profile. Review and submit every application
+      yourself.
+    </p>
+    <form id="pair">
+      <label
+        >Orbit address<input
+          name="base"
+          type="url"
+          value="http://127.0.0.1:3000"
+          required /></label
+      ><label
+        >Pairing token<input
+          name="token"
+          type="password"
+          required
+          autocomplete="off" /></label
+      ><button>Pair for this browser session</button>
+    </form>
+    <button id="next">Open & fill next application</button
+    ><button id="refill">Fill the current application again</button
+    ><button id="forget">Forget connection</button>
+    <p id="status" role="status"></p>
+    <p id="result"></p>
+    <small
+      >Never solves verification challenges, invents answers, or clicks
+      Submit.</small
+    >
+  </body>
+</html>

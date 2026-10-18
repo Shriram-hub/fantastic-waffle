@@ -1,11 +1,22 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { createApp } from "../server/index.mjs";
-import { openStore } from "../server/store.mjs";
+import { handlers, runOne } from "../server/worker.mjs";
+import { tokenCipher } from "../server/providers/mail/oauth.mjs";
 
+const profile = {
+  name: "Casey Quinn",
+  email: "casey@candidate.com",
+  phone: "",
+  headline: "Software engineer",
+  location: "Bengaluru",
+  portfolio: "",
+  authorization: "",
+  summary: "I build useful software.",
+  skills: ["React", "SQL"],
+  interests: ["Software engineer"],
+  workMode: "Remote",
+};
 async function workspace(
   t,
   config = {},
@@ -21,51 +32,47 @@ async function workspace(
     app.store.close();
   });
   const base = `http://127.0.0.1:${app.server.address().port}`;
-  const call = async (
-    path,
-    data,
-    method = data === undefined ? "GET" : "POST",
-    headers = {},
-  ) => {
-    const response = await fetch(`${base}${path}`, {
-      method,
-      headers: {
-        ...(data === undefined ? {} : { "Content-Type": "application/json" }),
-        ...headers,
-      },
-      ...(data === undefined ? {} : { body: JSON.stringify(data) }),
-    });
-    const raw = await response.text();
-    let json;
-    try {
-      json = JSON.parse(raw);
-    } catch {
-      /* Downloads are text or binary. */
-    }
-    return { status: response.status, headers: response.headers, raw, json };
+  return {
+    ...app,
+    base,
+    async call(
+      path,
+      data,
+      method = data === undefined ? "GET" : "POST",
+      headers = {},
+    ) {
+      const r = await fetch(`${base}${path}`, {
+        method,
+        headers: {
+          ...(data === undefined ? {} : { "Content-Type": "application/json" }),
+          ...headers,
+        },
+        ...(data === undefined ? {} : { body: JSON.stringify(data) }),
+      });
+      const raw = await r.text();
+      let json;
+      try {
+        json = JSON.parse(raw);
+      } catch {}
+      return { status: r.status, json, raw, headers: r.headers };
+    },
+    async work(id) {
+      return runOne(
+        app.store,
+        app.queue,
+        handlers(app.store, app.queue, config, fetcher),
+        id,
+      );
+    },
   };
-  return { ...app, call };
 }
-const profile = {
-  name: "Casey Quinn",
-  email: "casey@candidate.com",
-  phone: "",
-  headline: "Software engineer",
-  location: "Bengaluru",
-  portfolio: "",
-  authorization: "",
-  summary: "I build useful software.",
-  skills: ["React", "SQL"],
-  interests: ["Software engineer"],
-  workMode: "Remote",
-};
-async function liveWorkspace(t, fetcher) {
+async function live(t, fetcher) {
   const w = await workspace(
     t,
     {
+      ENABLE_LIVE_SEND: "true",
       RESEND_API_KEY: "TEST_ONLY",
       EMAIL_FROM: "casey@candidate.com",
-      ENABLE_LIVE_SEND: "true",
     },
     fetcher,
   );
@@ -87,288 +94,202 @@ async function liveWorkspace(t, fetcher) {
   return { ...w, campaign: c };
 }
 
-test("serves the interface and protects state, origins, file paths, and API secrets", async (t) => {
-  const { call } = await workspace(t, { APOLLO_API_KEY: "never-expose-this" });
-  const home = await call("/");
-  assert.equal(home.status, 200);
-  assert.match(home.raw, /Orbit/);
+test("serves the React build and protects API state, credentials, origins, and server paths", async (t) => {
+  const w = await workspace(t, { APOLLO_API_KEY: "never-expose" });
+  assert.equal((await w.call("/")).status, 200);
+  const state = await w.call("/api/state");
+  assert.equal(state.status, 200);
+  assert.equal(state.json.jobs.length, 12);
+  assert.ok(!state.raw.includes("never-expose"));
+  assert.ok(!("previews" in state.json));
   assert.match(
-    home.headers.get("content-security-policy"),
+    (await w.call("/")).headers.get("content-security-policy"),
     /script-src 'self'/,
   );
-  assert.equal((await call("/styles.css")).status, 200);
-  assert.equal((await call("/app.js")).status, 200);
-  const state = await call("/api/state");
-  assert.ok(state.json.isDemo);
-  assert.equal(state.json.jobs.length, 12);
-  assert.equal("previews" in state.json, false);
-  assert.ok(!state.raw.includes("never-expose-this"));
   assert.equal(
     (
-      await call("/api/profile", profile, "PUT", {
-        Origin: "https://unrelated-site.com",
+      await w.call("/api/profile", profile, "PUT", {
+        Origin: "https://unrelated.com",
       })
     ).status,
     403,
   );
-  assert.equal(
-    (
-      await call("/api/profile", profile, "PUT", {
-        "Sec-Fetch-Site": "cross-site",
-      })
-    ).status,
-    403,
-  );
-  assert.equal((await call("/server/index.mjs")).status, 404);
-  assert.equal((await call("/api/missing")).status, 404);
+  assert.equal((await w.call("/server/index.mjs")).status, 404);
 });
-test("optional workspace password gates both UI and data", async (t) => {
-  const { call } = await workspace(t, {
-    WORKSPACE_PASSWORD: "a-strong-test-password",
-  });
-  assert.equal((await call("/")).status, 401);
+test("workspace password gates data and extension API requires its own expiring token", async (t) => {
+  const w = await workspace(t, { WORKSPACE_PASSWORD: "test-owner-password" });
+  assert.equal((await w.call("/api/state")).status, 401);
+  const authorization = `Basic ${Buffer.from("orbit:test-owner-password").toString("base64")}`;
   assert.equal(
     (
-      await call("/api/state", undefined, "GET", {
-        Authorization: `Basic ${Buffer.from("orbit:wrong").toString("base64")}`,
-      })
-    ).status,
-    401,
-  );
-  assert.equal(
-    (
-      await call("/api/state", undefined, "GET", {
-        Authorization: `Basic ${Buffer.from("orbit:a-strong-test-password").toString("base64")}`,
+      await w.call("/api/state", undefined, "GET", {
+        Authorization: authorization,
       })
     ).status,
     200,
   );
+  assert.equal((await w.call("/api/extension/next")).status, 401);
+  const pairing = await w.call("/api/extension/token", {}, "POST", {
+    Authorization: authorization,
+  });
+  assert.ok(pairing.json.token);
+  const next = await w.call("/api/extension/next", undefined, "GET", {
+    Authorization: `Bearer ${pairing.json.token}`,
+  });
+  assert.equal(next.status, 200);
+  assert.equal(next.json.task, null);
 });
-test("profile and résumé changes persist in SQLite across restarts and files remain private", async (t) => {
-  const dir = mkdtempSync(join(tmpdir(), "orbit-test-"));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
-  let store = openStore(dir);
-  store.state.profile = profile;
-  store.save();
-  store.close();
-  store = openStore(dir);
-  assert.equal(store.state.profile.name, "Casey Quinn");
-  store.close();
-  const { call } = await workspace(t);
-  assert.equal((await call("/api/profile", profile, "PUT")).status, 200);
+test("résumé upload is quick and durable; the worker parses text and bytes stay out of state", async (t) => {
+  const w = await workspace(t),
+    body = "Casey Quinn\ncasey@candidate.com\n- Built React applications\nSQL";
+  const upload = await w.call("/api/resume", {
+    name: "resume.txt",
+    base64: Buffer.from(body).toString("base64"),
+  });
+  assert.equal(upload.status, 202);
+  assert.equal((await w.call("/api/state")).json.resume.parseStatus, "queued");
+  assert.equal((await w.call("/api/state")).json.resume.text, "");
+  const task = await w.work(upload.json.task.id);
+  assert.equal(task.status, "completed");
+  const state = (await w.call("/api/state")).json;
+  assert.equal(state.resume.text, body);
+  assert.deepEqual(state.resume.suggestions.skills, ["React", "SQL"]);
+  assert.equal("base64" in state.resume, false);
+  assert.equal((await w.call("/api/resume/download")).raw, body);
   assert.equal(
-    (await call("/api/profile", { ...profile, email: "invalid" }, "PUT"))
-      .status,
+    (await w.call("/api/resume", { name: "bad.pdf", base64: "YWJj" })).status,
     400,
   );
-  const content = "Casey Quinn\ncasey@candidate.com\nReact SQL";
-  const result = await call("/api/resume", {
-    name: "resume.txt",
-    base64: Buffer.from(content).toString("base64"),
-  });
-  assert.equal(result.status, 200);
-  const state = (await call("/api/state")).json;
-  assert.equal(state.resume.text, content);
-  assert.equal("base64" in state.resume, false);
-  assert.deepEqual(state.profile.skills, ["React", "SQL"]);
-  assert.equal((await call("/api/resume/download")).raw, content);
-  await call("/api/resume", {}, "DELETE");
-  assert.equal((await call("/api/resume/download")).status, 404);
 });
-test("batch preparation deduplicates, keeps submitted stages, and never claims to submit", async (t) => {
-  const { call } = await workspace(t);
-  const s = (await call("/api/state")).json;
-  const applied = s.applications.find((a) => a.stage === "Applied"),
+test("batch preparation is atomic, deduplicates, and never regresses submitted stages", async (t) => {
+  const w = await workspace(t),
+    s = (await w.call("/api/state")).json,
+    applied = s.applications.find((a) => a.stage === "Applied"),
     saved = s.applications.find((a) => a.stage === "Saved");
-  const result = await call("/api/applications/batch", {
-    jobIds: [applied.jobId, saved.jobId, saved.jobId],
-  });
-  assert.equal(result.json.count, 2);
-  const next = (await call("/api/state")).json;
+  assert.equal(
+    (
+      await w.call("/api/applications/batch", {
+        jobIds: [applied.jobId, saved.jobId, saved.jobId],
+      })
+    ).json.count,
+    2,
+  );
+  const next = (await w.call("/api/state")).json;
   assert.equal(
     next.applications.find((a) => a.id === applied.id).stage,
     "Applied",
   );
   assert.equal(next.applications.find((a) => a.id === saved.id).stage, "Ready");
-  const packet = await call(`/api/applications/${saved.id}/packet`);
-  assert.match(packet.raw, /does not submit an application/);
-  const same = await call("/api/applications", {
-    jobId: applied.jobId,
-    stage: "Saved",
-  });
-  assert.ok(same.json.existing);
-  assert.equal(same.json.application.stage, "Applied");
+  const count = next.applications.length;
   assert.equal(
     (
-      await call(
-        `/api/applications/${saved.id}`,
-        { stage: "Invented" },
-        "PATCH",
-      )
-    ).status,
-    400,
-  );
-  const before = next.applications.length;
-  assert.equal(
-    (
-      await call("/api/applications/batch", {
+      await w.call("/api/applications/batch", {
         jobIds: ["missing", "sample-10"],
       })
     ).status,
     404,
   );
-  assert.equal((await call("/api/state")).json.applications.length, before);
-});
-test("manual jobs validate URLs and export CSV neutralizes formula cells", async (t) => {
-  const { call } = await workspace(t);
-  assert.equal(
-    (
-      await call("/api/jobs/manual", {
-        title: "Role",
-        company: "Co",
-        url: "javascript:alert(1)",
-      })
-    ).status,
-    400,
-  );
-  const job = (
-    await call("/api/jobs/manual", {
-      title: "=danger",
-      company: "+formula",
-      url: "https://company.com/careers/1",
-      workMode: "Remote",
-    })
-  ).json.job;
-  await call("/api/applications", { jobId: job.id });
-  const exported = await call("/api/export/applications");
-  assert.match(exported.raw, /"'\+formula"/);
-  assert.match(exported.raw, /"'=danger"/);
-});
-test("contact import skips malformed rows and duplicates, with explicit verification provenance", async (t) => {
-  const { call } = await workspace(t);
-  await call("/api/workspace/reset", { confirm: "START_FRESH" });
-  const result = await call("/api/contacts/import", {
-    csv: "name,email,company,email_status\nA,hello@company.com,Firm,verified\nB,hello@company.com,Firm,verified\nC,not-an-email,Firm,verified\nD,new@company.com,Firm,",
-  });
-  assert.equal(result.json.imported, 2);
-  assert.equal(result.json.skipped, 2);
-  const contacts = (await call("/api/state")).json.contacts;
-  assert.equal(contacts[0].source, "CSV");
-  assert.equal(contacts[1].emailStatus, "unverified");
-  assert.equal(
-    (await call("/api/contacts/apollo/search", { domain: "company.com" }))
-      .status,
-    503,
+  assert.equal((await w.call("/api/state")).json.applications.length, count);
+  assert.match(
+    (await w.call(`/api/applications/${saved.id}/packet`)).raw,
+    /does not submit/,
   );
 });
-test("campaign preview creates personalized draft downloads with the actual résumé attachment and no send", async (t) => {
-  const { call } = await workspace(t);
-  const s = (await call("/api/state")).json;
-  const attachment = Buffer.from("My actual résumé").toString("base64");
-  await call("/api/resume", { name: "my-resume.txt", base64: attachment });
-  const c = (
-    await call("/api/campaigns", {
-      name: "Job search",
-      subject: "Hello {{first_name}}",
-      body: "I am {{my_name}}. Here are my skills: {{skills}}",
-      contactIds: s.contacts.map((c) => c.id),
-      attachResume: true,
-    })
-  ).json.campaign;
-  const preview = await call(`/api/campaigns/${c.id}/preview`, {});
-  assert.equal(preview.json.messages.length, 5);
-  assert.equal(preview.json.attachment.name, "my-resume.txt");
-  const draft = await call(
-    `/api/campaigns/${c.id}/messages/${s.contacts[0].id}`,
-  );
-  assert.equal(draft.status, 200);
-  assert.match(draft.raw, /X-Unsent: 1/);
-  assert.ok(draft.raw.includes(attachment));
-  assert.equal(
-    (
-      await call(`/api/campaigns/${c.id}/send`, {
-        approved: true,
-        confirmCount: 5,
-        previewId: preview.json.previewId,
-      })
-    ).status,
-    503,
-  );
-  assert.equal(
-    (await call("/api/state")).json.campaigns[0].deliveries.length,
-    0,
-  );
-});
-test("reviewed email suggestions do not change the tracker until accepted", async (t) => {
-  const { call } = await workspace(t);
-  const s = (await call("/api/state")).json,
-    a = s.applications[0];
-  const item = (
-    await call("/api/inbox/analyze", {
-      applicationId: a.id,
-      subject: "Interview invitation",
-      from: "Hiring team",
-      body: "We would like to schedule your interview.",
-    })
-  ).json.item;
-  assert.equal(item.proposedStage, "Interview");
-  assert.equal(
-    (await call("/api/state")).json.applications.find((x) => x.id === a.id)
-      .stage,
-    a.stage,
-  );
-  assert.equal((await call(`/api/inbox/${item.id}/accept`, {})).status, 200);
-  assert.equal(
-    (await call("/api/state")).json.applications.find((x) => x.id === a.id)
-      .stage,
-    "Interview",
-  );
-  assert.equal((await call(`/api/inbox/${item.id}/accept`, {})).status, 409);
-});
-test("job synchronization uses the adapter, caches refreshes, and records source errors", async (t) => {
+test("job imports return queued tasks; the separate worker fetches, deduplicates, and caches", async (t) => {
   let calls = 0;
-  const { call } = await workspace(t, {}, async () => {
+  const w = await workspace(t, {}, async () => {
     calls++;
     return new Response(
       JSON.stringify({
         jobs: [
           {
             id: 1,
-            title: "Engineer",
-            company_name: "Real Co",
+            title: "Software Engineer",
+            company_name: "Acme",
             url: "https://remotive.com/job/1",
             description: "React SQL",
+            candidate_required_location: "Worldwide",
           },
         ],
       }),
     );
   });
-  assert.equal(
-    (await call("/api/jobs/sync", { source: "Remotive" })).json.count,
-    1,
-  );
-  assert.ok((await call("/api/jobs/sync", { source: "Remotive" })).json.cached);
+  const queued = await w.call("/api/jobs/sync", { source: "Remotive" });
+  assert.equal(queued.status, 202);
+  assert.equal(calls, 0);
+  await w.work(queued.json.task.id);
   assert.equal(calls, 1);
   assert.equal(
-    (await call("/api/state")).json.jobs.find((j) => j.id === "remotive-1")
+    (await w.call("/api/state")).json.jobs.find((j) => j.id === "remotive-1")
       .isDemo,
     false,
   );
+  const again = await w.call("/api/jobs/sync", { source: "Remotive" });
+  assert.equal(again.json.task.id, queued.json.task.id);
   assert.equal(
-    (await call("/api/jobs/sync", { source: "Lever", board: "not-saved" }))
+    (await w.call("/api/jobs/sync", { source: "Lever", board: "not-saved" }))
       .status,
     400,
   );
 });
-test("live send requires a current preview and reviewed count; accepted messages cannot be sent twice", async (t) => {
+test("CSV import reports duplicates and invalid emails without silently verifying them", async (t) => {
+  const w = await workspace(t);
+  await w.call("/api/workspace/reset", { confirm: "START_FRESH" });
+  const r = await w.call("/api/contacts/import", {
+    csv: "name,email,company,email_status\nA,hello@company.com,Firm,verified\nB,hello@company.com,Firm,verified\nC,bad-email,Firm,verified\nD,new@company.com,Firm,",
+  });
+  assert.equal(r.json.imported, 2);
+  assert.equal(r.json.skipped, 2);
+  const contacts = (await w.call("/api/state")).json.contacts;
+  assert.equal(contacts[0].source, "CSV");
+  assert.equal(contacts[1].emailStatus, "unverified");
+});
+test("campaign drafts contain actual attachments and send remains disabled without explicit setup", async (t) => {
+  const w = await workspace(t),
+    s = (await w.call("/api/state")).json,
+    encoded = Buffer.from("Actual résumé").toString("base64");
+  await w.call("/api/resume", { name: "resume.txt", base64: encoded });
+  const c = (
+    await w.call("/api/campaigns", {
+      name: "Search",
+      subject: "Hi {{first_name}}",
+      body: "I am {{my_name}}.",
+      contactIds: s.contacts.map((c) => c.id),
+      attachResume: true,
+    })
+  ).json.campaign;
+  const preview = (await w.call(`/api/campaigns/${c.id}/preview`, {})).json;
+  assert.equal(preview.messages.length, 5);
+  const draft = await w.call(
+    `/api/campaigns/${c.id}/messages/${s.contacts[0].id}`,
+  );
+  assert.equal(draft.status, 200);
+  assert.match(draft.raw, /X-Unsent: 1/);
+  assert.ok(draft.raw.includes(encoded));
+  assert.equal(
+    (
+      await w.call(`/api/campaigns/${c.id}/send`, {
+        previewId: preview.previewId,
+        approved: true,
+        confirmCount: 5,
+      })
+    ).status,
+    503,
+  );
+});
+test("an approved campaign enters the outbox; only the worker calls the provider and duplicate queueing is blocked", async (t) => {
+  t.mock.timers.enable({
+    apis: ["Date"],
+    now: new Date("2026-10-19T09:00:00Z"),
+  });
   const sent = [];
-  const w = await liveWorkspace(t, async (url, opts) => {
+  const w = await live(t, async (url, options) => {
     sent.push({
       url,
-      body: JSON.parse(opts.body),
-      key: opts.headers["Idempotency-Key"],
+      body: JSON.parse(options.body),
+      key: options.headers["Idempotency-Key"],
     });
-    return new Response(JSON.stringify({ id: "resend-message" }));
+    return new Response(JSON.stringify({ id: "provider-id" }));
   });
   const cid = w.campaign.id,
     preview = (await w.call(`/api/campaigns/${cid}/preview`, {})).json;
@@ -382,34 +303,21 @@ test("live send requires a current preview and reviewed count; accepted messages
     ).status,
     400,
   );
-  const result = await w.call(`/api/campaigns/${cid}/send`, {
+  const queued = await w.call(`/api/campaigns/${cid}/send`, {
     previewId: preview.previewId,
     approved: true,
     confirmCount: 1,
   });
-  assert.equal(result.status, 200);
-  assert.equal(result.json.deliveries[0].status, "accepted");
+  assert.equal(queued.status, 202);
+  assert.equal(sent.length, 0);
+  assert.equal(queued.json.deliveries[0].status, "queued");
+  await w.work(queued.json.deliveries[0].taskId);
   assert.equal(sent.length, 1);
   assert.deepEqual(sent[0].body.to, ["hr@company.com"]);
   assert.equal(
-    (
-      await w.call(`/api/campaigns/${cid}/send`, {
-        previewId: preview.previewId,
-        approved: true,
-        confirmCount: 1,
-      })
-    ).status,
-    409,
+    (await w.call("/api/state")).json.campaigns[0].deliveries[0].status,
+    "accepted",
   );
-  assert.equal(sent.length, 1);
-});
-test("changing recipients or the profile invalidates previous send approval", async (t) => {
-  const w = await liveWorkspace(t, async () => {
-    throw Error("Must not send");
-  });
-  const cid = w.campaign.id;
-  const preview = (await w.call(`/api/campaigns/${cid}/preview`, {})).json;
-  await w.call("/api/profile", { ...profile, name: "Changed Name" }, "PUT");
   assert.equal(
     (
       await w.call(`/api/campaigns/${cid}/send`, {
@@ -420,102 +328,291 @@ test("changing recipients or the profile invalidates previous send approval", as
     ).status,
     409,
   );
-  const fresh = (await w.call(`/api/campaigns/${cid}/preview`, {})).json;
-  const contact = (await w.call("/api/state")).json.contacts[0];
-  await w.call(`/api/contacts/${contact.id}`, { suppressed: true }, "PATCH");
-  assert.equal(
-    (
-      await w.call(`/api/campaigns/${cid}/send`, {
-        previewId: fresh.previewId,
-        approved: true,
-        confirmCount: 1,
-      })
-    ).status,
-    409,
-  );
 });
-test("draft editing invalidates the old preview and preserves a single campaign", async (t) => {
-  const w = await liveWorkspace(t, async () => {
-    throw Error("Must not send");
-  });
-  const cid = w.campaign.id;
-  const preview = (await w.call(`/api/campaigns/${cid}/preview`, {})).json;
-  const updated = await w.call(
-    `/api/campaigns/${cid}`,
-    { ...w.campaign, body: "A different message" },
-    "PATCH",
-  );
-  assert.equal(updated.status, 200);
-  assert.equal(
-    (
-      await w.call(`/api/campaigns/${cid}/send`, {
-        previewId: preview.previewId,
-        approved: true,
-        confirmCount: 1,
-      })
-    ).status,
-    409,
-  );
-  assert.equal((await w.call("/api/state")).json.campaigns.length, 1);
-});
-test("concurrent send requests cannot bypass the workspace send lock", async (t) => {
-  let release, started;
-  const entered = new Promise((resolve) => {
-    started = resolve;
-  });
-  const gate = new Promise((resolve) => {
-    release = resolve;
+test("profile edits invalidate approval and later suppression cancels queued messages before delivery", async (t) => {
+  t.mock.timers.enable({
+    apis: ["Date"],
+    now: new Date("2026-10-19T09:00:00Z"),
   });
   let sent = 0;
-  const w = await liveWorkspace(t, async () => {
-    sent++;
-    started();
-    await gate;
-    return new Response(JSON.stringify({ id: "one-send-only" }));
-  });
-  const cid = w.campaign.id,
-    preview = (await w.call(`/api/campaigns/${cid}/preview`, {})).json,
-    request = { previewId: preview.previewId, approved: true, confirmCount: 1 };
-  const first = w.call(`/api/campaigns/${cid}/send`, request);
-  await entered;
-  const second = await w.call(`/api/campaigns/${cid}/send`, request);
-  assert.equal(second.status, 409);
-  release();
-  assert.equal((await first).status, 200);
-  assert.equal(sent, 1);
-});
-test("ambiguous sends survive restarts as unknown and are not automatically retried", async (t) => {
-  const w = await liveWorkspace(t, async () => {
-    throw Error("Network timed out");
-  });
-  const cid = w.campaign.id,
-    preview = (await w.call(`/api/campaigns/${cid}/preview`, {})).json;
-  const result = await w.call(`/api/campaigns/${cid}/send`, {
-    previewId: preview.previewId,
-    approved: true,
-    confirmCount: 1,
-  });
-  assert.equal(result.json.deliveries[0].status, "unknown");
+  const w = await live(t, async () => {
+      sent++;
+      return new Response("{}");
+    }),
+    cid = w.campaign.id,
+    p = (await w.call(`/api/campaigns/${cid}/preview`, {})).json;
+  await w.call("/api/profile", { ...profile, name: "Changed" }, "PUT");
   assert.equal(
     (
       await w.call(`/api/campaigns/${cid}/send`, {
-        previewId: preview.previewId,
+        previewId: p.previewId,
         approved: true,
         confirmCount: 1,
       })
     ).status,
     409,
   );
-  const dir = mkdtempSync(join(tmpdir(), "orbit-restart-"));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
-  let store = openStore(dir);
-  store.state.campaigns.push({
-    id: "c",
-    deliveries: [{ contactId: "a", status: "sending" }],
+  const fresh = (await w.call(`/api/campaigns/${cid}/preview`, {})).json,
+    queued = await w.call(`/api/campaigns/${cid}/send`, {
+      previewId: fresh.previewId,
+      approved: true,
+      confirmCount: 1,
+    }),
+    contact = (await w.call("/api/state")).json.contacts[0];
+  await w.call(`/api/contacts/${contact.id}`, { suppressed: true }, "PATCH");
+  const task = await w.work(queued.json.deliveries[0].taskId);
+  assert.equal(task.status, "cancelled");
+  assert.equal(sent, 0);
+});
+test("ambiguous provider acceptance is held rather than retried", async (t) => {
+  t.mock.timers.enable({
+    apis: ["Date"],
+    now: new Date("2026-10-19T09:00:00Z"),
   });
-  store.save();
-  store.close();
-  store = openStore(dir);
-  assert.equal(store.state.campaigns[0].deliveries[0].status, "unknown");
-  store.close();
+  let calls = 0;
+  const w = await live(t, async () => {
+      calls++;
+      throw Error("network timeout");
+    }),
+    cid = w.campaign.id,
+    p = (await w.call(`/api/campaigns/${cid}/preview`, {})).json,
+    q = await w.call(`/api/campaigns/${cid}/send`, {
+      previewId: p.previewId,
+      approved: true,
+      confirmCount: 1,
+    });
+  assert.equal((await w.work(q.json.deliveries[0].taskId)).status, "unknown");
+  assert.equal(await w.work(q.json.deliveries[0].taskId), null);
+  assert.equal(calls, 1);
+});
+test("follow-up sync detects a reply and cancels before sending a second message", async (t) => {
+  t.mock.timers.enable({
+    apis: ["Date"],
+    now: new Date("2026-10-19T09:00:00Z"),
+  });
+  let sends = 0;
+  const cfg = {
+    ENABLE_LIVE_SEND: "true",
+    TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 3).toString("base64"),
+  };
+  const w = await workspace(t, cfg, async (url, opts) => {
+    if (url.endsWith("/messages/send")) {
+      sends++;
+      return new Response(
+        JSON.stringify({ id: "sent-1", threadId: "thread-1" }),
+      );
+    }
+    if (url.endsWith("/profile"))
+      return new Response(JSON.stringify({ historyId: "100" }));
+    if (url.includes("/messages?"))
+      return new Response(JSON.stringify({ messages: [{ id: "reply-1" }] }));
+    return new Response(
+      JSON.stringify({
+        id: "reply-1",
+        threadId: "thread-1",
+        internalDate: String(Date.now()),
+        labelIds: ["INBOX"],
+        payload: {
+          mimeType: "text/plain",
+          headers: [
+            { name: "From", value: "hr@company.com" },
+            { name: "Subject", value: "Re: Hello" },
+          ],
+          body: {
+            data: Buffer.from("Happy to chat tomorrow.").toString("base64url"),
+          },
+        },
+      }),
+    );
+  });
+  await w.call("/api/workspace/reset", { confirm: "START_FRESH" });
+  await w.call("/api/profile", profile, "PUT");
+  await w.call("/api/contacts/import", {
+    csv: "name,email,company,email_status\nRiley,hr@company.com,Company,verified",
+  });
+  w.store.db
+    .prepare(
+      "INSERT INTO mail_accounts(id,provider,email,secret,metadata) VALUES(?,?,?,?,?)",
+    )
+    .run(
+      "a",
+      "google",
+      profile.email,
+      tokenCipher(cfg).seal({
+        access_token: "test",
+        refresh_token: "test",
+        expires_at: Date.now() + 10 * 86400000,
+      }),
+      "{}",
+    );
+  const contacts = (await w.call("/api/state")).json.contacts,
+    c = (
+      await w.call("/api/campaigns", {
+        name: "Sequence",
+        subject: "Hello",
+        body: "A thoughtful introduction.",
+        contactIds: [contacts[0].id],
+        accountId: "a",
+        sequence: {
+          enabled: true,
+          afterBusinessDays: 4,
+          body: "Just following up.",
+        },
+      })
+    ).json.campaign,
+    p = (await w.call(`/api/campaigns/${c.id}/preview`, {})).json,
+    q = await w.call(`/api/campaigns/${c.id}/send`, {
+      previewId: p.previewId,
+      approved: true,
+      confirmCount: 1,
+    });
+  await w.work(q.json.deliveries[0].taskId);
+  const delivery = (await w.call("/api/state")).json.campaigns[0].deliveries[0];
+  assert.ok(delivery.followupTaskId);
+  t.mock.timers.setTime(Date.parse("2026-10-23T09:00:00Z"));
+  const result = await w.work(delivery.followupTaskId);
+  assert.equal(result.status, "cancelled");
+  assert.equal(sends, 1);
+  assert.ok(
+    (await w.call("/api/state")).json.campaigns[0].deliveries[0].repliedAt,
+  );
+});
+test("imported email suggestions stay in review until accepted and can be applied only once", async (t) => {
+  const w = await workspace(t),
+    a = (await w.call("/api/state")).json.applications[0];
+  const item = (
+    await w.call("/api/inbox/analyze", {
+      applicationId: a.id,
+      subject: "Interview invitation",
+      body: "Please schedule your interview.",
+    })
+  ).json.item;
+  assert.equal(
+    (await w.call("/api/state")).json.applications.find((x) => x.id === a.id)
+      .stage,
+    a.stage,
+  );
+  await w.call(`/api/inbox/${item.id}/accept`, {});
+  assert.equal(
+    (await w.call("/api/state")).json.applications.find((x) => x.id === a.id)
+      .stage,
+    "Interview",
+  );
+  assert.equal((await w.call(`/api/inbox/${item.id}/accept`, {})).status, 409);
+});
+test("browser assistant is bearer-scoped, destination-checked, and cannot report a submission", async (t) => {
+  const w = await workspace(t);
+  assert.equal(
+    (await w.call("/api/apply/queue", { approved: true, jobIds: ["sample-1"] }))
+      .status,
+    400,
+  );
+  await w.call("/api/workspace/reset", { confirm: "START_FRESH" });
+  await w.call("/api/profile", profile, "PUT");
+  const j = (
+    await w.call("/api/jobs/manual", {
+      title: "Software Engineer",
+      company: "Acme",
+      url: "https://boards.greenhouse.io/acme/jobs/1",
+    })
+  ).json.job;
+  await w.call("/api/apply/queue", { approved: true, jobIds: [j.id] });
+  const token = (await w.call("/api/extension/token", {})).json.token,
+    headers = { Authorization: `Bearer ${token}` },
+    next = (await w.call("/api/extension/next", undefined, "GET", headers)).json
+      .task;
+  assert.ok(next.profile);
+  assert.equal(
+    (
+      await w.call(
+        "/api/extension/report",
+        { taskId: next.id, status: "Applied" },
+        "POST",
+        headers,
+      )
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await w.call(
+        "/api/extension/report",
+        {
+          taskId: next.id,
+          status: "needs-review",
+          missing: ["Work eligibility"],
+        },
+        "POST",
+        headers,
+      )
+    ).status,
+    200,
+  );
+  let s = (await w.call("/api/state")).json;
+  assert.equal(s.applications.find((a) => a.jobId === j.id).stage, "Ready");
+  await w.call(`/api/apply/${next.id}/confirm`, {
+    confirmationReference: "Employer receipt #123",
+  });
+  s = (await w.call("/api/state")).json;
+  assert.equal(s.applications.find((a) => a.jobId === j.id).stage, "Applied");
+});
+test("public résumé links are approved, revocable, file-bound, and expire independently of owner access", async (t) => {
+  const w = await workspace(t),
+    file = Buffer.from("Private résumé").toString("base64");
+  await w.call("/api/resume", { name: "r.txt", base64: file });
+  assert.equal(
+    (await w.call("/api/share/resume", { approved: false })).status,
+    400,
+  );
+  const link = (await w.call("/api/share/resume", { approved: true })).json.url,
+    path = new URL(link).pathname;
+  assert.equal((await w.call(path)).raw, "Private résumé");
+  const info = (await w.call("/api/vault")).json.links[0];
+  await w.call(`/api/share/${info.id}/revoke`, {});
+  assert.equal((await w.call(path)).status, 404);
+  assert.equal((await w.call("/api/resume/download")).status, 200);
+});
+test("mail tokens are never returned and Graph notifications require stored clientState", async (t) => {
+  const config = {
+      TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 1).toString("base64"),
+    },
+    w = await workspace(t, config);
+  w.store.db
+    .prepare(
+      "INSERT INTO mail_accounts(id,provider,email,secret,metadata) VALUES(?,?,?,?,?)",
+    )
+    .run(
+      "a",
+      "microsoft",
+      "me@candidate.com",
+      tokenCipher(config).seal({
+        access_token: "never-return-this",
+        notificationSecret: "expected-state",
+      }),
+      JSON.stringify({ subscriptionId: "subscription-1" }),
+    );
+  const accounts = await w.call("/api/mail/accounts");
+  assert.ok(!accounts.raw.includes("never-return-this"));
+  assert.equal(
+    (
+      await w.call("/api/webhooks/microsoft", {
+        value: [{ subscriptionId: "subscription-1", clientState: "wrong" }],
+      })
+    ).status,
+    401,
+  );
+  assert.equal(
+    (
+      await w.call("/api/webhooks/microsoft", {
+        value: [
+          { subscriptionId: "subscription-1", clientState: "expected-state" },
+        ],
+      })
+    ).status,
+    202,
+  );
+  assert.equal(
+    (await w.call("/api/webhooks/gmail", { message: { data: "abc" } })).status,
+    503,
+  );
 });

@@ -1,70 +1,68 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import vm from "node:vm";
+import { build } from "vite";
+import react from "@vitejs/plugin-react";
+import { writeFile, mkdir, rm } from "node:fs/promises";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { initialState } from "../server/fixtures.mjs";
 import { scoreJob } from "../server/domain.mjs";
-
-// Browser-free rendering checks. These are not a substitute for a real browser QA pass.
-test("every page renders populated and empty states, and user-controlled text is escaped", async () => {
-  const data = initialState(),
-    nodes = { "#app": { innerHTML: "" }, "#modal": { addEventListener() {} } };
-  data.profile.name = "<img src=x onerror=alert(1)>";
-  data.contacts[0].name = "<script>alert(1)</script>";
-  data.jobs = data.jobs.map((j) => ({
-    ...j,
-    match: scoreJob(j, data.profile),
-  }));
-  const document = { querySelector: (s) => nodes[s], addEventListener() {} };
-  const context = vm.createContext({
-    document,
-    window: { addEventListener() {}, scrollTo() {} },
-    location: { hash: "#overview" },
-    console,
-    setTimeout,
-    Date,
-    Set,
-    URL,
-    fetch: async (url) => ({
-      ok: true,
-      json: async () => (url === "/api/state" ? data : {}),
-    }),
+test("React views render populated/empty states and escape untrusted profile and job text", async (t) => {
+  const output = await build({
+    configFile: false,
+    plugins: [react()],
+    logLevel: "silent",
+    build: {
+      ssr: new URL("../web/src/App.jsx", import.meta.url).pathname,
+      write: false,
+      minify: false,
+    },
   });
-  const script = await readFile(
-    new URL("../public/app.js", import.meta.url),
-    "utf8",
-  );
-  await vm.runInContext(script, context);
-  assert.ok(nodes["#app"].innerHTML.includes("&lt;img"));
-  assert.ok(!nodes["#app"].innerHTML.includes("<img src=x"));
-  for (const route of [
-    "overview",
-    "jobs",
-    "applications",
-    "contacts",
-    "outreach",
-    "inbox",
-    "profile",
-    "connections",
-  ]) {
-    vm.runInContext(`state.route = '${route}'; render();`, context);
-    assert.match(nodes["#app"].innerHTML, /<main id="main">/);
-    assert.ok(!nodes["#app"].innerHTML.includes("<script>alert(1)"));
-  }
-  const clean = initialState(false);
-  context.clean = clean;
-  vm.runInContext("state.data = clean;", context);
-  for (const route of [
-    "overview",
-    "jobs",
-    "applications",
-    "contacts",
-    "outreach",
-    "inbox",
-    "profile",
-    "connections",
-  ]) {
-    vm.runInContext(`state.route = '${route}'; render();`, context);
-    assert.ok(nodes["#app"].innerHTML.includes("Orbit v0.1"));
+  await mkdir(".test-build", { recursive: true });
+  const path = new URL("../.test-build/ui.mjs", import.meta.url);
+  await writeFile(path, output.output[0].code);
+  t.after(() => rm(".test-build", { recursive: true, force: true }));
+  const views = await import(`${path.href}?t=${Date.now()}`);
+  for (const demo of [true, false]) {
+    const data = initialState(demo);
+    data.profile.name = "<img src=x onerror=alert(1)>";
+    if (data.jobs.length) data.jobs[0].title = "<script>alert(1)</script>";
+    data.jobs = data.jobs.map((j) => ({
+      ...j,
+      match: scoreJob(j, data.profile),
+    }));
+    const app = {
+      data,
+      accounts: [],
+      tasks: { tasks: [], applications: [] },
+      vault: { versions: [], links: [] },
+      integrations: {},
+      perform() {},
+      notify() {},
+      setModal() {},
+      go() {},
+    };
+    for (const name of [
+      "Overview",
+      "Jobs",
+      "Applications",
+      "Profile",
+      "Contacts",
+      "Outreach",
+      "Inbox",
+      "Automation",
+      "Connections",
+    ]) {
+      const html = renderToStaticMarkup(
+        React.createElement(
+          views.WorkspaceContext.Provider,
+          { value: app },
+          React.createElement(views[name]),
+        ),
+      );
+      assert.ok(html.length > 100);
+      assert.ok(!html.includes("<script>alert(1)</script>"));
+      assert.ok(!html.includes("<img src=x"));
+    }
   }
 });

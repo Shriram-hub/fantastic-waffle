@@ -1,0 +1,55 @@
+body {
+  font: 13px/1.6 system-ui;
+  width: 315px;
+  padding: 20px;
+  margin: 0;
+  color: #274738;
+  background: #f7faf5;
+}
+h1 {
+  letter-spacing: -1px;
+  font-size: 29px;
+  margin: 0;
+}
+h1 small {
+  font-size: 8px;
+  letter-spacing: 1px;
+}
+p,
+small {
+  color: #64745d;
+}
+label {
+  display: block;
+  margin: 12px 0;
+  font-size: 11px;
+}
+input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #d5dfcf;
+  border-radius: 6px;
+  margin-top: 5px;
+}
+button {
+  display: block;
+  width: 100%;
+  padding: 11px;
+  border: 0;
+  background: #175744;
+  color: white;
+  border-radius: 7px;
+  margin: 12px 0;
+  cursor: pointer;
+}
+button:disabled {
+  opacity: 0.5;
+}
+#forget {
+  background: #e5edde;
+  color: #48633b;
+}
+#status {
+  font-weight: 600;
+}

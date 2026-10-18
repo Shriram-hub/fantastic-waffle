@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Orbit Application Assistant",
+  "version": "0.2.0",
+  "description": "Fill an application from your approved Orbit profile, then hand control back for review and submission.",
+  "permissions": ["storage", "scripting", "tabs"],
+  "host_permissions": [
+    "http://127.0.0.1/*",
+    "http://localhost/*",
+    "https://*.greenhouse.io/*",
+    "https://*.lever.co/*",
+    "https://*.myworkdayjobs.com/*",
+    "https://*.ashbyhq.com/*",
+    "https://www.linkedin.com/jobs/*"
+  ],
+  "optional_host_permissions": ["https://*/*"],
+  "background": { "service_worker": "background.mjs", "type": "module" },
+  "action": { "default_popup": "popup.html" }
+}
