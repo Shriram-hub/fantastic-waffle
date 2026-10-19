@@ -71,7 +71,7 @@ export function Connections() {
           ["Hunter", "Work-email verification", "hunter"],
           ["Adzuna", "Aggregator search using your target roles", "adzuna"],
           [
-            "AI & embeddings",
+            setup.geminiConfigured ? "Gemini AI & embeddings" : "AI & embeddings",
             "Structured extraction and semantic matching",
             "ai",
           ],

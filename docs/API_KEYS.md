@@ -22,12 +22,47 @@ Then connect the mailbox there; saved credentials alone do not connect an accoun
 | Company contacts and independent email verification | `HUNTER_API_KEY` | [Hunter API dashboard](https://hunter.io/api) | Enable contact-credit use. Verification requires available quota; catch-all/invalid/unverified addresses are skipped. |
 | Public LinkedIn profile snippets and additional ATS search | `SERPAPI_API_KEY` | [SerpApi](https://serpapi.com/manage-api-key) | Enable the optional search-API setting in Autopilot. The same key can serve Google Jobs; JSearch alone does not enable this extra search. |
 | Gmail sending and automatic application/reply updates | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | [Google Cloud credentials](https://console.cloud.google.com/apis/credentials) | Create a Web application OAuth client, use the exact callback below, then **Connect Google**. |
-| AI résumé extraction and personalized pitches | `LLM_API_KEY`, `LLM_MODEL`; optional `LLM_BASE_URL` | Your OpenAI-compatible provider's API dashboard | Choose the exact supported model ID and enable AI drafting if wanted. The default base URL is `https://api.openai.com/v1`. |
+| Gemini résumé extraction and personalized pitches | `LLM_PROVIDER`, `LLM_API_KEY`, `LLM_MODEL`, `LLM_BASE_URL` | [Google AI Studio](https://aistudio.google.com/api-keys) | Save your Gemini key as `LLM_API_KEY` and use the settings below. Enable AI drafting if wanted. |
 
 For the broadest requested features, start with one Google Jobs key, Apollo,
 Hunter, and a Google OAuth client. AI is optional: public job discovery,
 explained matching, résumé text parsing, factual template drafts and printable
 tailoring work without it.
+
+## Gemini settings
+
+The hosted workspace uses Google's native `generateContent` and
+`batchEmbedContents` APIs. No OpenAI account, OpenAI key or ChatGPT subscription
+is required.
+
+```dotenv
+LLM_PROVIDER=gemini
+LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta
+LLM_MODEL=gemini-3.5-flash-lite
+LLM_API_KEY=YOUR_GOOGLE_AI_STUDIO_KEY
+EMBEDDING_MODEL=gemini-embedding-001
+```
+
+`gemini-3.5-flash-lite` is the selected stable model for extraction/classification
+and source-checked drafting. `gemini-flash-latest` also routes to Gemini, but
+the alias can change and temporarily return overload errors. Embeddings remain
+an optional explicit action. AI calls allow up to 60 seconds; other provider
+requests retain their shorter timeout. Schema validation and provider/model/input
+caches remain active. Google API quotas and account terms apply.
+Gemini receives a compact JSON schema without numeric or length bounds to avoid
+schema-compiler errors; the complete original Zod schema, including those bounds,
+must still pass before any model output is returned or cached.
+
+In Connections, the provider card reads **Gemini AI & embeddings** when these
+credentials are configured. Upload/review the résumé, request structured parsing,
+and enable AI drafting in Autopilot only if wanted. Inbox AI classification is
+a separate option. Adding the provider does not automatically send email or
+change existing sending preferences.
+
+Official references: [structured outputs](https://ai.google.dev/gemini-api/docs/generate-content/structured-output),
+[embedding API](https://ai.google.dev/api/embeddings),
+[model](https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite),
+[key setup](https://ai.google.dev/gemini-api/docs/api-key).
 
 ## Gmail setup, exactly
 

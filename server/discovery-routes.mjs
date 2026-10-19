@@ -4,7 +4,10 @@ import {buildSearchPlan,rankOpportunity} from './services/search-plan.mjs';
 import {fail} from './domain.mjs';
 
 export function setupReadiness(store,config) {
-  return {apolloConfigured:!!config.APOLLO_API_KEY,hunterConfigured:!!config.HUNTER_API_KEY,jsearchConfigured:!!config.JSEARCH_API_KEY,serpapiConfigured:!!config.SERPAPI_API_KEY,googleConfigured:!!(config.GOOGLE_CLIENT_ID && config.GOOGLE_CLIENT_SECRET && config.TOKEN_ENCRYPTION_KEY),microsoftConfigured:!!(config.MICROSOFT_CLIENT_ID && config.MICROSOFT_CLIENT_SECRET && config.TOKEN_ENCRYPTION_KEY),resendConfigured:!!(config.RESEND_API_KEY && config.EMAIL_FROM),aiConfigured:!!(config.LLM_API_KEY && config.LLM_MODEL),liveSendEnabled:config.ENABLE_LIVE_SEND==='true'};
+  const aiConfigured=!!(config.LLM_API_KEY && config.LLM_MODEL);
+  let geminiConfigured=aiConfigured && String(config.LLM_PROVIDER || '').toLowerCase()==='gemini';
+  try {geminiConfigured ||= aiConfigured && new URL(config.LLM_BASE_URL).hostname==='generativelanguage.googleapis.com';}catch{}
+  return {apolloConfigured:!!config.APOLLO_API_KEY,hunterConfigured:!!config.HUNTER_API_KEY,jsearchConfigured:!!config.JSEARCH_API_KEY,serpapiConfigured:!!config.SERPAPI_API_KEY,googleConfigured:!!(config.GOOGLE_CLIENT_ID && config.GOOGLE_CLIENT_SECRET && config.TOKEN_ENCRYPTION_KEY),microsoftConfigured:!!(config.MICROSOFT_CLIENT_ID && config.MICROSOFT_CLIENT_SECRET && config.TOKEN_ENCRYPTION_KEY),resendConfigured:!!(config.RESEND_API_KEY && config.EMAIL_FROM),aiConfigured,geminiConfigured,liveSendEnabled:config.ENABLE_LIVE_SEND==='true'};
 }
 export function discoveryRoutes(store,config) {
   const queue=taskQueue(store);

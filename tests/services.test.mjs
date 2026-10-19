@@ -369,6 +369,69 @@ test('structured AI and embeddings cache exact content/provider/model and invali
   await embedTexts(['resume text','new job text'],options,fetcher,store);assert.equal(calls,5);
 });
 
+test('compatible model APIs use Google endpoints for validated resume extraction and embeddings, with a longer AI deadline',async t=>{
+  const {extractStructuredResume,embedTexts}=await import('../server/services/ai.mjs');
+  const {setupReadiness}=await import('../server/discovery-routes.mjs');
+  const store=openStore(':memory:');t.after(()=>store.close());
+  const config={LLM_BASE_URL:'https://generativelanguage.googleapis.com/v1beta/openai/',LLM_MODEL:'gemini-3.5-flash-lite',LLM_API_KEY:'test-gemini-key',EMBEDDING_MODEL:'gemini-embedding-001'};
+  const timeouts=[];t.mock.method(AbortSignal,'timeout',ms=>{timeouts.push(ms);return new AbortController().signal;});
+  const extracted={skills:['React','SQL'],yearsOfExperience:null,education:[],workHistory:[],projects:[],linkedin:null,github:null,portfolio:null,noticePeriod:null,expectedSalary:null};
+  let calls=0;
+  const fetcher=async(url,request)=>{
+    calls++;assert.equal(new URL(url).hostname,'generativelanguage.googleapis.com');assert.equal(request.headers.Authorization,'Bearer test-gemini-key');
+    const body=JSON.parse(request.body);
+    if(url.endsWith('/embeddings')) {
+      assert.equal(body.model,'gemini-embedding-001');assert.deepEqual(body.input,['React resume','React job']);
+      return response({data:[{index:1,embedding:[0,1,0]},{index:0,embedding:[1,0,0]}]});
+    }
+    assert.equal(url,'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions');assert.equal(body.model,'gemini-3.5-flash-lite');
+    assert.equal(body.response_format.json_schema.strict,true);assert.ok(body.response_format.json_schema.schema.properties.yearsOfExperience);
+    assert.equal(body.response_format.json_schema.schema.$schema,undefined);
+    return response({choices:[{message:{content:JSON.stringify(extracted)}}]});
+  };
+  assert.deepEqual(await extractStructuredResume({text:'Built React and SQL applications.'},config,fetcher,store),extracted);
+  await extractStructuredResume({text:'Built React and SQL applications.'},config,fetcher,store);assert.equal(calls,1);
+  assert.deepEqual(await embedTexts(['React resume','React job'],config,fetcher,store),[[1,0,0],[0,1,0]]);
+  assert.deepEqual(timeouts,[60000,60000]);assert.equal(setupReadiness(store,config).geminiConfigured,true);
+  assert.equal(setupReadiness(store,{...config,LLM_API_KEY:''}).geminiConfigured,false);
+  await assert.rejects(extractStructuredResume({text:'A changed resume'},config,async()=>response({choices:[{message:{content:'{"skills":"not-an-array"}'}}]}),store),/schema validation/);
+  assert.equal(store.db.prepare('SELECT count(*) AS count FROM ai_cache').get().count,1,'Invalid model output is never cached');
+});
+
+test('native Gemini preserves nullable resume fields, ignores thought parts, and bounds embedding batches',async t=>{
+  const {extractStructuredResume,embedTexts,structuredAI}=await import('../server/services/ai.mjs');
+  const {z}=await import('zod');const store=openStore(':memory:');t.after(()=>store.close());
+  const config={LLM_PROVIDER:'gemini',LLM_BASE_URL:'https://generativelanguage.googleapis.com/v1beta',LLM_MODEL:'gemini-3.5-flash-lite',LLM_API_KEY:'test-native-key',EMBEDDING_MODEL:'gemini-embedding-001'};
+  const extracted={skills:['React'],yearsOfExperience:null,education:[],workHistory:[],projects:[],linkedin:null,github:null,portfolio:null,noticePeriod:null,expectedSalary:null};
+  let generations=0;const batches=[];
+  const fetcher=async(url,request)=>{
+    assert.equal(request.headers['X-goog-api-key'],'test-native-key');assert.equal(request.headers.Authorization,undefined);assert.ok(!String(url).includes('test-native-key'));
+    const body=JSON.parse(request.body);
+    if(url.endsWith(':batchEmbedContents')) {
+      assert.equal(url,'https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents');
+      batches.push(body.requests.length);assert.ok(body.requests.every(r=>r.model==='models/gemini-embedding-001' && r.taskType==='SEMANTIC_SIMILARITY'));
+      return response({embeddings:body.requests.map(()=>({values:[1,.2,0]}))});
+    }
+    generations++;assert.equal(url,'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent');
+    assert.equal(body.generationConfig.responseMimeType,'application/json');
+    const schema=body.generationConfig.responseJsonSchema;
+    assert.ok(schema.properties.yearsOfExperience);assert.equal(schema.properties.skills.maxItems,undefined);
+    assert.equal(schema.properties.education.items.properties.year.type[1],'null');
+    assert.match(body.systemInstruction.parts[0].text,/untrusted data/);assert.match(body.contents[0].parts[0].text,/React/);
+    return response({candidates:[{finishReason:'STOP',content:{parts:[{thought:true,text:'Not JSON: private reasoning'},{text:JSON.stringify(extracted)}]}}]});
+  };
+  assert.deepEqual(await extractStructuredResume({text:'Built a React app.'},config,fetcher,store),extracted);
+  await extractStructuredResume({text:'Built a React app.'},config,fetcher,store);assert.equal(generations,1);
+  const inputs=Array.from({length:105},(_,i)=>`job ${i}`);
+  assert.equal((await embedTexts(inputs,config,fetcher,store)).length,105);assert.deepEqual(batches,[100,5]);
+  await embedTexts(inputs,config,fetcher,store);assert.deepEqual(batches,[100,5]);
+  await assert.rejects(structuredAI(z.object({value:z.string()}),'Extract',{},config,async()=>response({candidates:[{finishReason:'MAX_TOKENS',content:{parts:[{text:'{"value":"partial"}'}]}}]}),store),/incomplete response/);
+  await assert.rejects(structuredAI(z.object({value:z.string()}),'Extract',{},config,async()=>response({promptFeedback:{blockReason:'SAFETY'}}),store),/usable response/);
+  const tooManySkills={...extracted,skills:Array.from({length:81},(_,i)=>`skill ${i}`)};
+  await assert.rejects(extractStructuredResume({text:'Another React resume.'},config,async()=>response({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(tooManySkills)}]}}]}),store),/schema validation/);
+  assert.equal(store.db.prepare('SELECT count(*) AS count FROM ai_cache').get().count,1,'Gemini output must pass the complete local schema before caching');
+});
+
 test('an explicit unsubscribe reply suppresses the contact across campaigns',async t=>{
   const store=openStore(':memory:');t.after(()=>store.close());
   const contact=store.state.contacts[0];contact.email='hr@company.com';contact.suppressed=false;store.save();

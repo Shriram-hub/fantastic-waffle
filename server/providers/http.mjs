@@ -1,10 +1,10 @@
 import { fail } from "../domain.mjs";
-export async function remoteJSON(url, options = {}, fetcher = fetch) {
+export async function remoteJSON(url, options = {}, fetcher = fetch, timeoutMs = 15000) {
   let response;
   try {
     response = await fetcher(url, {
       ...options,
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(timeoutMs),
       redirect: "error",
       headers: { Accept: "application/json", ...options.headers },
     });
