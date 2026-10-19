@@ -24,8 +24,23 @@ export function postgresSQL(sql) {
   }
   return output;
 }
+export async function postgresPoolOptions(config) {
+  let connectionString=config.DATABASE_URL;
+  const url=new URL(connectionString);
+  const supabase=url.hostname.endsWith(".pooler.supabase.com") || url.hostname.endsWith(".supabase.co");
+  let ssl;
+  if(supabase || config.DATABASE_SSL_CA) {
+    if(url.searchParams.get("sslmode") === "disable")fail("This database requires verified TLS.",503);
+    const ca=config.DATABASE_SSL_CA ? config.DATABASE_SSL_CA.replaceAll("\\n","\n") : await readFile(new URL("./supabase-ca.crt",import.meta.url),"utf8");
+    // pg's connection-string SSL fields otherwise overwrite the supplied CA.
+    for(const name of ["sslmode","sslrootcert","sslcert","sslkey"])url.searchParams.delete(name);
+    connectionString=url.href;
+    ssl={ca,rejectUnauthorized:true};
+  }
+  return {connectionString,...(ssl ? {ssl} : {}),max:4,connectionTimeoutMillis:10000,idleTimeoutMillis:30000,statement_timeout:20000,application_name:"orbit"};
+}
 export async function openPostgresStore(config = process.env, suppliedPool) {
-  const pool = suppliedPool || new pg.Pool({connectionString: config.DATABASE_URL, max: 4, connectionTimeoutMillis: 10000, idleTimeoutMillis: 30000, statement_timeout: 20000, application_name: 'orbit'});
+  const pool = suppliedPool || new pg.Pool(await postgresPoolOptions(config));
   // pg returns int8 strings by default; these columns contain JS-safe millisecond timestamps.
   if (!suppliedPool) pool.on('error', () => console.error('PostgreSQL connection unavailable; reconnecting.'));
   const session = new AsyncLocalStorage(), context = new AsyncLocalStorage();

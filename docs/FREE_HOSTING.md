@@ -14,7 +14,7 @@ Environment page. Keep this password private. Provider credentials are separate.
 ## New installation
 
 1. Use the `codex/orbit-prototype` branch. `main` does not contain the application until the PR is merged.
-2. Create a Supabase project on a Free organization. In Connect, select the shared pooler in **session mode**, and copy its exact PostgreSQL URI. IPv4-only hosts need this pooler; its cluster index cannot be inferred from region.
+2. Create a Supabase project on a Free organization. In Connect, select the shared pooler in **session mode**, and copy its exact PostgreSQL URI. Supabase connections verify TLS using the bundled official public CA; `DATABASE_SSL_CA` can supply an alternative PEM CA. IPv4-only hosts need this pooler; its cluster index cannot be inferred from region.
 3. Create a Render web service with Node runtime and Free plan, or use `render.yaml`. Build: `npm ci && npm run build`. Start: `node server/index.mjs`.
 4. Set `HOST=0.0.0.0`, `RUN_EMBEDDED_WORKER=true`, `DATABASE_URL` to the private session-pooler URI, `NODE_VERSION=24`, and a strong `WORKSPACE_PASSWORD`.
 5. The Blueprint generates the encryption secret automatically. For manual setup, generate a stable `TOKEN_ENCRYPTION_KEY` using `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`. Set it as a secret. Never rotate it without reconnecting mailboxes.

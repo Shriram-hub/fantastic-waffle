@@ -73,3 +73,14 @@ test('PostgreSQL outreach commits approvals, reserves recipients, enforces budge
   assert.equal((await store.db.prepare('SELECT count FROM send_budget').get()).count,1);
   await assert.rejects(store.db.prepare("INSERT INTO outreach_send_log(user_id,contact_email,campaign_id,sequence_step,task_id,status,updated_at) VALUES('local',?,?,0,'duplicate','queued',?)").run(row.contact_email,row.campaign_id,Date.now()),/duplicate key|unique constraint/i);
 });
+
+test('Supabase TLS trusts the official CA and keeps certificate/hostname verification enabled',async()=>{
+  const {postgresPoolOptions}=await import('../server/db/postgres-store.mjs');
+  const {X509Certificate}=await import('node:crypto');
+  const options=await postgresPoolOptions({DATABASE_URL:'postgresql://orbit_app.project:private@aws-0-us-east-2.pooler.supabase.com:5432/postgres?sslmode=verify-full'});
+  assert.equal(options.ssl.rejectUnauthorized,true);
+  assert.equal(new URL(options.connectionString).searchParams.has('sslmode'),false);
+  const certificate=new X509Certificate(options.ssl.ca);assert.equal(certificate.ca,true);assert.match(certificate.subject,/Supabase/);
+  assert.equal(certificate.verify(certificate.publicKey),true);
+  await assert.rejects(postgresPoolOptions({DATABASE_URL:'postgresql://user:password@db.project.supabase.co/postgres?sslmode=disable'}),/verified TLS/);
+});
