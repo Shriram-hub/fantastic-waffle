@@ -97,7 +97,7 @@ export async function discoverJobs(task, store, queue, config = {}, fetcher = fe
   for (const source of sources) {
     await store.refresh();
     if (!await activePolicy(store,p.id)) return {status:"cancelled"};
-    const key = `autopilot:${source.source}:${source.slug}`, previous = store.state.syncs[key];
+    const key = `${source.source}:${source.slug}`, previous = store.state.syncs[key];
     let jobs;
     if (previous?.ok && Date.now()-Date.parse(previous.at)<source.ttl) {
       jobs = store.state.jobs.filter(j => !j.archived && (j.sources || [{source:j.source,board:j.board || ""}]).some(s=>s.source===source.source && s.board===source.slug));

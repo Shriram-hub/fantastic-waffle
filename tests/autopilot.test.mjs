@@ -92,10 +92,12 @@ for(const kind of ['sqlite','postgres']) test(`${kind}: autonomous discovery lin
   assert.match(review.messages[0].body,/Frontend Engineer/);assert.match(review.messages[0].body,/\/r\//);
   assert.ok(!review.messages[0].body.includes('Q...'));
   await assert.rejects(store.run(()=>approveReview({approved:true,confirmCount:2,fingerprint:'stale'},store,queue,config)),/changed/);
+  const future=await queue.enqueue('campaign.followup',{accountId:'resend'}, {runAt:Date.now()+4*86400000});
   await store.run(()=>approveReview({approved:true,confirmCount:2,fingerprint:review.fingerprint},store,queue,config));
   const sends=(await queue.list()).filter(t=>t.kind==='campaign.send');assert.equal(sends.length,2);
   assert.ok(sends.every(s=>s.max_attempts===1));
   const scheduled=sends.map(s=>s.run_at).sort();assert.ok(scheduled[1]-scheduled[0]>=240000);
+  assert.equal(scheduled[0],Date.now(),'A future follow-up must not block today’s available sending slots.');
   assert.equal((await runOne(store,queue,registry,sends.find(s=>s.run_at===scheduled[0]).id)).status,'completed');
   assert.equal(mock.calls.filter(u=>u.includes('api.resend.com')).length,1);
   await store.run(()=>savePolicy({enabled:false},store,config));

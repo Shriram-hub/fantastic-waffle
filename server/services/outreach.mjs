@@ -57,13 +57,21 @@ export async function queueCampaign(c, data, store, queue, config, options = {})
   if (!options.inTransaction) await store.db.exec("BEGIN IMMEDIATE");
   try {
     const reserved = await store.db.prepare("SELECT run_at FROM tasks WHERE kind IN ('campaign.send','campaign.followup') AND status NOT IN ('cancelled','failed') AND json_extract(payload,'$.accountId')=? ORDER BY run_at DESC").all(accountId);
-    if (reserved.length) cursor = Math.max(cursor, reserved[0].run_at + randomInt(c.autopilot ? 4 : 3,9)*60000);
     const booked = reserved.map(r => r.run_at);
     for (const m of recipients) {
       if(c.autopilot && await store.db.prepare("SELECT task_id FROM outreach_send_log WHERE contact_email=? AND campaign_id!=? AND status IN ('queued','sending','accepted','unknown') AND updated_at>?").get(m.to.toLowerCase(),c.id,Date.now()-30*86400000))
         fail("A recipient already has recent or pending outreach. Refresh the review queue.",409);
       let slot = businessSlot(cursor, zone);
-      while (booked.filter(at => new Date(at).toISOString().slice(0, 10) === new Date(slot).toISOString().slice(0, 10)).length >= limit) slot = businessSlot(slot + 86400000, zone);
+      // Fill available slots before future follow-ups instead of pushing every
+      // new campaign behind the farthest reservation in the account.
+      for (;;) {
+        if (booked.filter(at => new Date(at).toISOString().slice(0, 10) === new Date(slot).toISOString().slice(0, 10)).length >= limit) {
+          slot = businessSlot(slot + 86400000, zone); continue;
+        }
+        const collision=booked.filter(at=>Math.abs(at-slot)<(c.autopilot ? 4 : 3)*60000);
+        if(!collision.length) break;
+        slot=businessSlot(Math.max(...collision)+randomInt(c.autopilot ? 4 : 3,9)*60000,zone);
+      }
       const key = hash([c.id, m.contactId, c.subject, c.body, c.sequence || null]);
       const task = await queue.enqueue("campaign.send", {
         campaignId: c.id,
