@@ -2,6 +2,54 @@ import { resumeHash } from "./resume-storage.mjs";
 import { z } from "zod";
 import { remoteJSON } from "../providers/http.mjs";
 import { fail, hash, id, now, text } from "../domain.mjs";
+import boards from "../providers/jobs/boards.json" with { type: "json" };
+
+export async function generateSearchMatrix(state, config = {}, fetcher = fetch, store, useAI = false) {
+  const p = state.profile, r = state.resume;
+  const skills = [...new Set([...(p.skills || []), ...(r?.suggestions?.skills || [])])].slice(0, 40);
+  const has = pattern => skills.some(s => pattern.test(s));
+  let roles = (p.interests || []).filter(Boolean).slice(0, 6);
+  if (!roles.length) {
+    if (has(/react|vue|angular|javascript|typescript/i)) roles.push("Frontend Engineer");
+    if (has(/node|django|rails|java|golang|python/i)) roles.push("Backend Engineer");
+    if (roles.length === 2) roles.push("Full Stack Developer");
+    if (has(/machine learning|pytorch|tensorflow/i)) roles.push("Machine Learning Engineer");
+    if (has(/sql|tableau|power bi/i) && !roles.length) roles.push("Data Analyst");
+    if (!roles.length && /engineer|developer|designer|analyst|intern/i.test(p.headline || "")) roles.push(text(p.headline, 100));
+  }
+  // Optional AI ranks existing candidates rather than inventing qualifications/locations.
+  if (useAI && roles.length && config.LLM_API_KEY && config.LLM_MODEL) {
+    const result = await structuredAI(z.object({target_roles:z.array(z.enum(roles)).min(1).max(6)}).strict(),
+      "Rank these candidate job roles using the résumé. Select only supplied candidates; do not infer relocation or seniority.",
+      {roles, resume:text(r?.text, 30000)}, config, fetcher, store);
+    roles = [...new Set(result.target_roles)];
+  }
+  return { target_roles: roles, skills, locations: [...new Set([p.location, p.workMode !== "On-site" && p.workMode !== "Hybrid" ? "Remote" : ""].filter(Boolean))],
+    ats_boards_to_watch: boards.map(b => ({source:b.source,slug:b.slug})),
+    derivedRoles: !(p.interests || []).length, generatedAt: now(),
+    sourceHash: hash({resume:resumeHash(r),text:r?.text || "",skills:p.skills,interests:p.interests,location:p.location,workMode:p.workMode}),
+  };
+}
+
+export async function draftAutopilotPitch(state, job, contact, resumeURL, policy, config, fetcher = fetch, store) {
+  const resume = state.resume?.text || "", p = state.profile;
+  const skills = (p.skills?.length ? p.skills : state.resume?.suggestions?.skills || [])
+    .filter(s => `${job.title} ${job.description}`.toLowerCase().includes(s.toLowerCase())).slice(0, 4);
+  let evidence = [];
+  if (policy.useAI) {
+    const output = await structuredAI(z.object({evidence:z.array(z.string()).max(2)}).strict(),
+      "Select up to two short résumé excerpts relevant to this job. Each excerpt must be copied exactly from the résumé, at most 18 words. Return an empty list when unsupported.",
+      {resume:text(resume,30000),job:{title:job.title,description:text(job.description,12000)},contactTitle:contact.title}, config, fetcher, store);
+    evidence = output.evidence.filter(e => e.trim() && resume.includes(e) && e.split(/\s+/).length <= 18);
+  }
+  const clean = value => String(value || "").replace(/[\r\n{}]/g," ").slice(0,180);
+  const first = clean(contact.name).split(" ")[0] || "there";
+  const skillLine = skills.length ? `My background includes ${skills.map(clean).join(", ")}.` : "I have included my résumé so you can assess my background for this position.";
+  let body = `Hi ${first},\n\nI saw the ${clean(job.title)} opening at ${clean(job.company)} and wanted to reach out about the role. ${skillLine}`;
+  if (evidence.length) body += ` Relevant work from my résumé: ${evidence.map(e => `“${e}”`).join("; ")}.`;
+  body += `\n\n${resumeURL ? `My résumé: ${resumeURL}` : "My résumé is attached."}\nRole: ${job.url}\n\nWould you be the right person to discuss this opportunity, or could you point me to the hiring team? Thank you for your time.`;
+  return {subject:`${clean(job.title)} at ${clean(job.company)} — ${clean(p.name)}`.slice(0,350),body,evidence,method:policy.useAI ? "AI-selected, source-checked résumé excerpts" : "Factual template"};
+}
 export const ResumeSchema = z
   .object({
     skills: z.array(z.string()).max(80),

@@ -1,12 +1,21 @@
-# Orbit v0.3 · Career workspace
+# Orbit v0.4 · Career workspace
 
 A working personal workspace for job discovery, résumé preparation, application tracking, browser-assisted filling, inbox updates, company contacts, and reviewed outreach.
 
 SQLite remains the local default. Set `DATABASE_URL` to use the real PostgreSQL runtime, including durable jobs, send logs, encrypted mailbox credentials, and private resume objects. `RUN_EMBEDDED_WORKER=true` supervises a worker alongside the API on a single hosting service. OAuth connects mailboxes; this is one private personal workspace.
 
+## Autonomous search and outreach
+
+Open **Automation → Autopilot Mode** to opt into two-hour job discovery, automatic
+company/contact lookup, verified job-specific pitches, and either a daily review
+queue or explicitly approved automatic sending. Includes 110 checked ATS boards,
+free public feeds, durable provider-call limits and cloud scheduling. Contact
+APIs/sending still require your own provider access. See [Autopilot setup and
+behavior](docs/AUTOPILOT.md).
+
 ## Free online hosting
 
-Use Render Free + Supabase Free with no PC running: [complete hosting instructions](docs/FREE_HOSTING.md). The web service and worker sleep together on the free plan; queued work survives in PostgreSQL and resumes after wake. Provider API access is separate from hosting.
+Use Render Free + Supabase Free with no PC running: [complete hosting instructions](docs/FREE_HOSTING.md). The web service and worker sleep together on the free plan; Supabase Cron wakes them for due work, and queued work survives in PostgreSQL. Provider API access is separate from hosting.
 
 ## Start locally
 
@@ -41,8 +50,8 @@ Copy `.env.example` to `.env` to configure optional services. No provider creden
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Interface         | React components, Vite production build, Tailwind + retained Orbit styles, responsive views, explicit connection/queue status.                                                                                                                          |
 | Persistence       | Relational SQLite tables, v1 migration, foreign keys and indexes, request-scoped snapshots, per-record conflict checks across API/worker processes.                                                                                                     |
-| Workers           | Durable SQLite task outbox, atomic claims, expiring leases, logs, cancellation, backoff for retryable tasks, separate worker process. Optional Redis + BullMQ dispatch.                                                                                 |
-| Job feeds         | Remotive, selected Greenhouse/Lever/Ashby boards, Arbeitnow, and optional Adzuna. Canonical company/title/location deduplication preserves application-linked IDs and source provenance.                                                                |
+| Workers           | Durable SQLite/PostgreSQL task outbox, atomic claims, expiring leases, logs, cancellation, backoff for retryable tasks, separate worker process. Optional Redis + BullMQ dispatch.                                                                                 |
+| Job feeds         | Remotive, Greenhouse/Lever/Ashby boards, Arbeitnow, Himalayas, and optional Adzuna. Canonical company/title/location deduplication preserves application-linked IDs and source provenance.                                                                |
 | Résumé vault      | Background TXT/DOCX/PDF extraction, reviewed skill suggestions, optional schema-validated model extraction, private local/S3/R2 files, printable fact-preserving versions.                                                                              |
 | Matching          | Explained keyword scores plus optional real embedding/cosine matching. Scores retain model/content fingerprints and invalidate when source text changes.                                                                                                |
 | Browser assistant | Chrome MV3 extension, expiring/revocable pairing tokens, destination checks, approved-field filling, résumé attachment, unknown-question reporting, verification-challenge stop, user-confirmed submission reference.                                   |
@@ -52,7 +61,7 @@ Copy `.env.example` to `.env` to configure optional services. No provider creden
 | Outreach          | Saved/edited drafts, per-recipient previews and `.eml` downloads, native Gmail/Outlook sends or Resend, durable scheduled sends, 30/day default cap (maximum 50), business-hour pacing, one approved threaded follow-up, reply/suppression/pause stops. |
 | Résumé links      | Explicitly approved unlisted seven-day links, revocation, file-version binding, request counts labeled as requests rather than proof of human reading.                                                                                                  |
 
-**Still separate milestones:** multi-user sign-in/isolation, PostgreSQL runtime cutover, broader licensed aggregator coverage such as JSearch/SerpApi, generic headless auto-submit workers, a rich-text multi-step sequence builder, bounce/delivery webhooks and automatic unsubscribe parsing, file-retention cleanup, and production deployment/operations review. There is no universal ATS application-submission claim.
+**Still separate milestones:** multi-user sign-in/isolation, broader licensed aggregator coverage such as JSearch, generic headless auto-submit workers, a rich-text multi-step sequence builder, bounce/delivery webhooks and automatic unsubscribe parsing, file-retention cleanup, and production deployment/operations review. There is no universal ATS application-submission claim.
 
 ## Five-minute workflow
 

@@ -51,12 +51,22 @@ export const applications = pgTable(
   },
   (t) => [uniqueIndex("user_application_job").on(t.userId, t.jobId)],
 );
+export const companies = pgTable("companies", {
+  domain: text("domain").primaryKey(),
+  name: text("name").notNull(),
+});
+export const searchMatrices = pgTable("search_matrices", {
+  userId: text("user_id").primaryKey().references(() => users.id),
+  data: jsonb("data").notNull(),
+});
 export const contacts = pgTable("contacts", {
   id: text("id").primaryKey(),
   userId: text("user_id")
     .notNull()
     .references(() => users.id),
   email: text("email"),
+  jobId: text("job_id").references(() => jobs.id),
+  companyDomain: text("company_domain").references(() => companies.domain),
   suppressed: boolean("suppressed").notNull().default(false),
   data: jsonb("data").notNull(),
 });

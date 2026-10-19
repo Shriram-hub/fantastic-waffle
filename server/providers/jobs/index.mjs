@@ -1,4 +1,5 @@
 import { fetchCoreJobs } from "./core.mjs";
+import { fetchHimalayas } from "./himalayas.mjs";
 import { remoteJSON } from "../http.mjs";
 import { fail, hash, now, safeUrl, stripHtml, text } from "../../domain.mjs";
 export const JOB_SOURCES = [
@@ -8,6 +9,7 @@ export const JOB_SOURCES = [
   "Ashby",
   "Arbeitnow",
   "Adzuna",
+  "Himalayas",
 ];
 export async function fetchJobs(
   source,
@@ -16,6 +18,7 @@ export async function fetchJobs(
   config = {},
   query = "",
 ) {
+  if (source === "Himalayas") return fetchHimalayas(query || board, config, fetcher);
   if (["Remotive", "Greenhouse", "Lever"].includes(source))
     return fetchCoreJobs(source, board, fetcher);
   let jobs = [];

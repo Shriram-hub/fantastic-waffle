@@ -110,7 +110,7 @@ export function Connections() {
         >
           <h2>Sources & automation settings</h2>
           <p>
-            Remotive and Arbeitnow are public feeds. Company-board slugs choose
+            Remotive, Arbeitnow, and Himalayas are public feeds. Company-board slugs choose
             specific employers.
           </p>
           <div className="stack">
@@ -282,10 +282,8 @@ export function Connections() {
         </div>
       </div>
       <div className="notice">
-        Queue driver: {integrations.queueDriver}. PostgreSQL/pgvector and
-        multi-user sign-in are deployment milestones; this running version uses
-        relational SQLite and a personal workspace. OAuth mailbox authorization
-        does not create separate application user accounts.
+        Queue driver: {integrations.queueDriver}. This is one private personal workspace.
+        OAuth connects your mailboxes; separate user accounts are a future milestone.
       </div>
     </>
   );

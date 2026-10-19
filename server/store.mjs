@@ -42,6 +42,16 @@ CREATE TABLE IF NOT EXISTS outreach_send_log(user_id TEXT NOT NULL DEFAULT 'loca
 CREATE TABLE IF NOT EXISTS unsubscribe_tokens(id TEXT PRIMARY KEY,email TEXT NOT NULL,created_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS ai_cache(id TEXT PRIMARY KEY,body TEXT NOT NULL,created_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS public_resumes(id TEXT PRIMARY KEY, resume_hash TEXT NOT NULL, expires INTEGER NOT NULL, revoked INTEGER DEFAULT 0, views INTEGER DEFAULT 0);
+CREATE TABLE IF NOT EXISTS companies(domain TEXT PRIMARY KEY,name TEXT NOT NULL,body TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS search_matrices(id TEXT PRIMARY KEY,body TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS autopilot_config(id TEXT PRIMARY KEY,body TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS autopilot_schedule(id TEXT PRIMARY KEY,next_run INTEGER NOT NULL,cursor INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS autopilot_runs(id TEXT PRIMARY KEY,job_id TEXT NOT NULL REFERENCES job_listings(id) ON DELETE CASCADE,policy_id TEXT NOT NULL,status TEXT NOT NULL,body TEXT NOT NULL,updated_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS autopilot_run_status ON autopilot_runs(status,updated_at);
+CREATE TABLE IF NOT EXISTS autopilot_activity(id TEXT PRIMARY KEY,at INTEGER NOT NULL,kind TEXT NOT NULL,message TEXT NOT NULL,count INTEGER);
+CREATE INDEX IF NOT EXISTS autopilot_activity_time ON autopilot_activity(at);
+CREATE TABLE IF NOT EXISTS provider_requests(id TEXT PRIMARY KEY,provider TEXT NOT NULL,day TEXT NOT NULL,status TEXT NOT NULL,body TEXT,created_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS provider_request_budget ON provider_requests(day,provider);
 `;
 export function openStore(directory) {
   let path = ":memory:";
@@ -55,6 +65,11 @@ export function openStore(directory) {
     "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;",
   );
   db.exec(schema);
+  // Additive upgrade for existing local workspaces.
+  const contactColumns = db.prepare("PRAGMA table_info(contacts)").all().map(c => c.name);
+  if (!contactColumns.includes("job_id")) db.exec("ALTER TABLE contacts ADD COLUMN job_id TEXT REFERENCES job_listings(id) ON DELETE SET NULL");
+  if (!contactColumns.includes("company_domain")) db.exec("ALTER TABLE contacts ADD COLUMN company_domain TEXT REFERENCES companies(domain)");
+  db.exec("CREATE INDEX IF NOT EXISTS contact_job ON contacts(job_id); CREATE INDEX IF NOT EXISTS contact_domain ON contacts(company_domain)");
   if (path !== ":memory:") chmodSync(path, 0o600);
   const context = new AsyncLocalStorage();
   const rows = (table) =>
@@ -102,8 +117,8 @@ export function openStore(directory) {
       ).run(key, value.jobId, value.stage, body);
     else if (table === "contacts")
       db.prepare(
-        "INSERT INTO contacts(id,email,suppressed,body) VALUES(?,?,?,?)",
-      ).run(key, value.email || null, value.suppressed ? 1 : 0, body);
+        "INSERT INTO contacts(id,email,suppressed,job_id,company_domain,body) VALUES(?,?,?,?,?,?)",
+      ).run(key, value.email || null, value.suppressed ? 1 : 0, value.jobId || null, value.companyDomain || null, body);
     else if (table === "campaigns")
       db.prepare("INSERT INTO campaigns(id,status,body) VALUES(?,?,?)").run(
         key,
@@ -118,6 +133,7 @@ export function openStore(directory) {
   }
   function overwrite(state) {
     for (const table of [
+      "autopilot_runs", "autopilot_config", "autopilot_schedule", "autopilot_activity", "search_matrices", "provider_requests",
       "outreach_send_log",
       "unsubscribe_tokens",
       "ai_cache",
@@ -135,6 +151,7 @@ export function openStore(directory) {
       "inbox_updates",
       "applications",
       "contacts",
+      "companies",
       "campaigns",
       "job_listings",
       "resumes",
@@ -213,8 +230,8 @@ export function openStore(directory) {
               );
             if (table === "contacts")
               db.prepare(
-                "UPDATE contacts SET email=?,suppressed=? WHERE id=?",
-              ).run(value.email || null, value.suppressed ? 1 : 0, id);
+                "UPDATE contacts SET email=?,suppressed=?,job_id=?,company_domain=? WHERE id=?",
+              ).run(value.email || null, value.suppressed ? 1 : 0, value.jobId || null, value.companyDomain || null, id);
             if (table === "inbox_updates")
               db.prepare(
                 "UPDATE inbox_updates SET application_id=? WHERE id=?",

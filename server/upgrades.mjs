@@ -1,4 +1,5 @@
 import { unsubscribeRoute } from "./services/unsubscribe.mjs";
+import { autopilotRoutes } from "./autopilot-routes.mjs";
 import { resumeHash, hydrateResume } from "./services/resume-storage.mjs";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { createRemoteJWKSet, jwtVerify } from "jose";
@@ -39,10 +40,12 @@ export function upgradeRoutes(store, config, fetcher) {
   const enqueue = async (res, json, kind, payload, options) => json(res, 202, {
     task: await queue.enqueue(kind, payload, options)
   });
+  const autopilot = autopilotRoutes(store,queue,config,fetcher);
   async function publicRoute(req, res, u, {
     json,
     bodyJSON
   }) {
+    if (await autopilot.publicRoute(req,res,u,{json,bodyJSON})) return true;
     const path = u.pathname;
     if (await unsubscribeRoute(req,res,u,store,queue)) return true;
     if (path === "/api/webhooks/microsoft") {
@@ -217,6 +220,7 @@ export function upgradeRoutes(store, config, fetcher) {
     json,
     bodyJSON
   }) {
+    if (await autopilot.handle(req,res,u,{json,bodyJSON})) return true;
     const path = u.pathname,
       method = req.method,
       s = store.state;

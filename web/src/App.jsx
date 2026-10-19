@@ -18,6 +18,7 @@ export default function App() {
     [accounts, setAccounts] = useState([]),
     [tasks, setTasks] = useState({ tasks: [], applications: [] }),
     [vault, setVault] = useState({ versions: [], links: [] }),
+    [autopilot, setAutopilot] = useState(null),
     [route, setRoute] = useState(location.hash.slice(1) || "overview"),
     [modal, setModal] = useState(null),
     [notice, setNotice] = useState(null),
@@ -26,18 +27,20 @@ export default function App() {
     [error, setError] = useState("");
   const notify = (message, error = false) => setNotice({ message, error });
   async function reload() {
-    const [s, i, a, t, v] = await Promise.all([
+    const [s, i, a, t, v, auto] = await Promise.all([
       api("/state"),
       api("/integrations"),
       api("/mail/accounts"),
       api("/tasks"),
       api("/vault"),
+      api("/autopilot"),
     ]);
     setData(s);
     setIntegrations(i);
     setAccounts(a.accounts);
     setTasks(t);
     setVault(v);
+    setAutopilot(auto);
   }
   async function perform(fn, message) {
     if (busy) return;
@@ -69,6 +72,12 @@ export default function App() {
       const task = JSON.parse(event.data);
       if (['completed', 'failed', 'unknown', 'cancelled'].includes(task.status))
         notify(`${task.kind}: ${task.status}`, ['failed', 'unknown'].includes(task.status));
+      clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => reloadRef.current().catch(() => {}), 150);
+    });
+    events.addEventListener('autopilot', (event) => {
+      const item = JSON.parse(event.data);
+      notify(item.message, item.kind === 'blocked');
       clearTimeout(refreshTimer);
       refreshTimer = setTimeout(() => reloadRef.current().catch(() => {}), 150);
     });
@@ -104,6 +113,7 @@ export default function App() {
     accounts,
     tasks,
     vault,
+    autopilot,
     reload,
     go,
     modal,
@@ -268,7 +278,7 @@ export default function App() {
             )}
             <View key={route} />
             <footer className="page-footer">
-              Orbit v0.3 · Personal workspace
+              Orbit v0.4 · Personal workspace
             </footer>
           </main>
         </div>

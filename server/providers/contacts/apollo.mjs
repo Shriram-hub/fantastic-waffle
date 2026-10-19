@@ -30,7 +30,7 @@ export async function searchApollo(query, key, fetcher = fetch) {
       headers: { "Content-Type": "application/json", "X-Api-Key": key },
       body: JSON.stringify({
         page: 1,
-        per_page: 25,
+        per_page: Math.max(1, Math.min(25, Number(query.limit) || 25)),
         ...(domain ? { q_organization_domains_list: [domain] } : {}),
         ...(titles.length ? { person_titles: titles } : {}),
       }),
@@ -83,11 +83,13 @@ export async function enrichApollo(contact, key, fetcher = fetch) {
   return {
     name: text(p.name, 150) || contact.name,
     email: emailValid(p.email || "") ? p.email.toLowerCase() : "",
-    emailStatus: p.email_status === "verified" ? "verified" : "unverified",
+    emailStatus: p.email_status === "verified" && !p.email_domain_catchall ? "verified" : "unverified",
     title: text(p.title, 150) || contact.title,
     company: text(p.organization?.name, 150) || contact.company,
     enrichedAt: now(),
     headline: text(p.headline, 500),
     companyDescription: text(p.organization?.short_description, 3000),
+    organizationDomain: text(p.organization?.primary_domain, 200).toLowerCase(),
+    verification: {provider:"Apollo",status:p.email_status === "verified" && !p.email_domain_catchall ? "verified" : "unverified",at:now()},
   };
 }

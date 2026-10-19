@@ -6,6 +6,7 @@ import { writeFile, mkdir, rm } from "node:fs/promises";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { initialState } from "../server/fixtures.mjs";
+import { AUTOPILOT_DEFAULTS } from "../server/services/autopilot-policy.mjs";
 import { scoreJob } from "../server/domain.mjs";
 test("React views render populated/empty states and escape untrusted profile and job text", async (t) => {
   const output = await build({
@@ -37,6 +38,7 @@ test("React views render populated/empty states and escape untrusted profile and
       tasks: { tasks: [], applications: [] },
       vault: { versions: [], links: [] },
       integrations: {},
+      autopilot: {policy:AUTOPILOT_DEFAULTS,reviewCount:0,activity:[{id:'activity-1',at:Date.now(),kind:'discovery',message:'<script>alert(1)</script>'}],blockers:{discovery:[],contacts:[],sending:[]},runs:[],lookupsToday:0},
       perform() {},
       notify() {},
       setModal() {},
@@ -61,6 +63,7 @@ test("React views render populated/empty states and escape untrusted profile and
         ),
       );
       assert.ok(html.length > 100);
+      if(name === "Automation") {assert.match(html,/Autopilot Mode/);assert.match(html,/Enable Autopilot/);assert.match(html,/Approve|review queue/);}
       assert.ok(!html.includes("<script>alert(1)</script>"));
       assert.ok(!html.includes("<img src=x"));
     }

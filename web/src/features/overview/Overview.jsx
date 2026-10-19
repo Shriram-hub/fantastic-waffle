@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp, api, stages, split, fmt } from '../../shared/workspace.jsx';
 import { Button, Badge, Heading, Empty, Panel, Field, Company, Modal, ConfirmAction, Sample } from '../../shared/ui.jsx';
 import { ApplicationList } from '../tracker/ApplicationList.jsx';
+import { AutopilotActivity } from '../automation/AutopilotActivity.jsx';
 export function Overview() {
   const { data, tasks, go } = useApp(),
     applied = data.applications.filter((a) =>
@@ -117,6 +118,7 @@ export function Overview() {
           </div>
         </Panel>
       </div>
+      <AutopilotActivity compact/>
       <div className="quick-links">
         {[
           [

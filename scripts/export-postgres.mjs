@@ -68,17 +68,23 @@ try {
           data: a,
         })
         .onConflictDoNothing();
-    for (const c of state.contacts)
+    for (const c of state.contacts) {
+      if (c.companyDomain) await tx.insert(schema.companies).values({domain:c.companyDomain,name:c.company}).onConflictDoNothing();
       await tx
         .insert(schema.contacts)
         .values({
           id: `${userId}:${c.id}`,
           userId,
           email: c.email || null,
+          jobId: c.jobId ? `${userId}:${c.jobId}` : null,
+          companyDomain: c.companyDomain || null,
           suppressed: c.suppressed,
           data: c,
         })
         .onConflictDoNothing();
+    }
+    const matrix = source.db.prepare("SELECT body FROM search_matrices WHERE id='current'").get();
+    if (matrix) await tx.insert(schema.searchMatrices).values({userId,data:JSON.parse(matrix.body)}).onConflictDoNothing();
     for (const c of state.campaigns)
       await tx
         .insert(schema.campaigns)

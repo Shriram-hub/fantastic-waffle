@@ -1,6 +1,6 @@
 # Free online first version
 
-Orbit v0.3 can run on a Render Free web service plus a Supabase Free database.
+Orbit v0.4 can run on a Render Free web service plus a Supabase Free database.
 The API supervises a separate worker child process inside the same service.
 No PC, paid worker, Redis, S3 bucket, or paid disk is required for this setup.
 This remains one password-protected personal workspace, not public multi-tenant SaaS.
@@ -29,7 +29,7 @@ S3/R2 remains optional. A blank `DATABASE_URL` selects local SQLite instead.
 
 ## Configure features gradually
 
-- Job feeds: Remotive/Arbeitnow need no API key; Greenhouse/Lever/Ashby need selected board slugs.
+- Job feeds: Remotive/Arbeitnow/Himalayas need no API key; Greenhouse/Lever/Ashby need selected board slugs.
 - PDF: native Render may not have Poppler. Paste extracted text or upload DOCX/TXT when warned. The Docker image includes Poppler.
 - Gmail/Outlook: configure the provider's OAuth web client. Callback is `https://YOUR-HOST/api/oauth/google/callback` or `/api/oauth/microsoft/callback`. Then connect in Orbit and run a manual sync. Hosted webhooks require additional provider setup.
 - Contacts: CSV/manual entry works; Apollo and Hunter require your own API access.
@@ -42,7 +42,10 @@ S3/R2 remains optional. A blank `DATABASE_URL` selects local SQLite instead.
 Render Free sleeps after 15 minutes without inbound traffic. Waking can take about a minute.
 The API and embedded worker both stop during sleep; queued tasks persist in PostgreSQL
 and resume after wake. Follow-ups and polling are therefore best-effort, not always-on.
-No artificial keepalive is installed. Supabase Free can pause after one week of inactivity.
+Supabase Cron now dispatches real due work through an authenticated endpoint every
+two minutes when needed, including scheduled discovery every two hours. No empty
+keepalive is installed. See [Autopilot scheduling](AUTOPILOT.md). Supabase Free
+can pause after one week of inactivity.
 Free hosting does not make Apollo, email verification, or model APIs free.
 Respect the providers' published storage, traffic, and usage limits.
 

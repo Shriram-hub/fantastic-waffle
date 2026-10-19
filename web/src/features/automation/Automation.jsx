@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp, api, stages, split, fmt } from '../../shared/workspace.jsx';
 import { Button, Badge, Heading, Empty, Panel, Field, Company, Modal, ConfirmAction, Sample } from '../../shared/ui.jsx';
+import { AutopilotSettings } from './AutopilotSettings.jsx';
 export function Automation() {
   const { tasks, data, perform, setModal } = useApp();
   return (
@@ -9,6 +10,7 @@ export function Automation() {
         title="Work in motion."
         subtitle="Background imports, parsing, matching, outreach, and browser-assisted applications."
       />
+      <AutopilotSettings/>
       <Panel
         title="Browser application queue"
         subtitle="The extension fills supported fields. You review and submit yourself."
@@ -64,7 +66,7 @@ export function Automation() {
       </Panel>
       <Panel
         title="Background tasks"
-        subtitle="Queued tasks require npm run worker or the Docker worker service."
+        subtitle="Discovery, contact lookups, drafts, and sends run in the hosted background worker."
       >
         {tasks.tasks.map((t) => (
           <div className="task-item" key={t.id}>

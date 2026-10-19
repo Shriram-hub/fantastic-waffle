@@ -1,4 +1,6 @@
 import { taskEvents } from "./events.mjs";
+import { ensureSearchMatrix } from "./services/autopilot.mjs";
+import { profileScope } from "./services/autopilot-policy.mjs";
 import { openConfiguredStore } from "./store-config.mjs";
 import { spawn } from "node:child_process";
 import { hydrateResume } from "./services/resume-storage.mjs";
@@ -29,7 +31,7 @@ function publicState(s) {
     jobs: s.jobs.map(j => ({
       ...j,
       semanticMatch: j.semanticMatch?.resumeHash === hash(s.resume?.text) && j.semanticMatch?.jobHash === hash(`${j.title}\n${j.description}`) ? j.semanticMatch : null,
-      match: scoreJob(j, s.profile)
+      match: j.autopilotMatch?.scope === profileScope(s) ? j.autopilotMatch : scoreJob(j, s.profile)
     })),
     resume: s.resume ? Object.fromEntries(Object.entries(s.resume).filter(([key]) => key !== "base64")) : null
   };
@@ -97,7 +99,7 @@ export function createApp({
     if (!item) fail(`${label} not found.`, 404);
     return item;
   };
-  const events = taskEvents(upgrade.queue);
+  const events = taskEvents(upgrade.queue,store);
   const server = createServer((req, res) => ready.then(() => store.run(async () => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "no-referrer");
@@ -157,7 +159,9 @@ export function createApp({
         hunter: Boolean(config.HUNTER_API_KEY),
         ai: Boolean(config.LLM_API_KEY && config.LLM_MODEL),
         embeddings: Boolean(config.LLM_API_KEY && config.EMBEDDING_MODEL),
-        queueDriver: config.REDIS_URL ? "BullMQ + Redis" : "SQLite",
+        queueDriver: config.REDIS_URL ? "BullMQ + Redis" : store.kind === "postgres" ? "PostgreSQL" : "SQLite",
+        himalayas: true,
+        liveSendEnabled: config.ENABLE_LIVE_SEND === "true",
         autoApply: "assisted"
       });
       if (method === "GET" && path === "/api/resume/download") {
@@ -226,6 +230,7 @@ export function createApp({
             resumeUrl: s.profile.resumeUrl || ""
           };
           await store.save();
+          await ensureSearchMatrix(store,config,fetcher);
           return json(res, 200, {
             ok: true
           });
@@ -241,6 +246,7 @@ export function createApp({
           if (!s.resume) fail("Upload a résumé first.");
           s.resume.text = text(data.text, 100000);
           await store.save();
+          await ensureSearchMatrix(store,config,fetcher);
           return json(res, 200, {
             ok: true
           });

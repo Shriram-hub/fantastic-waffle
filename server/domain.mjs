@@ -267,7 +267,10 @@ export function campaignFingerprint(campaign, state) {
     resume: state.resume
       ? state.resume.contentHash || hash(state.resume.base64)
       : null,
-    contacts: state.contacts,
+    contacts: campaign.contactIds.map(cid => state.contacts.find(c => c.id === cid)),
+    jobId: campaign.jobId || null,
+    autopilot: campaign.autopilot || null,
+    resumeShare: campaign.resumeShare || null,
   });
 }
 export function suggestStage(subject, body) {

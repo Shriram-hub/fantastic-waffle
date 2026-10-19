@@ -1,4 +1,19 @@
 @import "tailwindcss";
+
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.check input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  min-height: 16px;
+  margin-top: 3px;
+  flex: 0 0 16px;
+}
 @import "../../public/styles.css";
 .content-grid {
   display: grid;

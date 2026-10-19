@@ -11,8 +11,9 @@ import { extractStructuredResume, generateIcebreaker, classifyInboxAI, embedText
 import { syncMailbox, watchMailbox } from "./providers/mail/inbox.mjs";
 import { ingestMessage, shouldClassify } from "./services/inbox.mjs";
 import { deliverTask } from "./services/outreach.mjs";
+import { scheduleAutopilot, ensureSearchMatrix, discoverJobs, enrichCompany, draftPitches } from "./services/autopilot.mjs";
 import { fail, hash, now } from "./domain.mjs";
-export function handlers(store, queue, config = {}, fetcher = fetch) {
+export function handlers(store, queue, config = {}, fetcher = fetch, dependencies = {}) {
   const find = (values, id) => {
     const v = values.find(v => v.id === id);
     if (!v) fail("The target record no longer exists.", 404);
@@ -37,6 +38,9 @@ export function handlers(store, queue, config = {}, fetcher = fetch) {
     };
   }
   return {
+    async "JOB_DISCOVERY_SWEEP"(task) { return discoverJobs(task,store,queue,config,fetcher); },
+    async "AUTO_ENRICH_COMPANY"(task) { return enrichCompany(task,store,queue,config,fetcher,dependencies.lookupMx); },
+    async "AUTO_DRAFT_PERSONALIZED_EMAIL"(task) { return draftPitches(task,store,queue,config,fetcher); },
     async "jobs.sync"(task) {
       const {
           source,
@@ -84,6 +88,7 @@ export function handlers(store, queue, config = {}, fetcher = fetch) {
       });
       if (!persisted.base64) delete store.state.resume.base64;
       await store.save();
+      await ensureSearchMatrix(store,config,fetcher);
       if (config.LLM_API_KEY && config.LLM_MODEL && task.payload.structured) await queue.enqueue("resume.extract", {
         resumeHash: task.payload.resumeHash
       }, {
@@ -246,6 +251,7 @@ export async function runOne(store, queue, registry, wantedId) {
       return handler(task);
     });
     if (result?.status === "cancelled" && task.kind.startsWith("campaign.")) await store.run(async () => {
+      await store.db.prepare("UPDATE outreach_send_log SET status='cancelled',updated_at=? WHERE task_id=? AND status='queued'").run(Date.now(),task.id);
       const c = store.state.campaigns.find(c => c.id === task.payload.campaignId),
         d = c?.deliveries.find(d => d.taskId === (task.payload.parentTaskId || task.id));
       if (d) {
@@ -312,7 +318,12 @@ export async function startWorker(config = process.env) {
   console.log(`Orbit worker started (${config.REDIS_URL ? "BullMQ + Redis" : `durable ${store.kind || "SQLite"} queue`}).`);
   let lastRecovery=0;
   while (!stopping) {
-    if (Date.now()-lastRecovery>60000) {await queue.recover();lastRecovery=Date.now();}
+    if (Date.now()-lastRecovery>60000) {
+      await queue.recover();
+      try { await store.run(()=>scheduleAutopilot(store,queue,config)); }
+      catch { console.error("Autopilot schedule unavailable; durable work will be retried."); }
+      lastRecovery=Date.now();
+    }
     if (bull) {
       for (const row of await store.db.prepare("SELECT id,kind,status,run_at,attempts FROM tasks WHERE status='queued' ORDER BY run_at LIMIT 200").all()) await bull.add(row.kind, {
         taskId: row.id
