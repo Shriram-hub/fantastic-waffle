@@ -1,5 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import { AsyncLocalStorage } from "node:async_hooks";
+import {cloneJsonState} from './state-clone.mjs';
 import { mkdirSync, chmodSync } from "node:fs";
 import { resolve } from "node:path";
 import { initialState } from "./fixtures.mjs";
@@ -192,7 +193,7 @@ export function openStore(directory) {
   }
   const snapshot = () => {
     const state = read();
-    return { state, base: structuredClone(state) };
+    return { state, base: cloneJsonState(state) };
   };
   let root = snapshot();
   function save(inTransaction = false) {
@@ -256,7 +257,7 @@ export function openStore(directory) {
           } else insert(table, id, value);
         }
       if (!inTransaction) db.exec("COMMIT");
-      local.base = structuredClone(local.state);
+      local.base = cloneJsonState(local.state);
     } catch (e) {
       if (!inTransaction) db.exec("ROLLBACK");
       throw e;
@@ -286,7 +287,7 @@ export function openStore(directory) {
         db.exec("COMMIT");
         const local = context.getStore() || root;
         local.state = next;
-        local.base = structuredClone(next);
+        local.base = cloneJsonState(next);
       } catch (e) {
         db.exec("ROLLBACK");
         throw e;

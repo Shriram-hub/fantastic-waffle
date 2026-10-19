@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import {cloneJsonState} from '../state-clone.mjs';
 import { readFile } from 'node:fs/promises';
 import pg from 'pg';
 import { collections } from '../store.mjs';
@@ -101,15 +102,15 @@ export async function openPostgresStore(config = process.env, suppliedPool) {
   let cachedSnapshot;
   const read = async () => {
     const revision=(await pool.query("SELECT value FROM orbit_runtime.workspace_revision WHERE id='local'")).rows[0]?.value;
-    if(!session.getStore()?.client && cachedSnapshot?.revision===revision) return structuredClone(cachedSnapshot.state);
+    if(!session.getStore()?.client && cachedSnapshot?.revision===revision) return cloneJsonState(cachedSnapshot.state);
     const result = await query(tables.map(t => `SELECT '${t}' AS collection,body,row_order FROM ${t}`).join(' UNION ALL ') + ' ORDER BY collection,row_order');
     const groups = Object.fromEntries(tables.map(t => [t, []]));
     for (const row of result.rows) groups[row.collection].push(JSON.parse(row.body));
     const state={...(groups.workspace_meta[0] || {}),profile:groups.user_profiles[0] || {},resume:groups.resumes[0] || null,...Object.fromEntries(Object.entries(collections).map(([key, table]) => [key, groups[table]]))};
-    if(!session.getStore()?.client) cachedSnapshot={revision,state:structuredClone(state)};
+    if(!session.getStore()?.client) cachedSnapshot={revision,state:cloneJsonState(state)};
     return state;
   };
-  const snapshot = async () => { const state = await read(); return {state,base:structuredClone(state)}; };
+  const snapshot = async () => { const state = await read(); return {state,base:cloneJsonState(state)}; };
   const overwrite = async (state) => {
     for (const table of [...new Set(['autopilot_runs', ...[...runtimeTables].reverse().filter(t => !['companies','contacts'].includes(t)), 'contacts', 'companies'])]) if (table !== 'migrations') await db.exec(`DELETE FROM ${table}`);
     for (const [table, values] of Object.entries(entries(state))) for (const row of values) await write(table,row.id,row.value,false);
@@ -148,11 +149,11 @@ export async function openPostgresStore(config = process.env, suppliedPool) {
             await write(table,id,value,Boolean(current));
           }
           if (!inTransaction) await db.exec('COMMIT');
-          local.base=structuredClone(local.state);
+          local.base=cloneJsonState(local.state);
         } catch(e) { if (!inTransaction) await db.exec('ROLLBACK'); throw e; }
       });
     },
-    async replace(next) { return withSession(async () => {await db.exec('BEGIN');try {await overwrite(next);await db.exec('COMMIT');const local=context.getStore()||root;local.state=next;local.base=structuredClone(next);}catch(e){await db.exec('ROLLBACK');throw e;}}); },
+    async replace(next) { return withSession(async () => {await db.exec('BEGIN');try {await overwrite(next);await db.exec('COMMIT');const local=context.getStore()||root;local.state=next;local.base=cloneJsonState(next);}catch(e){await db.exec('ROLLBACK');throw e;}}); },
     async close() { await pool.end(); },
   };
 }

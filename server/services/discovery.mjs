@@ -9,7 +9,7 @@ import {providerCall} from './provider-budget.mjs';
 
 export const DISCOVERY_INTERVAL=2*3600000;
 // Keep retained provider payloads small enough for Render's shared free instance.
-const BATCH_SIZE=6,MAX_INDEX=1500;
+const BATCH_SIZE=4,MAX_INDEX=1500;
 const sourceKey=d=>hash([d.source,d.board,d.page || 1,d.location || '',d.country || '']);
 export const SOURCE_DEFAULTS=Object.freeze({'Remotive':true,'Arbeitnow':true,'Remote OK':true,'Jobicy':true,'Himalayas':true,'Greenhouse':true,'Lever':true,'Ashby':true,'Google Jobs':false});
 export async function getSearchConfig(store) {
