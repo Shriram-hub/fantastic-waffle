@@ -1,4 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
+import {scheduleDiscovery} from './services/discovery.mjs';
+import {setupReadiness} from './discovery-routes.mjs';
+import {scheduleMailboxSync} from './services/inbox.mjs';
 import { fail } from "./domain.mjs";
 import { autopilotStatus, savePolicy, getPolicy, ensureSearchMatrix, scheduleAutopilot, reviewAutopilot, approveReview, retryHeldLookups } from "./services/autopilot.mjs";
 
@@ -10,8 +13,10 @@ export function autopilotRoutes(store,queue,config,fetcher) {
       const actual=Buffer.from(String(req.headers["x-orbit-scheduler"] || "")),expected=Buffer.from(config.AUTOPILOT_CRON_SECRET || "");
       if(!expected.length || expected.length!==actual.length || !timingSafeEqual(actual,expected)) fail("Invalid scheduler credential.",401);
       const task=await scheduleAutopilot(store,queue,config);
+      const discovery=await scheduleDiscovery(store,queue,config);
+      const inboxes=await scheduleMailboxSync(store,queue);
       // A tick wakes the embedded worker for real due tasks, even while discovery is paused.
-      json(res,202,{scheduled:!!task,version:"0.4.0",storage:store.kind || "sqlite"});return true;
+      json(res,202,{scheduled:!!task || !!discovery || !!inboxes,version:"0.5.0",storage:store.kind || "sqlite",setup:setupReadiness(store,config)});return true;
     },
     async handle(req,res,url,{json,bodyJSON}) {
       const path=url.pathname;
@@ -28,6 +33,11 @@ export function autopilotRoutes(store,queue,config,fetcher) {
           await scheduleAutopilot(store,queue,config);
         }
         json(res,200,await autopilotStatus(store,config));return true;
+      }
+      if(path==='/api/autopilot/run' && req.method==='POST') {
+        const discovery=await scheduleDiscovery(store,queue,config,true);
+        const outreach=await scheduleAutopilot(store,queue,config);
+        json(res,202,{taskId:discovery?.id || outreach?.id || null,queued:!!discovery || !!outreach});return true;
       }
       if(path==="/api/autopilot/sweep" && req.method==="POST") {
         const policy=await getPolicy(store);

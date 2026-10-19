@@ -4,14 +4,16 @@ import { setTimeout as pause } from "node:timers/promises";
 import { openConfiguredStore } from "./store-config.mjs";
 import { taskQueue } from "./queue.mjs";
 import { fetchJobs, mergeJobListings } from "./providers/jobs/index.mjs";
-import { parseResume } from "./resume.mjs";
+import { parseResumeAsync } from "./resume.mjs";
 import { enrichApollo } from "./providers/contacts/apollo.mjs";
 import { verifyWorkEmail } from "./providers/contacts/verification.mjs";
 import { extractStructuredResume, generateIcebreaker, classifyInboxAI, embedTexts, cosineSimilarity, factPreservingTailor } from "./services/ai.mjs";
 import { syncMailbox, watchMailbox } from "./providers/mail/inbox.mjs";
-import { ingestMessage, shouldClassify } from "./services/inbox.mjs";
+import { ingestMessage, shouldClassify, scheduleMailboxSync } from "./services/inbox.mjs";
 import { deliverTask } from "./services/outreach.mjs";
 import { scheduleAutopilot, ensureSearchMatrix, discoverJobs, enrichCompany, draftPitches } from "./services/autopilot.mjs";
+import {scheduleDiscovery,discoverBatch} from './services/discovery.mjs';
+import {verifyBoard} from './providers/jobs/registry.mjs';
 import { fail, hash, now } from "./domain.mjs";
 export function handlers(store, queue, config = {}, fetcher = fetch, dependencies = {}) {
   const find = (values, id) => {
@@ -38,8 +40,10 @@ export function handlers(store, queue, config = {}, fetcher = fetch, dependencie
     };
   }
   return {
+    async 'boards.verify'(task) {return verifyBoard(task,store,fetcher);},
+    async 'jobs.discover'(task) {return discoverBatch(task,store,queue,config,fetcher);},
     async "JOB_DISCOVERY_SWEEP"(task) { return discoverJobs(task,store,queue,config,fetcher); },
-    async "AUTO_ENRICH_COMPANY"(task) { return enrichCompany(task,store,queue,config,fetcher,dependencies.lookupMx); },
+    async "AUTO_ENRICH_COMPANY"(task) { return enrichCompany(task,store,queue,config,fetcher,dependencies.lookupMx,dependencies.contactPages); },
     async "AUTO_DRAFT_PERSONALIZED_EMAIL"(task) { return draftPitches(task,store,queue,config,fetcher); },
     async "jobs.sync"(task) {
       const {
@@ -71,7 +75,7 @@ export function handlers(store, queue, config = {}, fetcher = fetch, dependencie
       if (!r || resumeHash(r) !== task.payload.resumeHash) return {
         status: "cancelled"
       };
-      const result = parseResume(await hydrateResume(r, store, config));
+      const result = await parseResumeAsync(await hydrateResume(r, store, config));
       await store.refresh();
       if (!store.state.resume || resumeHash(store.state.resume) !== task.payload.resumeHash) return {
         status: "cancelled"
@@ -89,6 +93,7 @@ export function handlers(store, queue, config = {}, fetcher = fetch, dependencie
       if (!persisted.base64) delete store.state.resume.base64;
       await store.save();
       await ensureSearchMatrix(store,config,fetcher);
+      await scheduleDiscovery(store,queue,config,true);
       if (config.LLM_API_KEY && config.LLM_MODEL && task.payload.structured) await queue.enqueue("resume.extract", {
         resumeHash: task.payload.resumeHash
       }, {
@@ -252,6 +257,7 @@ export async function runOne(store, queue, registry, wantedId) {
     });
     if (result?.status === "cancelled" && task.kind.startsWith("campaign.")) await store.run(async () => {
       await store.db.prepare("UPDATE outreach_send_log SET status='cancelled',updated_at=? WHERE task_id=? AND status='queued'").run(Date.now(),task.id);
+      await store.db.prepare("UPDATE outreach_company_budget SET status='cancelled',updated_at=? WHERE task_id=? AND status='queued'").run(Date.now(),task.id);
       const c = store.state.campaigns.find(c => c.id === task.payload.campaignId),
         d = c?.deliveries.find(d => d.taskId === (task.payload.parentTaskId || task.id));
       if (d) {
@@ -267,6 +273,7 @@ export async function runOne(store, queue, registry, wantedId) {
   } catch (error) {
     if (task.kind.startsWith("campaign.")) {
       await store.db.prepare("UPDATE outreach_send_log SET status='unknown',updated_at=? WHERE task_id=? AND status='sending'").run(Date.now(),task.id);
+      await store.db.prepare("UPDATE outreach_company_budget SET status='unknown',updated_at=? WHERE task_id=? AND status='queued'").run(Date.now(),task.id);
       try {
         await store.run(async () => {
           const c = store.state.campaigns.find(c => c.id === task.payload.campaignId),
@@ -320,7 +327,17 @@ export async function startWorker(config = process.env) {
   while (!stopping) {
     if (Date.now()-lastRecovery>60000) {
       await queue.recover();
-      try { await store.run(()=>scheduleAutopilot(store,queue,config)); }
+      try {
+        // Cheap schedule probes avoid reloading the entire job index every minute.
+        const due=await store.db.prepare("SELECT id FROM autopilot_schedule WHERE next_run<=? LIMIT 1").get(Date.now());
+        const search=await store.db.prepare("SELECT id FROM job_search_config WHERE id='local'").get();
+        const mailboxDue=await store.db.prepare("SELECT id FROM mail_accounts a WHERE NOT EXISTS (SELECT 1 FROM autopilot_schedule s WHERE s.id='mailbox:' || a.id AND s.next_run>?) LIMIT 1").get(Date.now());
+        if(due || !search || mailboxDue) await store.run(async()=>{
+          await scheduleDiscovery(store,queue,config);
+          await scheduleAutopilot(store,queue,config);
+          await scheduleMailboxSync(store,queue);
+        });
+      }
       catch { console.error("Autopilot schedule unavailable; durable work will be retried."); }
       lastRecovery=Date.now();
     }

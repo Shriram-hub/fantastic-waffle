@@ -84,3 +84,13 @@ test('Supabase TLS trusts the official CA and keeps certificate/hostname verific
   assert.equal(certificate.verify(certificate.publicKey),true);
   await assert.rejects(postgresPoolOptions({DATABASE_URL:'postgresql://user:password@db.project.supabase.co/postgres?sslmode=disable'}),/verified TLS/);
 });
+
+test('PostgreSQL snapshot cache avoids repeated full index reads and observes another worker’s committed revision',async t=>{
+  const db=new PGlite();t.after(()=>db.close());const base=poolFor(db);let fullReads=0;
+  const counted={...base,async query(sql,params){if(sql.includes('UNION ALL'))fullReads++;return base.query(sql,params);}};
+  const a=await openPostgresStore({},counted),b=await openPostgresStore({},base);
+  const first=fullReads;await a.refresh();await a.run(async()=>assert.ok(a.state.profile));assert.equal(fullReads,first);
+  b.state.profile.name='New profile from worker';await b.save();
+  await a.refresh();assert.equal(a.state.profile.name,'New profile from worker');assert.equal(fullReads,first+1);
+  await a.refresh();assert.equal(fullReads,first+1);
+});

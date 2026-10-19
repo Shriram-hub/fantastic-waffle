@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { openStore } from "../server/store.mjs";
 import { tokenCipher, startOAuth, completeOAuth } from "../server/providers/mail/oauth.mjs";
 import { syncMailbox } from "../server/providers/mail/inbox.mjs";
-import { classifyEmail, ingestMessage } from "../server/services/inbox.mjs";
+import { classifyEmail, ingestMessage, scheduleMailboxSync, INBOX_SYNC_INTERVAL } from "../server/services/inbox.mjs";
+import { taskQueue } from "../server/queue.mjs";
 import { canonicalJobKey, mergeJobListings, fetchJobs } from "../server/providers/jobs/index.mjs";
 import { cosineSimilarity, factPreservingTailor } from "../server/services/ai.mjs";
 import { businessSlot, afterBusinessDays } from "../server/services/outreach.mjs";
@@ -16,6 +17,17 @@ const response = v => new Response(JSON.stringify(v)),
   config = {
     TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 2).toString("base64")
   };
+test('connected inbox polling is durable, bounded, and stops after disconnect without push credentials',async t=>{
+  const store=openStore(':memory:');t.after(()=>store.close());const queue=taskQueue(store),clock=Date.now();
+  store.db.prepare("INSERT INTO mail_accounts(id,provider,email,secret) VALUES('mailbox','google','owner@company.com','encrypted-test-only')").run();
+  assert.equal(await store.run(()=>scheduleMailboxSync(store,queue,clock)),1);
+  assert.equal(await store.run(()=>scheduleMailboxSync(store,queue,clock+60000)),0);
+  assert.equal((await queue.list()).filter(t=>t.kind==='inbox.sync').length,1);
+  assert.equal(store.db.prepare("SELECT next_run FROM autopilot_schedule WHERE id='mailbox:mailbox'").get().next_run,clock+INBOX_SYNC_INTERVAL);
+  assert.equal(await store.run(()=>scheduleMailboxSync(store,queue,clock+INBOX_SYNC_INTERVAL)),1);
+  store.db.prepare("DELETE FROM mail_accounts WHERE id='mailbox'").run();
+  assert.equal(await store.run(()=>scheduleMailboxSync(store,queue,clock+2*INBOX_SYNC_INTERVAL)),0);
+});
 test("deduplication preserves application-linked job identity and independent source freshness", () => {
   const old = {
     id: "saved-id",

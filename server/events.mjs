@@ -2,7 +2,7 @@
 // completed by a separate worker process. No provider payloads/tokens are emitted.
 export function taskEvents(queue, store) {
   const clients = new Set();
-  let timer, running = false, previous = new Map(), seenActivity = new Set();
+  let timer, running = false, previous = new Map(), seenActivity = new Set(),searchSignature='';
   const send = (res, event, value) => {
     if (!res.destroyed && !res.writableEnded) res.write(`event: ${event}\ndata: ${JSON.stringify(value)}\n\n`);
   };
@@ -18,6 +18,13 @@ export function taskEvents(queue, store) {
       }
       previous = next;
       if(store) {
+        const run=await store.db.prepare('SELECT id,status,updated_at,body FROM job_search_runs ORDER BY created_at DESC LIMIT 1').get();
+        const signature=run ? `${run.id}:${run.status}:${run.updated_at}` : '';
+        if(signature!==searchSignature && run) {
+          const details=JSON.parse(run.body);delete details.descriptors;
+          for(const res of clients) send(res,'search',{id:run.id,status:run.status,details});
+          searchSignature=signature;
+        }
         const activity = await store.db.prepare("SELECT id,at,kind,message,count FROM autopilot_activity ORDER BY at DESC LIMIT 30").all();
         for(const item of [...activity].reverse()) if(!seenActivity.has(item.id)) {
           for(const res of clients) send(res,"autopilot",item);

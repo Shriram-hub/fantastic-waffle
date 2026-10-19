@@ -12,6 +12,7 @@ import { Automation } from './features/automation/Automation.jsx';
 import { Connections } from './features/connections/Connections.jsx';
 import { ModalContent } from './features/modals/ModalContent.jsx';
 import { symbols, names } from './shared/navigation.mjs';
+import {Icon} from './shared/Icon.jsx';
 export default function App() {
   const [data, setData] = useState(null),
     [integrations, setIntegrations] = useState({}),
@@ -19,7 +20,10 @@ export default function App() {
     [tasks, setTasks] = useState({ tasks: [], applications: [] }),
     [vault, setVault] = useState({ versions: [], links: [] }),
     [autopilot, setAutopilot] = useState(null),
-    [route, setRoute] = useState(location.hash.slice(1) || "overview"),
+    [search,setSearch] = useState(null),
+    [setup,setSetup] = useState({}),
+    [connected,setConnected] = useState(false),
+    [route, setRoute] = useState(location.hash.slice(1) || "jobs"),
     [modal, setModal] = useState(null),
     [notice, setNotice] = useState(null),
     [busy, setBusy] = useState(false),
@@ -27,20 +31,9 @@ export default function App() {
     [error, setError] = useState("");
   const notify = (message, error = false) => setNotice({ message, error });
   async function reload() {
-    const [s, i, a, t, v, auto] = await Promise.all([
-      api("/state"),
-      api("/integrations"),
-      api("/mail/accounts"),
-      api("/tasks"),
-      api("/vault"),
-      api("/autopilot"),
-    ]);
-    setData(s);
-    setIntegrations(i);
-    setAccounts(a.accounts);
-    setTasks(t);
-    setVault(v);
-    setAutopilot(auto);
+    const s=await api('/bootstrap');
+    setData(s.data);setIntegrations(s.integrations);setAccounts(s.accounts);
+    setTasks(s.tasks);setVault(s.vault);setAutopilot(s.autopilot);setSearch(s.search);setSetup(s.setup);
   }
   async function perform(fn, message) {
     if (busy) return;
@@ -63,23 +56,28 @@ export default function App() {
   reloadRef.current = reload;
   useEffect(() => {
     reload().catch((e) => setError(e.message));
-    const listen = () => setRoute(location.hash.slice(1) || "overview");
+    const listen = () => setRoute(location.hash.slice(1) || "jobs");
     window.addEventListener("hashchange", listen);
     const events = new EventSource('/api/events');
     let refreshTimer;
-    events.addEventListener('ready', () => reloadRef.current().catch(() => {}));
+    events.addEventListener('ready', () => {setConnected(true);reloadRef.current().catch(() => {});});
+    events.onerror=()=>setConnected(false);
     events.addEventListener('task', (event) => {
       const task = JSON.parse(event.data);
-      if (['completed', 'failed', 'unknown', 'cancelled'].includes(task.status))
-        notify(`${task.kind}: ${task.status}`, ['failed', 'unknown'].includes(task.status));
+      if (task.kind==='resume.parse' && task.status==='completed') notify('Résumé ready. Matching jobs are being discovered.');
+      if (['failed','unknown'].includes(task.status)) notify('A background task needs attention. Check Automation.',true);
       clearTimeout(refreshTimer);
       refreshTimer = setTimeout(() => reloadRef.current().catch(() => {}), 150);
     });
     events.addEventListener('autopilot', (event) => {
       const item = JSON.parse(event.data);
-      notify(item.message, item.kind === 'blocked');
+      if(['review','queued','blocked'].includes(item.kind)) notify(item.message,item.kind==='blocked');
       clearTimeout(refreshTimer);
       refreshTimer = setTimeout(() => reloadRef.current().catch(() => {}), 150);
+    });
+    events.addEventListener('search',()=>{
+      clearTimeout(refreshTimer);
+      refreshTimer=setTimeout(()=>reloadRef.current().catch(()=>{}),350);
     });
     return () => {
       window.removeEventListener("hashchange", listen);
@@ -114,6 +112,7 @@ export default function App() {
     tasks,
     vault,
     autopilot,
+    search,setup,
     reload,
     go,
     modal,
@@ -151,12 +150,12 @@ export default function App() {
           <div className="brand">
             <span className="logo-mark">◉</span>
             <span className="logo-word">orbit</span>
-            <small>v0.3</small>
+            <small>CAREER WORKSPACE</small>
           </div>
           <div className="workspace-switch">
             <span className="workspace-mark">O</span>
             <div>
-              Career workspace
+              Your career, in motion
               <p className="muted tiny">
                 {data.isDemo ? "Fictional sample data" : "Personal workspace"}
               </p>
@@ -166,10 +165,10 @@ export default function App() {
             <p className="nav-label">WORKSPACE</p>
             <nav className="nav" aria-label="Workspace">
               {[
-                "overview",
-                "profile",
                 "jobs",
+                "overview",
                 "applications",
+                "profile",
                 "contacts",
                 "outreach",
                 "inbox",
@@ -181,7 +180,7 @@ export default function App() {
                   onClick={() => go(key)}
                   aria-current={route === key ? "page" : undefined}
                 >
-                  <span>{symbols[key]}</span>
+                  <Icon name={key}/>
                   {names[key]}
                   {key === "automation" &&
                     tasks.tasks.some(
@@ -203,18 +202,17 @@ export default function App() {
                 className={`nav-item${route === "connections" ? " active" : ""}`}
                 onClick={() => go("connections")}
               >
-                <span>⌘</span>Connections
+                <Icon name="connections"/>Connections & setup
               </button>
             </div>
           </div>
           <div className="sidebar-spacer" />
           <div className="help-box">
-            <strong>A little closer, every day.</strong>
-            <p>
-              Keep your applications, next steps, and outreach together.
-            </p>
-            <Button small onClick={() => setModal({ type: "add-job" })}>
-              + Add an opportunity
+            <span className="help-eyebrow"><span className="status-dot"/>AUTOMATIC DISCOVERY</span>
+            <strong>Your search keeps going.</strong>
+            <p>Set your roles once. Orbit checks public feeds and company boards every two hours.</p>
+            <Button small onClick={() => go('jobs')}>
+              Customize your search
             </Button>
           </div>
           <div className="profile-mini">
@@ -251,14 +249,15 @@ export default function App() {
               </span>
             </div>
             <div className="topbar-actions">
+              <span className={`connection-indicator ${connected ? 'online' : ''}`}><span className="status-dot"/>{connected ? 'Live updates' : 'Connecting…'}</span>
               <span className="muted">
                 {new Date().toLocaleDateString(undefined, {
                   month: "short",
                   day: "numeric",
                 })}
               </span>
-              <Button small onClick={() => go("automation")}>
-                {busy ? "Working…" : "View activity"}
+              <Button small onClick={() => go("connections")}>
+                <Icon name="connections"/>{busy ? "Working…" : "Connection status"}
               </Button>
             </div>
           </header>
@@ -278,7 +277,7 @@ export default function App() {
             )}
             <View key={route} />
             <footer className="page-footer">
-              Orbit v0.4 · Personal workspace
+              Orbit v0.5 · Your personal career workspace
             </footer>
           </main>
         </div>

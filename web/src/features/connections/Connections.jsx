@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp, api, stages, split, fmt } from '../../shared/workspace.jsx';
 import { Button, Badge, Heading, Empty, Panel, Field, Company, Modal, ConfirmAction, Sample } from '../../shared/ui.jsx';
+import {SetupChecklist} from './SetupChecklist.jsx';
 export function Connections() {
-  const { data, accounts, integrations, perform, notify, setModal } = useApp(),
+  const { data, accounts, integrations, setup={}, perform, notify, setModal } = useApp(),
     [settings, setSettings] = useState({
       ...data.settings,
       greenhouseBoards: (data.settings.greenhouseBoards || []).join(", "),
@@ -18,6 +19,8 @@ export function Connections() {
         title="Your tools, working together."
         subtitle="Explicit connections. Server-side secrets. A clear view of what is configured."
       />
+      <SetupChecklist/>
+      <section className="notice mb"><strong>Free job discovery is included</strong><p>Greenhouse, Lever, Ashby and public feeds work without API keys. Optional JSEARCH_API_KEY or SERPAPI_API_KEY broadens coverage through Google Jobs. Save these in Render → Environment, then enable Google Jobs in search sources.</p><p>JSearch: {setup.jsearchConfigured ? 'key saved' : 'not configured'} · SerpApi: {setup.serpapiConfigured ? 'key saved' : 'not configured'}. Saved keys are confirmed by real provider requests.</p></section>
       <div className="provider-grid">
         <section className="connection-card">
           <div className="spread">

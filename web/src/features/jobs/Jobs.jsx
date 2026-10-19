@@ -1,253 +1,34 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useApp, api, stages, split, fmt } from '../../shared/workspace.jsx';
-import { Button, Badge, Heading, Empty, Panel, Field, Company, Modal, ConfirmAction, Sample } from '../../shared/ui.jsx';
+import React,{useMemo,useState} from 'react';
+import {useApp,api} from '../../shared/workspace.jsx';
+import {Button,Heading} from '../../shared/ui.jsx';
+import {Icon} from '../../shared/Icon.jsx';
+import {SearchPreferences} from './SearchPreferences.jsx';
+import {SearchStatus} from './SearchStatus.jsx';
+import {JobCard} from './JobCard.jsx';
+
 export function Jobs() {
-  const { data, integrations, perform, notify, setModal, go } = useApp(),
-    [q, setQ] = useState(""),
-    [mode, setMode] = useState(""),
-    [location, setLocation] = useState(""),
-    [source, setSource] = useState(""),
-    [selected, setSelected] = useState(new Set()),
-    [limit, setLimit] = useState(24);
-  const list = useMemo(
-    () =>
-      data.jobs
-        .filter(
-          (j) =>
-            !j.archived &&
-            (!q ||
-              `${j.title} ${j.company} ${j.tags?.join(" ")} ${j.category}`
-                .toLowerCase()
-                .includes(q.toLowerCase())) &&
-            (!location ||
-              j.location.toLowerCase().includes(location.toLowerCase())) &&
-            (!mode || j.workMode === mode) &&
-            (!source ||
-              j.sources?.some((s) => s.source === source) ||
-              j.source === source),
-        )
-        .sort(
-          (a, b) =>
-            (b.semanticMatch?.score ?? b.match.score ?? 0) -
-            (a.semanticMatch?.score ?? a.match.score ?? 0),
-        ),
-    [data, q, location, mode, source],
-  );
-  const toggle = (jid) =>
-    setSelected((previous) => {
-      const next = new Set(previous);
-      next.has(jid) ? next.delete(jid) : next.add(jid);
-      return next;
-    });
-  async function refresh() {
-    const sources = [
-      { source: "Remotive" },
-      { source: "Arbeitnow" },
-      ...["greenhouse", "lever", "ashby"].flatMap((source) =>
-        (data.settings[`${source}Boards`] || []).map((board) => ({
-          source: source[0].toUpperCase() + source.slice(1),
-          board,
-        })),
-      ),
-      ...(integrations.adzuna ? [{ source: "Adzuna" }] : []),
-    ];
-    for (const s of sources) await api("/jobs/sync", s);
-    notify(
-      `${sources.length} imports queued. Start the worker to process them.`,
-    );
-  }
-  return (
-    <>
-      <Heading
-        title="Find your next thing."
-        subtitle="Browse sources, compare your profile, and build a focused shortlist."
-      >
-        <Button onClick={() => setModal({ type: "add-job" })}>
-          + Add a job
-        </Button>
-        <Button primary disabled={false} onClick={() => perform(refresh)}>
-          Refresh sources
-        </Button>
-      </Heading>
-      <div className="toolbar">
-        <label className="search-input">
-          <input
-            aria-label="Role, skill, or company"
-            placeholder="Role, skill, or company…"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
-        </label>
-        <label className="search-input">
-          <input
-            aria-label="Job location"
-            placeholder="City, country, or worldwide…"
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-          />
-        </label>
-        <select
-          aria-label="Work style"
-          value={mode}
-          onChange={(e) => setMode(e.target.value)}
-        >
-          <option value="">All work styles</option>
-          {["Remote", "Hybrid", "On-site"].map((m) => (
-            <option key={m}>{m}</option>
-          ))}
-        </select>
-        <select
-          aria-label="Source"
-          value={source}
-          onChange={(e) => setSource(e.target.value)}
-        >
-          <option value="">All sources</option>
-          {[
-            "Sample",
-            "Remotive",
-            "Greenhouse",
-            "Lever",
-            "Ashby",
-            "Arbeitnow",
-            "Adzuna",
-            "Manual",
-          ].map((s) => (
-            <option key={s}>{s}</option>
-          ))}
-        </select>
-      </div>
-      <p className="list-summary">
-        {list.length} opportunities · Sorted by semantic score where available,
-        otherwise profile keywords.
-      </p>
-      <div className="job-grid">
-        {list.slice(0, limit).map((j) => (
-          <article
-            className={`job-card${selected.has(j.id) ? " is-selected" : ""}`}
-            key={j.id}
-          >
-            <div className="job-top">
-              <input
-                type="checkbox"
-                className="job-select"
-                checked={selected.has(j.id)}
-                onChange={() => toggle(j.id)}
-                aria-label={`Select ${j.title} at ${j.company}`}
-              />
-              <Company name={j.company} />
-              <div className="grow">
-                <p className="company-name">
-                  {j.company} <Sample value={j.isDemo} />
-                </p>
-                <button onClick={() => setModal({ type: "job", id: j.id })}>
-                  <h3>{j.title}</h3>
-                </button>
-              </div>
-              <button
-                className="icon-button"
-                onClick={() =>
-                  perform(async () => {
-                    await api("/applications", { jobId: j.id, stage: "Saved" });
-                    notify("Saved to your tracker.");
-                  })
-                }
-                aria-label={`Save ${j.title}`}
-              >
-                ☆
-              </button>
-            </div>
-            <div className="job-meta">
-              <span>{j.location}</span>
-              <span>{j.workMode}</span>
-            </div>
-            <div className="job-tags">
-              {j.tags?.slice(0, 4).map((tag, i) => (
-                <span className="tag" key={`${tag}-${i}`}>
-                  {tag}
-                </span>
-              ))}
-              <span className="tag">
-                {j.sources
-                  ?.map((s) => s.source)
-                  .filter((v, i, a) => a.indexOf(v) === i)
-                  .join(" + ") || j.source}
-              </span>
-            </div>
-            <div className="job-footer">
-              <strong className="salary">{j.salary}</strong>
-              <span className="match">
-                {j.semanticMatch
-                  ? `${j.semanticMatch.score}% semantic`
-                  : `${j.match.score ?? "—"}% keyword`}
-              </span>
-            </div>
-          </article>
-        ))}
-      </div>
-      {!list.length && (
-        <section className="panel">
-          <Empty title="No opportunities here yet.">
-            Try broader filters, add a job, or refresh configured sources.
-          </Empty>
-        </section>
-      )}
-      {list.length > limit && (
-        <div className="form-actions">
-          <Button onClick={() => setLimit(limit + 24)}>Show more</Button>
-        </div>
-      )}
-      {selected.size > 0 && (
-        <div className="bulk-bar">
-          <strong>{selected.size} selected</strong>
-          <Button
-            onClick={() =>
-              perform(async () => {
-                await api("/applications/batch", { jobIds: [...selected] });
-                setSelected(new Set());
-                go("applications");
-              })
-            }
-          >
-            Prepare applications
-          </Button>
-          <Button
-            onClick={() =>
-              setModal({ type: "browser-batch", ids: [...selected] })
-            }
-          >
-            Browser-assisted fill
-          </Button>
-          <Button
-            onClick={() => setModal({ type: "embeddings", ids: [...selected] })}
-          >
-            Semantic match
-          </Button>
-          <button onClick={() => setSelected(new Set())}>Clear</button>
-        </div>
-      )}
-      <div className="notice mt">
-        Keyword and embedding scores help with discovery; neither predicts
-        hiring success. Check eligibility and requirements on the original
-        listing. Remotive and other feeds retain source links.
-      </div>
-      <div className="btn-row mt">
-        {[
-          ["LinkedIn", "https://www.linkedin.com/jobs/"],
-          ["Indeed", "https://www.indeed.com/"],
-          ["Naukri", "https://www.naukri.com/"],
-          ["Wellfound", "https://wellfound.com/jobs"],
-        ].map(([n, url]) => (
-          <a
-            className="btn small"
-            href={url}
-            target="_blank"
-            rel="noreferrer"
-            key={n}
-          >
-            {n} ↗
-          </a>
-        ))}
-      </div>
-    </>
-  );
+  const {data,search,perform,setModal,go,busy}=useApp();
+  const personalized=search?.plan.personalized || !!data.profile.interests?.length;
+  const [q,setQ]=useState(''),[mode,setMode]=useState(''),[source,setSource]=useState(''),[tab,setTab]=useState('foryou'),[limit,setLimit]=useState(20),[selected,setSelected]=useState(new Set());
+  const running=['running','queued'].includes(search?.run?.status);
+  const live=data.jobs.filter(j=>!j.archived),saved=new Set(data.applications.map(a=>a.jobId));
+  const list=useMemo(()=>live.filter(j=>(!q || `${j.title} ${j.company} ${j.tags?.join(' ')}`.toLowerCase().includes(q.toLowerCase())) && (!mode || j.workMode===mode) && (!source || j.source===source || j.sources?.some(s=>s.source===source)) && (tab==='saved' ? saved.has(j.id) : tab==='strong' ? (j.match?.score || 0)>=80 && j.match?.eligible!==false : tab==='foryou' && personalized ? j.match?.eligible!==false : true)).sort((a,b)=>(b.semanticMatch?.score ?? b.match?.score ?? 0)-(a.semanticMatch?.score ?? a.match?.score ?? 0) || (Date.parse(b.publishedAt)||0)-(Date.parse(a.publishedAt)||0)),[data,q,mode,source,tab,personalized]);
+  const toggle=jid=>setSelected(old=>{const next=new Set(old);next.has(jid) ? next.delete(jid) : next.add(jid);return next;});
+  return <>
+    <Heading title="Discover your next role" subtitle="A job search that keeps working for you. Live opportunities, ranked around your goals."><Button primary disabled={busy || running || data.isDemo} onClick={()=>perform(()=>api('/jobs/discover',{}),'Search started. Jobs appear as sources finish.')}><Icon name="refresh"/>{running ? 'Searching sources…' : 'Find new jobs'}</Button></Heading>
+    <SearchPreferences/><SearchStatus/>
+    <div className="job-workspace-layout"><div className="job-results-area">
+      <div className="results-tabs" role="tablist" aria-label="Job views">{[['foryou',personalized ? 'For you' : 'Explore live jobs'],['strong','Strong matches'],['all','All live jobs'],['saved','Saved']].map(([key,label])=><button key={key} role="tab" aria-selected={tab===key} onClick={()=>{setTab(key);setLimit(20);}}>{label}{key==='saved' && saved.size>0 && <span>{saved.size}</span>}</button>)}</div>
+      <div className="job-filter-row"><label className="filter-search"><Icon name="jobs"/><input aria-label="Filter current results" value={q} onChange={e=>setQ(e.target.value)} placeholder="Filter by title, company or skill"/></label><select value={mode} aria-label="Work arrangement filter" onChange={e=>setMode(e.target.value)}><option value="">Any arrangement</option>{['Remote','Hybrid','On-site'].map(v=><option key={v}>{v}</option>)}</select><select value={source} aria-label="Job source filter" onChange={e=>setSource(e.target.value)}><option value="">All sources</option>{[...new Set(live.map(j=>j.source))].sort().map(v=><option key={v}>{v}</option>)}</select></div>
+      <div className="results-summary"><strong>{list.length.toLocaleString()} {tab==='saved' ? 'saved jobs' : 'opportunities'}</strong><span>{personalized ? 'Sorted by profile match' : 'Add preferences for personalized ranking'}</span></div>
+      <div className="opportunities-list">{list.slice(0,limit).map(j=><JobCard key={j.id} job={j} selected={selected.has(j.id)} toggle={toggle}/>)}</div>
+      {!list.length && <div className="results-empty"><Icon name="jobs" size={32}/><h2>{running ? 'Your search is underway' : 'Let’s refine your search'}</h2><p>{running ? 'We’re checking live feeds and company boards. Results appear here automatically.' : tab==='strong' ? 'No jobs have reached 80% yet. Check For you, or add skills and a résumé to improve ranking.' : 'Try another view or adjust your target roles and location above. We will keep checking in the background.'}</p><Button onClick={()=>{setQ('');setMode('');setSource('');setTab('all');}}>View all live jobs</Button></div>}
+      {list.length>limit && <div className="load-more"><Button onClick={()=>setLimit(n=>n+20)}>Show 20 more jobs</Button><span>Showing {Math.min(limit,list.length)} of {list.length}</span></div>}
+    </div><aside className="job-insights">
+      <section className="insight-panel"><div className="insight-panel-title"><Icon name="spark"/><h2>Built around your goals</h2></div><p>{personalized ? 'Your target roles guide every search. Add your résumé for skill-based explanations and stronger recommendations.' : 'Pick your roles and location to turn this live feed into your own job-search assistant.'}</p><Button small onClick={()=>go('profile')}>{data.resume ? 'Review profile & résumé' : 'Add your résumé'}</Button><div className="insight-facts"><div><Icon name="refresh"/><span>Automatic search every 2 hours</span></div><div><Icon name="check"/><span>110 direct company boards + public feeds</span></div><div><Icon name="clock"/><span>Provider caching and deduplication</span></div></div></section>
+      <section className="insight-panel"><h2>Source coverage</h2><p>Actual source results from your latest searches.</p>{search?.sources?.length ? <div className="source-health-list">{Object.entries(search.sources.reduce((acc,s)=>{const key=s.source;acc[key] ||= {checked:0,healthy:0};acc[key].checked++;if(s.status!=='unavailable')acc[key].healthy++;return acc;},{})).map(([name,s])=><div key={name}><span className={`status-dot ${s.healthy ? '' : 'warning'}`}/><strong>{name}</strong><span>{s.healthy}/{s.checked} ready</span></div>)}</div> : <p className="muted">Sources will appear as the first search runs.</p>}<details className="source-details"><summary>View source details</summary>{search?.sources?.map(s=><div key={s.id}><strong>{s.source}{s.board ? ` / ${s.board}` : ''}</strong><span>{s.status} · {s.scanned} listings</span>{s.message && <p>{s.message}</p>}</div>)}</details></section>
+      <section className="insight-panel subtle"><h2>Bring a role you found</h2><p>Keep an existing opportunity in the same tracker.</p><Button small onClick={()=>setModal({type:'add-job'})}>Add a job link</Button></section>
+    </aside></div>
+    {selected.size>0 && <div className="bulk-bar"><strong>{selected.size} selected</strong><Button onClick={()=>perform(async()=>{await api('/applications/batch',{jobIds:[...selected]});setSelected(new Set());go('applications');})}>Prepare applications</Button><Button onClick={()=>setModal({type:'browser-batch',ids:[...selected]})}>Browser-assisted fill</Button><Button onClick={()=>setSelected(new Set())}>Clear</Button></div>}
+  </>;
 }

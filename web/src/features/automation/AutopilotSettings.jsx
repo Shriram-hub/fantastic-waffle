@@ -3,6 +3,7 @@ import {useApp,api,fmt} from '../../shared/workspace.jsx';
 import {Panel,Field,Button,Badge} from '../../shared/ui.jsx';
 import {AutopilotReview} from './AutopilotReview.jsx';
 import {AutopilotActivity} from './AutopilotActivity.jsx';
+import {DiscoverySources} from '../jobs/DiscoverySources.jsx';
 
 export function AutopilotSettings() {
   const {autopilot,accounts=[],perform,busy,go}=useApp();
@@ -12,7 +13,8 @@ export function AutopilotSettings() {
   const set=(key,value)=>{setDraft(d=>({...d,[key]:value}));setAck(false);};
   const blockers=Object.entries(autopilot.blockers).flatMap(([stage,items])=>items.map(message=>({stage,message})));
   return <>
-    <Panel title="Autopilot Mode" subtitle="Find matching jobs every two hours, look up company contacts, and prepare a focused pitch for each role."
+    <DiscoverySources/>
+    <Panel title="Autopilot Mode" subtitle="Optional outreach: find company contacts and prepare a focused pitch for matching roles. Job search works with this switched off."
       action={<Badge value={autopilot.policy.enabled ? 'Enabled' : 'Paused'}/> }>
       <form className="panel-body" onSubmit={event=>{event.preventDefault();perform(()=>api('/autopilot',{...draft,acknowledged:ack},'PUT'),'Autopilot settings saved.');}}>
         <label className="check"><input type="checkbox" checked={draft.enabled} onChange={e=>set('enabled',e.target.checked)}/>Enable Autopilot</label>
@@ -20,16 +22,19 @@ export function AutopilotSettings() {
           <Field label="Approval mode"><select value={draft.approvalMode} onChange={e=>set('approvalMode',e.target.value)}><option value="review">1-click review queue</option><option value="automatic">Full Autopilot — send automatically</option></select></Field>
           <Field label="Minimum match score"><input type="number" min="75" max="100" value={draft.minimumMatchScore} onChange={e=>set('minimumMatchScore',Number(e.target.value))}/></Field>
           <Field label="Max cold emails per day"><input type="number" min="1" max="50" value={draft.dailySendLimit} onChange={e=>set('dailySendLimit',Number(e.target.value))}/></Field>
-          <Field label="Contacts per company"><input type="number" min="1" max="3" value={draft.contactsPerCompany} onChange={e=>set('contactsPerCompany',Number(e.target.value))}/></Field>
+          <Field label="Contacts per company / 14 days"><input type="number" min="1" max="3" value={draft.contactsPerCompany} onChange={e=>set('contactsPerCompany',Number(e.target.value))}/></Field>
+          <Field label="Minimum delay (minutes)"><input type="number" min="3" max="60" value={draft.minDelayMinutes} onChange={e=>set('minDelayMinutes',Number(e.target.value))}/></Field>
+          <Field label="Maximum delay (minutes)"><input type="number" min={draft.minDelayMinutes} max="120" value={draft.maxDelayMinutes} onChange={e=>set('maxDelayMinutes',Number(e.target.value))}/></Field>
           <Field label="Your country (ISO code)" hint="For location-restricted remote jobs. For example IN, GB, or US."><input maxLength="2" value={draft.country || ''} placeholder="IN" onChange={e=>set('country',e.target.value.toUpperCase())}/></Field>
           <Field label="Max contact API calls per day" hint={`${autopilot.lookupsToday} reserved today. Apollo/Hunter may use account credits.`}><input type="number" min="1" max="100" value={draft.maxContactLookupsPerDay} onChange={e=>set('maxContactLookupsPerDay',Number(e.target.value))}/></Field>
           <Field label="Sending mailbox"><select value={draft.accountId} onChange={e=>set('accountId',e.target.value)}><option value="">Configured Resend sender</option>{accounts.map(a=><option value={a.id} key={a.id}>{a.email}</option>)}</select></Field>
-          <Field label="Business-hours time zone" hint="Weekdays, 9–11 AM in this time zone, with 4–8 minutes between sends. Recipient time zones are not inferred."><input value={draft.timeZone} placeholder="Asia/Kolkata" onChange={e=>set('timeZone',e.target.value)}/></Field>
+          <Field label="Business-hours time zone" hint="Weekdays, 9–11 AM in this time zone, with randomized delays. Recipient time zones are not inferred."><input value={draft.timeZone} placeholder="Asia/Kolkata" onChange={e=>set('timeZone',e.target.value)}/></Field>
           <Field label="Include résumé"><select value={draft.resumeMode} onChange={e=>set('resumeMode',e.target.value)}><option value="link">Unlisted share link, valid for 7 days</option><option value="attachment">Original uploaded file attached</option></select></Field>
         </div>
+        <label className="check mt"><input type="checkbox" checked={draft.freeContactFallback} onChange={e=>set('freeContactFallback',e.target.checked)}/>Find publicly listed recruiting contacts for free when paid providers are unavailable. Unverified or guessed addresses are saved for verification and never auto-mailed.</label>
         <label className="check mt"><input type="checkbox" checked={draft.allowContactCredits} onChange={e=>set('allowContactCredits',e.target.checked)}/>Allow contact lookups and enrichment using my Apollo/Hunter credits within this daily cap.</label>
         <label className="check mt"><input type="checkbox" checked={draft.useAI} onChange={e=>set('useAI',e.target.checked)}/>Use my configured AI provider to select relevant résumé excerpts. Otherwise use factual templates.</label>
-        <label className="check mt"><input type="checkbox" checked={draft.useSearchAPI} onChange={e=>set('useSearchAPI',e.target.checked)}/>Use configured SerpApi credits for additional ATS board discovery, within the same API-call cap.</label>
+        <label className="check mt"><input type="checkbox" checked={draft.useSearchAPI} onChange={e=>set('useSearchAPI',e.target.checked)}/>Use optional SerpApi credits for ATS board and public recruiter-profile search. Search-provider limits apply.</label>
         <label className="check mt"><input type="checkbox" checked={draft.followup} onChange={e=>set('followup',e.target.checked)}/>One follow-up after 4 business days, in the same thread; stop on reply. Requires a connected mailbox.</label>
         {draft.enabled && <label className="check mt"><input type="checkbox" checked={ack} onChange={e=>setAck(e.target.checked)}/>I approve these limits and résumé sharing. {draft.approvalMode==='automatic' ? 'Send prepared messages automatically.' : 'Prepare messages for my approval before sending.'} Anyone with the résumé link can open it until expiry.</label>}
         <div className="btn-row mt"><Button primary type="submit" disabled={busy || draft.enabled && !ack}>Save Autopilot settings</Button>

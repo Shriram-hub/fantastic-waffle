@@ -3,12 +3,13 @@ import { z } from "zod";
 import { remoteJSON } from "../providers/http.mjs";
 import { fail, hash, id, now, text } from "../domain.mjs";
 import boards from "../providers/jobs/boards.json" with { type: "json" };
+import {buildSearchPlan} from './search-plan.mjs';
 
 export async function generateSearchMatrix(state, config = {}, fetcher = fetch, store, useAI = false) {
   const p = state.profile, r = state.resume;
   const skills = [...new Set([...(p.skills || []), ...(r?.suggestions?.skills || [])])].slice(0, 40);
   const has = pattern => skills.some(s => pattern.test(s));
-  let roles = (p.interests || []).filter(Boolean).slice(0, 6);
+  let roles = buildSearchPlan(state).roles.slice(0,5);
   if (!roles.length) {
     if (has(/react|vue|angular|javascript|typescript/i)) roles.push("Frontend Engineer");
     if (has(/node|django|rails|java|golang|python/i)) roles.push("Backend Engineer");
@@ -41,6 +42,8 @@ export async function draftAutopilotPitch(state, job, contact, resumeURL, policy
       "Select up to two short résumé excerpts relevant to this job. Each excerpt must be copied exactly from the résumé, at most 18 words. Return an empty list when unsupported.",
       {resume:text(resume,30000),job:{title:job.title,description:text(job.description,12000)},contactTitle:contact.title}, config, fetcher, store);
     evidence = output.evidence.filter(e => e.trim() && resume.includes(e) && e.split(/\s+/).length <= 18);
+  } else {
+    evidence=resume.split(/\n|(?<=\.)\s+/).map(s=>s.trim()).filter(s=>s && s.split(/\s+/).length<=18 && skills.some(skill=>s.toLowerCase().includes(skill.toLowerCase()))).slice(0,2);
   }
   const clean = value => String(value || "").replace(/[\r\n{}]/g," ").slice(0,180);
   const first = clean(contact.name).split(" ")[0] || "there";

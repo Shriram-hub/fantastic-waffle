@@ -136,3 +136,46 @@ Primary references:
 - https://developers.google.com/custom-search/v1/overview
 - https://supabase.com/docs/guides/cron
 - https://supabase.com/docs/guides/functions/schedule-functions
+
+## v0.5: search works independently
+
+The Discover jobs screen and `/api/jobs/discover` run the `jobs.discover` worker
+pipeline without requiring a résumé, mailbox or contact provider. Roles can be
+entered once or derived from résumé text. Source preferences, progress, health,
+compressed response caches and search runs persist in PostgreSQL/SQLite. A run
+uses bounded batches with three concurrent public requests, deduplicates by
+company/title/location and explains matching. Free sources and 110 curated ATS
+boards continue if an optional search provider fails. The Explore index retains
+1,500 best jobs plus tracked jobs. Source coverage is bounded by those providers,
+not every job on the internet. Source links and attribution remain visible.
+
+`POST /api/autopilot/run` only enqueues due work and returns 202. Render cold starts
+and DB/network latency still apply; there is no sub-100ms availability guarantee.
+The Supabase dispatcher now wakes independent job searches every two hours as
+well as due outreach tasks and connected-mailbox checks every 15 minutes. Polling
+does not require Gmail Pub/Sub or Graph webhook configuration. This remains a
+free, best-effort personal workspace. See [all API keys and exact callbacks](API_KEYS.md).
+
+Enable optional Google Jobs in search sources after saving `JSEARCH_API_KEY` or
+`SERPAPI_API_KEY` in Render Environment. `JOB_SEARCH_API_DAILY_LIMIT` defaults to
+6 reserved aggregator calls per day. Completed calls are cached; failed or
+ambiguous charged calls are held rather than silently charged twice. APIs and
+search results have their own access conditions and quotas. Public feed/ATS
+requests do not consume this budget. Actual ATS apply links are validated and
+persisted in `discovered_boards`; no guessed slug is treated as a verified company.
+
+The contact waterfall is: verified local cache → approved Apollo search/enrichment
+→ approved Hunter lookup/verification → optional public careers-page candidates.
+Public recruiter-profile search uses optional SerpApi access, not an unlimited
+free Google/LinkedIn endpoint. Name permutations are candidates, never verified
+addresses. Public page reads pin validated public DNS addresses, use HTTPS,
+respect robots exclusions and cap page sizes. No CAPTCHA bypass or SMTP mailbox
+probing is performed. Render Free blocks SMTP ports. MX only checks the domain.
+No system can guarantee free unlimited contacts, delivery, or freedom from bans.
+
+Autopilot defaults to review, 40/day maximum, 3–8 minute configurable jitter and
+at most 3 contacts per company in 14 days. Reservations and send logs are durable.
+Only verified corporate addresses can send. An actual recipient reply stops
+company follow-ups even in a new thread; matched interview/offer/rejection
+updates also stop pending follow-ups. The funnel reports actual workspace totals,
+with unverified public contacts identified separately.

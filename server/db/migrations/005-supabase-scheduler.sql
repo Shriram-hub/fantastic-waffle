@@ -20,6 +20,15 @@ BEGIN
       (status = 'queued' AND run_at <= clock_ms) OR
       (status = 'running' AND lease_until < clock_ms))
     OR EXISTS (
+      SELECT 1 FROM orbit_runtime.job_search_config c
+      WHERE c.id='local' AND (c.body::jsonb->>'enabled')='true'
+        AND NOT EXISTS (SELECT 1 FROM orbit_runtime.autopilot_schedule s WHERE s.id='jobs' AND s.next_run>clock_ms)
+    )
+    OR EXISTS (
+      SELECT 1 FROM orbit_runtime.mail_accounts a
+      WHERE NOT EXISTS (SELECT 1 FROM orbit_runtime.autopilot_schedule s WHERE s.id='mailbox:' || a.id AND s.next_run>clock_ms)
+    )
+    OR EXISTS (
       SELECT 1 FROM orbit_runtime.autopilot_config c
       WHERE c.id = 'local' AND (c.body::jsonb->>'enabled') = 'true'
         AND NOT EXISTS (SELECT 1 FROM orbit_runtime.autopilot_schedule s WHERE s.id='local' AND s.next_run > clock_ms)

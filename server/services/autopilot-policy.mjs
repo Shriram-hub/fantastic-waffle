@@ -3,7 +3,8 @@ import { resumeHash } from "./resume-storage.mjs";
 
 export const AUTOPILOT_DEFAULTS = Object.freeze({
   enabled: false, approvalMode: "review", minimumMatchScore: 80,
-  dailySendLimit: 30, contactsPerCompany: 3, maxContactLookupsPerDay: 20,
+  dailySendLimit: 40, contactsPerCompany: 3, maxContactLookupsPerDay: 20,
+  minDelayMinutes:3,maxDelayMinutes:8,freeContactFallback:true,
   allowContactCredits: false, useAI: false, useSearchAPI: false, resumeMode: "link",
   accountId: "", timeZone: "UTC", country: "", followup: false,
 });
@@ -24,8 +25,10 @@ export async function pipelineBlockers(store, config, policy) {
   if (s.isDemo) discovery.push("Start a personal workspace first.");
   if (!s.resume?.text?.trim()) discovery.push("Upload and parse a résumé, or add its extracted text in My profile.");
   if (!s.profile.name || !emailValid(s.profile.email || "") || sampleEmail(s.profile.email)) discovery.push("Save your real name and email in My profile.");
-  if (!policy.allowContactCredits) contacts.push("Allow contact API usage to fetch recruiters; provider credits may be consumed.");
-  if (!config.APOLLO_API_KEY && !config.HUNTER_API_KEY) contacts.push("Add an Apollo or Hunter API key in Render to fetch company contacts.");
+  if(!policy.freeContactFallback && !s.contacts.some(c=>!c.isDemo && !c.suppressed && c.emailStatus==='verified')) {
+    if (!policy.allowContactCredits) contacts.push("Allow contact API usage or enable the public-contact fallback.");
+    if (!config.APOLLO_API_KEY && !config.HUNTER_API_KEY) contacts.push("Add an Apollo or Hunter API key, or enable the public-contact fallback.");
+  }
   if (config.ENABLE_LIVE_SEND !== "true") sending.push("Live sending is disabled on the server.");
   if (policy.accountId) {
     if (!await store.db.prepare("SELECT id FROM mail_accounts WHERE id=?").get(policy.accountId)) sending.push("Connect the selected sending mailbox.");
@@ -41,11 +44,12 @@ export async function savePolicy(data, store, config) {
     if (!Number.isInteger(n) || n < min || n > max) fail(`${key} must be a whole number between ${min} and ${max}.`);
     return n;
   };
-  for (const key of ["enabled", "allowContactCredits", "useAI", "useSearchAPI", "followup"]) p[key] = (data[key] ?? current[key]) === true;
+  for (const key of ["enabled", "allowContactCredits", "useAI", "useSearchAPI", "followup","freeContactFallback"]) p[key] = (data[key] ?? current[key]) === true;
   p.minimumMatchScore = number("minimumMatchScore", 75, 100);
   p.dailySendLimit = number("dailySendLimit", 1, 50);
   p.contactsPerCompany = number("contactsPerCompany", 1, 3);
   p.maxContactLookupsPerDay = number("maxContactLookupsPerDay", 1, 100);
+  p.minDelayMinutes=number('minDelayMinutes',3,60);p.maxDelayMinutes=number('maxDelayMinutes',p.minDelayMinutes,120);
   p.approvalMode = data.approvalMode ?? current.approvalMode;
   p.resumeMode = data.resumeMode ?? current.resumeMode;
   if (!["review", "automatic"].includes(p.approvalMode)) fail("Choose review or automatic approval mode.");

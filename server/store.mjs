@@ -52,6 +52,13 @@ CREATE TABLE IF NOT EXISTS autopilot_activity(id TEXT PRIMARY KEY,at INTEGER NOT
 CREATE INDEX IF NOT EXISTS autopilot_activity_time ON autopilot_activity(at);
 CREATE TABLE IF NOT EXISTS provider_requests(id TEXT PRIMARY KEY,provider TEXT NOT NULL,day TEXT NOT NULL,status TEXT NOT NULL,body TEXT,created_at INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS provider_request_budget ON provider_requests(day,provider);
+CREATE TABLE IF NOT EXISTS job_search_config(id TEXT PRIMARY KEY,body TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS job_search_runs(id TEXT PRIMARY KEY,status TEXT NOT NULL,body TEXT NOT NULL,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS job_source_health(id TEXT PRIMARY KEY,source TEXT NOT NULL,board TEXT NOT NULL,checked_at INTEGER NOT NULL,status TEXT NOT NULL,scanned INTEGER NOT NULL,matched INTEGER NOT NULL,message TEXT);
+CREATE TABLE IF NOT EXISTS job_source_cache(id TEXT PRIMARY KEY,expires_at INTEGER NOT NULL,body TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS discovered_boards(id TEXT PRIMARY KEY,source TEXT NOT NULL,slug TEXT NOT NULL,status TEXT NOT NULL,body TEXT NOT NULL,checked_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS outreach_company_budget(domain TEXT NOT NULL,email TEXT NOT NULL,task_id TEXT NOT NULL,status TEXT NOT NULL,updated_at INTEGER NOT NULL,PRIMARY KEY(domain,email));
+CREATE INDEX IF NOT EXISTS outreach_company_window ON outreach_company_budget(domain,updated_at);
 `;
 export function openStore(directory) {
   let path = ":memory:";
@@ -133,6 +140,7 @@ export function openStore(directory) {
   }
   function overwrite(state) {
     for (const table of [
+      "discovered_boards","outreach_company_budget","job_source_cache", "job_source_health", "job_search_runs", "job_search_config",
       "autopilot_runs", "autopilot_config", "autopilot_schedule", "autopilot_activity", "search_matrices", "provider_requests",
       "outreach_send_log",
       "unsubscribe_tokens",

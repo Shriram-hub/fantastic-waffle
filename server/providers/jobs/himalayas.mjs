@@ -4,6 +4,7 @@ import { fail, hash, now, safeUrl, stripHtml, text } from "../../domain.mjs";
 export async function fetchHimalayas(query, config = {}, fetcher = fetch) {
   const url = new URL("https://himalayas.app/jobs/api/search");
   url.search = new URLSearchParams({ q: text(query, 150), sort: "recent", page: "1" });
+  url.searchParams.set('page',String(config.HIMALAYAS_PAGE || 1));
   const data = await remoteJSON(url.href, config.HIMALAYAS_API_KEY ? {headers:{Authorization:`Bearer ${config.HIMALAYAS_API_KEY}`}} : {}, fetcher);
   if (!Array.isArray(data.jobs)) fail("Himalayas returned an unexpected response.", 502);
   return data.jobs.slice(0, 20).filter(j => j.title && safeUrl(j.applicationLink)).map(j => ({

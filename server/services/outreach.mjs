@@ -53,12 +53,17 @@ export async function queueCampaign(c, data, store, queue, config, options = {})
     zone = policy?.timeZone || s.settings.sendTimeZone || "UTC";
   let cursor = Date.now();
   const accountId = c.accountId || "resend";
+  const minDelay=policy?.minDelayMinutes || 3,maxDelay=policy?.maxDelayMinutes || 8;
+  const jitter=()=>randomInt(minDelay*60000,maxDelay*60000+1);
   // Commit approval and the complete outbox atomically; no partially queued campaign.
   if (!options.inTransaction) await store.db.exec("BEGIN IMMEDIATE");
   try {
     const reserved = await store.db.prepare("SELECT run_at FROM tasks WHERE kind IN ('campaign.send','campaign.followup') AND status NOT IN ('cancelled','failed') AND json_extract(payload,'$.accountId')=? ORDER BY run_at DESC").all(accountId);
     const booked = reserved.map(r => r.run_at);
     for (const m of recipients) {
+      const domain=m.to.split('@')[1].toLowerCase();
+      const companyReservations=await store.db.prepare("SELECT email FROM outreach_company_budget WHERE domain=? AND (status IN ('queued','sending','unknown') OR status='accepted' AND updated_at>?)").all(domain,Date.now()-14*86400000);
+      if(companyReservations.filter(r=>r.email!==m.to.toLowerCase()).length>=(policy?.contactsPerCompany || 3)) fail('The 14-day contact limit for this company has been reached.',409);
       if(c.autopilot && await store.db.prepare("SELECT task_id FROM outreach_send_log WHERE contact_email=? AND campaign_id!=? AND status IN ('queued','sending','accepted','unknown') AND updated_at>?").get(m.to.toLowerCase(),c.id,Date.now()-30*86400000))
         fail("A recipient already has recent or pending outreach. Refresh the review queue.",409);
       let slot = businessSlot(cursor, zone);
@@ -68,9 +73,9 @@ export async function queueCampaign(c, data, store, queue, config, options = {})
         if (booked.filter(at => new Date(at).toISOString().slice(0, 10) === new Date(slot).toISOString().slice(0, 10)).length >= limit) {
           slot = businessSlot(slot + 86400000, zone); continue;
         }
-        const collision=booked.filter(at=>Math.abs(at-slot)<(c.autopilot ? 4 : 3)*60000);
+        const collision=booked.filter(at=>Math.abs(at-slot)<minDelay*60000);
         if(!collision.length) break;
-        slot=businessSlot(Math.max(...collision)+randomInt(c.autopilot ? 4 : 3,9)*60000,zone);
+        slot=businessSlot(Math.max(...collision)+jitter(),zone);
       }
       const key = hash([c.id, m.contactId, c.subject, c.body, c.sequence || null]);
       const task = await queue.enqueue("campaign.send", {
@@ -85,6 +90,8 @@ export async function queueCampaign(c, data, store, queue, config, options = {})
       });
       const reservation = await store.db.prepare("INSERT INTO outreach_send_log(user_id,contact_email,campaign_id,sequence_step,task_id,status,updated_at) VALUES('local',?,?,0,?,'queued',?) ON CONFLICT(user_id,contact_email,campaign_id,sequence_step) DO UPDATE SET task_id=excluded.task_id,status='queued',updated_at=excluded.updated_at WHERE outreach_send_log.status IN ('failed','cancelled')").run(m.to.toLowerCase(),c.id,task.id,Date.now());
       if (!reservation.changes) fail("This address already has a send reserved in this campaign.",409);
+      await store.db.prepare("INSERT INTO outreach_company_budget(domain,email,task_id,status,updated_at) VALUES(?,?,?,'queued',?) ON CONFLICT(domain,email) DO UPDATE SET task_id=excluded.task_id,status='queued',updated_at=excluded.updated_at")
+        .run(domain,m.to.toLowerCase(),task.id,Date.now());
       c.deliveries.push({
         key,
         taskId: task.id,
@@ -93,7 +100,7 @@ export async function queueCampaign(c, data, store, queue, config, options = {})
         scheduledAt: new Date(slot).toISOString()
       });
       booked.push(slot);
-      cursor = slot + randomInt(c.autopilot ? 4 : 3,9)*60000;
+      cursor = slot + jitter();
     }
     c.status = "Queued";
     c.approval = {
@@ -192,7 +199,7 @@ export async function deliverTask(task, store, queue, config, fetcher = fetch) {
       await store.db.exec("COMMIT");
       return {status:"cancelled",reason:"This campaign step was already attempted for this address; reconcile its send log."};
     }
-    await store.db.prepare("INSERT INTO send_leases(account_id,not_before) VALUES(?,?) ON CONFLICT(account_id) DO UPDATE SET not_before=excluded.not_before").run(budgetAccount, currentTime + randomInt(c.autopilot ? 240000 : 180000, 480001));
+    await store.db.prepare("INSERT INTO send_leases(account_id,not_before) VALUES(?,?) ON CONFLICT(account_id) DO UPDATE SET not_before=excluded.not_before").run(budgetAccount, currentTime + randomInt((policy?.minDelayMinutes || 3)*60000,(policy?.maxDelayMinutes || 8)*60000+1));
     await store.db.prepare("INSERT INTO send_budget(account_id,day,count) VALUES(?,?,1) ON CONFLICT(account_id,day) DO UPDATE SET count=count+1").run(budgetAccount, day);
     await store.db.exec("COMMIT");
   } catch (error) {
@@ -213,6 +220,7 @@ export async function deliverTask(task, store, queue, config, fetcher = fetch) {
     replyTo: s.profile.email
   }, config, c.attachResume ? await hydrateResume(s.resume, store, config) : null, d.key, fetcher);
   await store.db.prepare("UPDATE outreach_send_log SET status=?,provider_id=?,updated_at=? WHERE task_id=?").run(result.status,result.providerId || null,Date.now(),task.id);
+  await store.db.prepare('UPDATE outreach_company_budget SET status=?,updated_at=? WHERE task_id=?').run(result.status,Date.now(),task.id);
   if (followup) d.followupStatus = result.status;else Object.assign(d, result);
   d.at = now();
   const latest = [...new Map(c.deliveries.map(x => [x.contactId, x])).values()];

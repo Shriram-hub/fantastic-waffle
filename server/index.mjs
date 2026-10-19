@@ -1,6 +1,12 @@
 import { taskEvents } from "./events.mjs";
 import { ensureSearchMatrix } from "./services/autopilot.mjs";
 import { profileScope } from "./services/autopilot-policy.mjs";
+import {getSearchConfig,scheduleDiscovery,searchStatus} from './services/discovery.mjs';
+import {autopilotStatus} from './services/autopilot.mjs';
+import {setupReadiness} from './discovery-routes.mjs';
+import {listAccounts} from './providers/mail/oauth.mjs';
+import {buildSearchPlan,rankOpportunity} from './services/search-plan.mjs';
+import {gzipSync} from 'node:zlib';
 import { openConfiguredStore } from "./store-config.mjs";
 import { spawn } from "node:child_process";
 import { hydrateResume } from "./services/resume-storage.mjs";
@@ -20,7 +26,8 @@ const buildRoot = fileURLToPath(new URL("../dist/", import.meta.url));
 const JSON_LIMIT = 8_000_000;
 const csvCell = v => `"${String(v ?? "").replace(/^[=+@\-\t\r]/, "'$&").replaceAll('"', '""')}"`;
 const filename = s => s.replace(/[^a-z0-9._-]/gi, "_").slice(0, 130);
-function publicState(s) {
+function publicState(s,preferences) {
+  const plan=buildSearchPlan(s,preferences);
   const {
     previews,
     apolloResults,
@@ -30,8 +37,10 @@ function publicState(s) {
     ...rest,
     jobs: s.jobs.map(j => ({
       ...j,
+      description: j.description?.slice(0,280) || '',
+      descriptionTruncated: (j.description?.length || 0)>280,
       semanticMatch: j.semanticMatch?.resumeHash === hash(s.resume?.text) && j.semanticMatch?.jobHash === hash(`${j.title}\n${j.description}`) ? j.semanticMatch : null,
-      match: j.autopilotMatch?.scope === profileScope(s) ? j.autopilotMatch : scoreJob(j, s.profile)
+      match: s.isDemo ? scoreJob(j,s.profile) : j.discoveryMatch?.scope===plan.scope ? j.discoveryMatch : rankOpportunity(j,plan)
     })),
     resume: s.resume ? Object.fromEntries(Object.entries(s.resume).filter(([key]) => key !== "base64")) : null
   };
@@ -82,10 +91,14 @@ export function createApp({
   if (config.LEVER_BOARDS && !store.state.settings.leverBoards.length) store.state.settings.leverBoards = boardList(config.LEVER_BOARDS);
   const ready = Promise.resolve(store.save());
   const json = (res, status, data) => {
+    let payload=Buffer.from(JSON.stringify(data));
+    const gzip=payload.length>12000 && /\bgzip\b/.test(res.req?.headers['accept-encoding'] || '');
+    if(gzip) payload=gzipSync(payload,{level:4});
     res.writeHead(status, {
-      "Content-Type": "application/json; charset=utf-8"
+      "Content-Type": "application/json; charset=utf-8",
+      ...(gzip ? {'Content-Encoding':'gzip','Vary':'Accept-Encoding'} : {})
     });
-    res.end(JSON.stringify(data));
+    res.end(payload);
   };
   const download = (res, data, type, name) => {
     res.writeHead(200, {
@@ -108,7 +121,7 @@ export function createApp({
     res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; object-src 'none'");
     try {
       const publicUrl = new URL(req.url || "/", "http://localhost");
-      if (req.method === "GET" && publicUrl.pathname === "/api/health") return json(res,200,{ok:true});
+      if (req.method === "GET" && publicUrl.pathname === "/api/health") return json(res,200,{ok:true,version:"0.5.0"});
       if (await upgrade.publicRoute(req, res, publicUrl, {
         json,
         bodyJSON
@@ -138,10 +151,23 @@ export function createApp({
       })) return;
       if (method === "GET" && path === "/api/health") return json(res, 200, {
         ok: true,
-        version: "0.2.0"
+        version: "0.5.0"
       });
       if (method === "GET" && path === "/api/events") return events.connect(req,res);
-      if (method === "GET" && path === "/api/state") return json(res, 200, publicState(store.state));
+      if (method === 'GET' && path === '/api/bootstrap') {
+        const [preferences,search,autopilot,accounts,versions,links,tasks,applications]=await Promise.all([
+          getSearchConfig(store),searchStatus(store),autopilotStatus(store,config),listAccounts(store),
+          store.db.prepare('SELECT id,kind,body,created_at FROM resume_versions ORDER BY created_at DESC').all(),
+          store.db.prepare('SELECT id,expires,revoked,views FROM public_resumes').all(),upgrade.queue.list(),
+          store.db.prepare('SELECT id,application_id,status,body FROM apply_tasks ORDER BY rowid DESC LIMIT 100').all(),
+        ]);
+        const setup=setupReadiness(store,config);
+        return json(res,200,{data:publicState(store.state,preferences),search,autopilot,accounts,setup,
+          integrations:{remotive:true,greenhouse:true,lever:true,ashby:true,arbeitnow:true,himalayas:true,apollo:setup.apolloConfigured,hunter:setup.hunterConfigured,googleOAuth:setup.googleConfigured,microsoftOAuth:setup.microsoftConfigured,gmail:accounts.some(a=>a.provider==='google'),outlook:accounts.some(a=>a.provider==='microsoft'),resend:setup.resendConfigured,liveSendEnabled:setup.liveSendEnabled,ai:setup.aiConfigured,embeddings:!!(config.LLM_API_KEY && config.EMBEDDING_MODEL),adzuna:!!(config.ADZUNA_APP_ID && config.ADZUNA_APP_KEY),queueDriver:config.REDIS_URL ? 'BullMQ + Redis' : store.kind==='postgres' ? 'PostgreSQL' : 'SQLite',autoApply:'assisted'},
+          vault:{versions:versions.map(v=>({id:v.id,kind:v.kind,title:JSON.parse(v.body).title,createdAt:v.created_at})),links},
+          tasks:{tasks,applications:applications.map(a=>({...a,details:JSON.parse(a.body)}))}});
+      }
+      if (method === "GET" && path === "/api/state") return json(res, 200, publicState(store.state,await getSearchConfig(store)));
       if (method === "GET" && path === "/api/integrations") return json(res, 200, {
         remotive: true,
         greenhouse: true,
@@ -231,6 +257,10 @@ export function createApp({
           };
           await store.save();
           await ensureSearchMatrix(store,config,fetcher);
+          const preferences=await getSearchConfig(store);
+          await store.db.prepare("INSERT INTO job_search_config(id,body) VALUES('local',?) ON CONFLICT(id) DO UPDATE SET body=excluded.body")
+            .run(JSON.stringify({...preferences,roles:p.interests,location:p.location,workMode:p.workMode}));
+          await scheduleDiscovery(store,upgrade.queue,config,true);
           return json(res, 200, {
             ok: true
           });
@@ -247,6 +277,7 @@ export function createApp({
           s.resume.text = text(data.text, 100000);
           await store.save();
           await ensureSearchMatrix(store,config,fetcher);
+          await scheduleDiscovery(store,upgrade.queue,config,true);
           return json(res, 200, {
             ok: true
           });

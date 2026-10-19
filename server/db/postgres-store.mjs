@@ -6,7 +6,7 @@ import { initialState } from '../fixtures.mjs';
 import { fail } from '../domain.mjs';
 
 const tables = ['workspace_meta', 'user_profiles', 'resumes', ...Object.values(collections)];
-const runtimeTables = [...tables, 'tasks', 'task_logs', 'mail_accounts', 'oauth_states', 'inbox_messages', 'resume_versions', 'embeddings', 'apply_tasks', 'extension_tokens', 'send_leases', 'send_budget', 'public_resumes', 'outreach_send_log', 'unsubscribe_tokens', 'ai_cache', 'resume_objects', 'companies', 'search_matrices', 'autopilot_config', 'autopilot_schedule', 'autopilot_runs', 'autopilot_activity', 'provider_requests', 'migrations'];
+const runtimeTables = [...tables, 'tasks', 'task_logs', 'mail_accounts', 'oauth_states', 'inbox_messages', 'resume_versions', 'embeddings', 'apply_tasks', 'extension_tokens', 'send_leases', 'send_budget', 'public_resumes', 'outreach_send_log', 'unsubscribe_tokens', 'ai_cache', 'resume_objects', 'companies', 'search_matrices', 'autopilot_config', 'autopilot_schedule', 'autopilot_runs', 'autopilot_activity', 'provider_requests', 'job_search_config', 'job_search_runs', 'job_source_health', 'job_source_cache', 'discovered_boards', 'outreach_company_budget', 'migrations'];
 export function postgresSQL(sql) {
   let result = sql.replace(/INSERT OR IGNORE INTO/gi, 'INSERT INTO');
   if (/INSERT OR IGNORE INTO/i.test(sql)) result += ' ON CONFLICT DO NOTHING';
@@ -53,7 +53,7 @@ export async function openPostgresStore(config = process.env, suppliedPool) {
     });
   };
   function normalize(row) {
-    return Object.fromEntries(Object.entries(row).map(([key, value]) => [key, ['run_at','attempts','max_attempts','lease_until','created_at','updated_at','at','expires','revoked','views','count','not_before','sequence_step','next_run','cursor'].includes(key) && value !== null ? Number(value) : value]));
+    return Object.fromEntries(Object.entries(row).map(([key, value]) => [key, ['run_at','attempts','max_attempts','lease_until','created_at','updated_at','at','expires','revoked','views','count','not_before','sequence_step','next_run','cursor','checked_at','scanned','matched','expires_at'].includes(key) && value !== null ? Number(value) : value]));
   }
   const query = async (sql, values = []) => (session.getStore()?.client || pool).query(postgresSQL(sql), values.map(v => v === undefined ? null : v));
   const db = {
@@ -98,11 +98,16 @@ export async function openPostgresStore(config = process.env, suppliedPool) {
       await db.prepare(`UPDATE ${table} SET ${mutable.map(n => `${n}=?`).join(',')} WHERE id=?`).run(...mutable.map(n => columns[n]),id);
     } else await db.prepare(`INSERT INTO ${table}(${names.join(',')}) VALUES(${names.map(() => '?').join(',')})`).run(...Object.values(columns));
   };
+  let cachedSnapshot;
   const read = async () => {
+    const revision=(await pool.query("SELECT value FROM orbit_runtime.workspace_revision WHERE id='local'")).rows[0]?.value;
+    if(!session.getStore()?.client && cachedSnapshot?.revision===revision) return structuredClone(cachedSnapshot.state);
     const result = await query(tables.map(t => `SELECT '${t}' AS collection,body,row_order FROM ${t}`).join(' UNION ALL ') + ' ORDER BY collection,row_order');
     const groups = Object.fromEntries(tables.map(t => [t, []]));
     for (const row of result.rows) groups[row.collection].push(JSON.parse(row.body));
-    return {...(groups.workspace_meta[0] || {}),profile:groups.user_profiles[0] || {},resume:groups.resumes[0] || null,...Object.fromEntries(Object.entries(collections).map(([key, table]) => [key, groups[table]]))};
+    const state={...(groups.workspace_meta[0] || {}),profile:groups.user_profiles[0] || {},resume:groups.resumes[0] || null,...Object.fromEntries(Object.entries(collections).map(([key, table]) => [key, groups[table]]))};
+    if(!session.getStore()?.client) cachedSnapshot={revision,state:structuredClone(state)};
+    return state;
   };
   const snapshot = async () => { const state = await read(); return {state,base:structuredClone(state)}; };
   const overwrite = async (state) => {

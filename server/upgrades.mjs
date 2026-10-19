@@ -1,5 +1,6 @@
 import { unsubscribeRoute } from "./services/unsubscribe.mjs";
 import { autopilotRoutes } from "./autopilot-routes.mjs";
+import { discoveryRoutes } from './discovery-routes.mjs';
 import { resumeHash, hydrateResume } from "./services/resume-storage.mjs";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { createRemoteJWKSet, jwtVerify } from "jose";
@@ -41,6 +42,7 @@ export function upgradeRoutes(store, config, fetcher) {
     task: await queue.enqueue(kind, payload, options)
   });
   const autopilot = autopilotRoutes(store,queue,config,fetcher);
+  const discovery = discoveryRoutes(store,config);
   async function publicRoute(req, res, u, {
     json,
     bodyJSON
@@ -220,6 +222,7 @@ export function upgradeRoutes(store, config, fetcher) {
     json,
     bodyJSON
   }) {
+    if (await discovery(req,res,u,{json,bodyJSON})) return true;
     if (await autopilot.handle(req,res,u,{json,bodyJSON})) return true;
     const path = u.pathname,
       method = req.method,
@@ -401,6 +404,7 @@ export function upgradeRoutes(store, config, fetcher) {
       if (!(await store.db.prepare("SELECT id FROM mail_accounts WHERE id=?").get(mailbox[1]))) fail("Mailbox not found.", 404);
       if (mailbox[2] === "disconnect") {
         await store.db.prepare("DELETE FROM mail_accounts WHERE id=?").run(mailbox[1]);
+        await store.db.prepare("DELETE FROM autopilot_schedule WHERE id=?").run(`mailbox:${mailbox[1]}`);
         await store.db.prepare("UPDATE tasks SET status='cancelled' WHERE status='queued' AND json_extract(payload,'$.accountId')=?").run(mailbox[1]);
         json(res, 200, {
           ok: true

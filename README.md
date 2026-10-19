@@ -1,12 +1,30 @@
-# Orbit v0.4 · Career workspace
+# Orbit v0.5 · Career workspace
 
 A working personal workspace for job discovery, résumé preparation, application tracking, browser-assisted filling, inbox updates, company contacts, and reviewed outreach.
 
 SQLite remains the local default. Set `DATABASE_URL` to use the real PostgreSQL runtime, including durable jobs, send logs, encrypted mailbox credentials, and private resume objects. `RUN_EMBEDDED_WORKER=true` supervises a worker alongside the API on a single hosting service. OAuth connects mailboxes; this is one private personal workspace.
 
-## Autonomous search and outreach
+## Automatic job discovery
 
-Open **Automation → Autopilot Mode** to opt into two-hour job discovery, automatic
+Open **Discover jobs**, choose target roles and location once, or upload a résumé
+and use the roles derived from its text. Searches run every two hours without a
+contact API key or email connection. An initial Explore feed populates on the
+host with `DISCOVERY_BOOTSTRAP=true`. Public sources include Remotive, Arbeitnow,
+Remote OK, Jobicy, Himalayas and 110 curated Greenhouse/Lever/Ashby boards.
+Provider failures are isolated, full ATS snapshots archive removed postings,
+source results are cached, and IDs survive cross-source deduplication. The
+personal feed ranks and explains matches; **All live jobs** keeps other fields
+visible. Up to 1,500 best listings plus tracked jobs are retained per workspace.
+
+Optional `JSEARCH_API_KEY` or `SERPAPI_API_KEY` adds Google Jobs aggregation when
+you enable that source. Application links retain the original publisher.
+There is no keyless unlimited Google/LinkedIn/Indeed API claim. Discovered ATS
+application links add validated boards to a persistent registry.
+
+## Optional autonomous outreach
+
+
+Open **Automation → Autopilot Mode** to opt into automatic
 company/contact lookup, verified job-specific pitches, and either a daily review
 queue or explicitly approved automatic sending. Includes 110 checked ATS boards,
 free public feeds, durable provider-call limits and cloud scheduling. Contact
@@ -16,6 +34,8 @@ behavior](docs/AUTOPILOT.md).
 ## Free online hosting
 
 Use Render Free + Supabase Free with no PC running: [complete hosting instructions](docs/FREE_HOSTING.md). The web service and worker sleep together on the free plan; Supabase Cron wakes them for due work, and queued work survives in PostgreSQL. Provider API access is separate from hosting.
+
+For the existing hosted app, follow the [exact API-key checklist and mailbox setup](docs/API_KEYS.md).
 
 ## Start locally
 
@@ -42,7 +62,7 @@ npm run worker
 
 Open **http://127.0.0.1:3000**. Without the worker, imports, parsing, matching, and sends remain visibly queued.
 
-Copy `.env.example` to `.env` to configure optional services. No provider credentials are necessary for the sample workspace, manual tracking, TXT/DOCX parsing, printable résumé tailoring, or email draft downloads. PDF text extraction uses optional Poppler `pdftotext`; Docker includes it. Without Poppler, the PDF remains stored and attachable and you can paste its text.
+Copy `.env.example` to `.env` to configure optional services. No provider credentials are necessary for the sample workspace, manual tracking, TXT/DOCX parsing, printable résumé tailoring, or email draft downloads. PDF text extraction uses Poppler when available, with a bundled JavaScript PDF parser as a fallback on native Render. Image-only scans still need pasted text or OCR.
 
 ## What is implemented
 
@@ -51,23 +71,23 @@ Copy `.env.example` to `.env` to configure optional services. No provider creden
 | Interface         | React components, Vite production build, Tailwind + retained Orbit styles, responsive views, explicit connection/queue status.                                                                                                                          |
 | Persistence       | Relational SQLite tables, v1 migration, foreign keys and indexes, request-scoped snapshots, per-record conflict checks across API/worker processes.                                                                                                     |
 | Workers           | Durable SQLite/PostgreSQL task outbox, atomic claims, expiring leases, logs, cancellation, backoff for retryable tasks, separate worker process. Optional Redis + BullMQ dispatch.                                                                                 |
-| Job feeds         | Remotive, Greenhouse/Lever/Ashby boards, Arbeitnow, Himalayas, and optional Adzuna. Canonical company/title/location deduplication preserves application-linked IDs and source provenance.                                                                |
+| Job feeds         | Remotive, Greenhouse/Lever/Ashby boards, Arbeitnow, Himalayas, Remote OK, Jobicy, optional Adzuna and Google Jobs aggregators. Canonical company/title/location deduplication preserves application-linked IDs and source provenance.                                                                |
 | Résumé vault      | Background TXT/DOCX/PDF extraction, reviewed skill suggestions, optional schema-validated model extraction, private local/S3/R2 files, printable fact-preserving versions.                                                                              |
 | Matching          | Explained keyword scores plus optional real embedding/cosine matching. Scores retain model/content fingerprints and invalidate when source text changes.                                                                                                |
 | Browser assistant | Chrome MV3 extension, expiring/revocable pairing tokens, destination checks, approved-field filling, résumé attachment, unknown-question reporting, verification-challenge stop, user-confirmed submission reference.                                   |
 | Inbox             | Google/Microsoft OAuth with PKCE and encrypted tokens, Gmail history and Graph delta sync, push webhook handlers, watch renewals, rule-based classification and optional structured model classification.                                               |
 | Tracker           | Board/list views, notes/history, assessment stage and extracted deadlines, reviewed or opt-in conservative automatic updates, CSV export.                                                                                                               |
 | Contacts          | CSV/manual records, contextual Apollo targeting, separate paid enrichment, optional Hunter verification, catch-all/invalid blocking, suppression, evidence-checked AI opening lines for review.                                                         |
-| Outreach          | Saved/edited drafts, per-recipient previews and `.eml` downloads, native Gmail/Outlook sends or Resend, durable scheduled sends, 30/day default cap (maximum 50), business-hour pacing, one approved threaded follow-up, reply/suppression/pause stops. |
+| Outreach          | Saved/edited drafts, per-recipient previews and `.eml` downloads, native Gmail/Outlook sends or Resend, durable scheduled sends, 40/day Autopilot cap (30 for manual campaigns; maximum 50), business-hour pacing, one approved threaded follow-up, reply/suppression/pause stops. |
 | Résumé links      | Explicitly approved unlisted seven-day links, revocation, file-version binding, request counts labeled as requests rather than proof of human reading.                                                                                                  |
 
-**Still separate milestones:** multi-user sign-in/isolation, broader licensed aggregator coverage such as JSearch, generic headless auto-submit workers, a rich-text multi-step sequence builder, bounce/delivery webhooks and automatic unsubscribe parsing, file-retention cleanup, and production deployment/operations review. There is no universal ATS application-submission claim.
+**Still separate milestones:** multi-user sign-in/isolation, generic headless auto-submit workers, a rich-text multi-step sequence builder, bounce/delivery webhooks and automatic unsubscribe parsing, file-retention cleanup, and production deployment/operations review. There is no universal ATS application-submission claim.
 
 ## Five-minute workflow
 
 1. Explore the fictional sample, then start a personal workspace. Save your real profile, target roles, skills, links, notice period, salary expectation, and exact approved screening answers.
 2. Upload a résumé. Watch extraction in **Automation**, review its text/suggestions, and optionally request structured extraction. Nothing inferred by a model silently replaces your profile.
-3. Save company board slugs in **Connections**. Refresh job sources in **Job feed**, choose jobs, and prepare multiple applications. Keyword matching works without a model key; semantic matching requires confirmation and an embedding model.
+3. Set target roles and location in **Discover jobs**. Jobs appear as the background search checks sources. Choose jobs and prepare multiple applications. Additional company-board slugs are optional. Keyword matching works without a model key; semantic matching requires confirmation and an embedding model.
 4. Choose **Browser-assisted fill**, pair the extension, and open one queued form. Review all fields, complete unknown questions or verification directly, and submit yourself. Record the employer’s confirmation in Orbit.
 5. Connect a mailbox or paste email updates. Automatic stage changes are opt-in and require a unique role match. Assessment links and explicit dates appear in the dashboard.
 6. Find/import relevant contacts, enrich/verify selected work emails, and optionally draft an evidence-backed opening line. Preview initial and follow-up messages, attachments, sender account, and recipients before queueing.

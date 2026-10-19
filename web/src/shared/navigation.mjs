@@ -11,12 +11,12 @@ export const symbols = {
 };
 export const names = {
   overview: "Overview",
-  profile: "Profile & résumé vault",
-  jobs: "Job feed",
+  profile: "Profile & résumé",
+  jobs: "Discover jobs",
   applications: "Application tracker",
   contacts: "Company contacts",
-  outreach: "Outreach studio",
+  outreach: "Email campaigns",
   inbox: "Inbox updates",
-  automation: "Automation queue",
+  automation: "Outreach & activity",
   connections: "Connections",
 };

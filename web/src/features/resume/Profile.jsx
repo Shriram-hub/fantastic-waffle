@@ -18,13 +18,13 @@ export function Profile() {
     let raw = "";
     for (const b of bytes) raw += String.fromCharCode(b);
     await api("/resume", { name: file.name, base64: btoa(raw) });
-    notify("Résumé saved. Text extraction is queued for the worker.");
+    notify("Résumé uploaded. We’re reading it and updating your job matches.");
   }
   return (
     <>
       <Heading
-        title="The story only you can tell."
-        subtitle="A reusable profile, a résumé vault, and answers you have approved."
+        title="Your profile & résumé"
+        subtitle="Your experience guides your search. Save changes to update job matching automatically."
       />
       <div className="profile-grid">
         <div>
@@ -42,7 +42,7 @@ export function Profile() {
                   },
                   "PUT",
                 );
-                notify("Profile saved.");
+                notify("Profile saved. Your job search is updating automatically.");
               });
             }}
           >
@@ -100,7 +100,7 @@ export function Profile() {
             </div>
             <div className="form-actions">
               <Button primary type="submit">
-                Save my profile
+                Save & update matches
               </Button>
             </div>
           </form>

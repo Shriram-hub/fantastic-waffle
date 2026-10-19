@@ -46,7 +46,7 @@ function providerMock() {
 async function prepare(store,queue,p,fetcher,steps=3) {
   const task=await store.run(()=>scheduleAutopilot(store,queue,config));
   assert.ok(task);
-  const registry=handlers(store,queue,config,fetcher,{lookupMx:mx});
+  const registry=handlers(store,queue,config,fetcher,{lookupMx:mx,contactPages:async()=>[]});
   for(let i=0;i<steps;i++) {
     const done=await runOne(store,queue,registry);
     assert.equal(done?.status,'completed',JSON.stringify(done));
@@ -96,7 +96,7 @@ for(const kind of ['sqlite','postgres']) test(`${kind}: autonomous discovery lin
   await store.run(()=>approveReview({approved:true,confirmCount:2,fingerprint:review.fingerprint},store,queue,config));
   const sends=(await queue.list()).filter(t=>t.kind==='campaign.send');assert.equal(sends.length,2);
   assert.ok(sends.every(s=>s.max_attempts===1));
-  const scheduled=sends.map(s=>s.run_at).sort();assert.ok(scheduled[1]-scheduled[0]>=240000);
+  const scheduled=sends.map(s=>s.run_at).sort();assert.ok(scheduled[1]-scheduled[0]>=180000);
   assert.equal(scheduled[0],Date.now(),'A future follow-up must not block today’s available sending slots.');
   assert.equal((await runOne(store,queue,registry,sends.find(s=>s.run_at===scheduled[0]).id)).status,'completed');
   assert.equal(mock.calls.filter(u=>u.includes('api.resend.com')).length,1);
@@ -172,5 +172,5 @@ test('Himalayas preserves attribution/restrictions and the scheduler endpoint re
   assert.equal((await fetch(base+'/api/autopilot')).status,401);
   assert.equal((await fetch(base+'/api/internal/autopilot/tick',{method:'POST'})).status,401);
   const valid=await fetch(base+'/api/internal/autopilot/tick',{method:'POST',headers:{'X-Orbit-Scheduler':'test-scheduler'}});
-  assert.equal(valid.status,202);assert.deepEqual(await valid.json(),{scheduled:false,version:'0.4.0',storage:'sqlite'});
+  assert.equal(valid.status,202);const status=await valid.json();assert.equal(status.version,'0.5.0');assert.equal(status.storage,'sqlite');assert.ok(!Object.values(status.setup).some(Boolean));
 });

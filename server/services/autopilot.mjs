@@ -12,6 +12,7 @@ import { providerCall } from "./provider-budget.mjs";
 import { queueCampaign } from "./outreach.mjs";
 import boards from "../providers/jobs/boards.json" with { type: "json" };
 import { discoverATSBoards } from "../providers/jobs/ats-search.mjs";
+import {findPublicContacts} from '../providers/contacts/free-xray.mjs';
 
 export const SWEEP_INTERVAL = 2 * 3600000;
 export async function ensureSearchMatrix(store, config = {}, fetcher = fetch) {
@@ -22,6 +23,8 @@ export async function ensureSearchMatrix(store, config = {}, fetcher = fetch) {
   const policy = await getPolicy(store);
   const matrix = await generateSearchMatrix(s,config,fetcher,store,policy.enabled && policy.scope === profileScope(s) && policy.useAI);
   await store.db.prepare("INSERT INTO search_matrices(id,body) VALUES('current',?) ON CONFLICT(id) DO UPDATE SET body=excluded.body").run(JSON.stringify(matrix));
+  store.state.discovery_queries={target_roles:matrix.target_roles,locations:matrix.locations,keywords:matrix.skills};
+  await store.save();
   return matrix;
 }
 async function activePolicy(store, expectedId) {
@@ -94,6 +97,13 @@ export async function discoverJobs(task, store, queue, config = {}, fetcher = fe
     ...[...new Map([...customBoards,...selectedBoards].map(b=>[`${b.source}:${b.slug}`,b])).values()].slice(0,20).map(b=>({...b,ttl:SWEEP_INTERVAL}))];
   let found = 0, failed = 0, queried = 0;
   const eligible = new Map();
+  const indexed=await store.db.prepare("SELECT id FROM job_search_runs WHERE status='completed' ORDER BY created_at DESC LIMIT 1").get();
+  if(indexed) {
+    // Independent discovery owns the source schedule and source toggles. Outreach
+    // consumes that index rather than re-fetching disabled or already cached feeds.
+    sources.length=0;
+    for(const job of store.state.jobs) if(scoreDiscoveredJob(job,store.state,matrix,p).score>=p.minimumMatchScore) eligible.set(job.id,job);
+  }
   for (const source of sources) {
     await store.refresh();
     if (!await activePolicy(store,p.id)) return {status:"cancelled"};
@@ -111,7 +121,9 @@ export async function discoverJobs(task, store, queue, config = {}, fetcher = fe
         // Keep the feed focused; failed providers never archive existing jobs.
         const scored = jobs.map(j=>({...j,autopilotMatch:scoreDiscoveredJob(j,store.state,matrix,p)})).filter(j => j.autopilotMatch.score >= p.minimumMatchScore).slice(0,100);
         const before = new Set(store.state.jobs.map(canonicalJobKey));
-        store.state.jobs = mergeJobListings(store.state.jobs,scored,source.source,source.slug);
+        // Keep every live listing in the discovery feed; only the outreach
+        // pipeline uses the higher score threshold.
+        store.state.jobs = mergeJobListings(store.state.jobs,jobs.map(job=>({...job,autopilotMatch:scoreDiscoveredJob(job,store.state,matrix,p)})),source.source,source.slug);
         found += scored.filter(j=>!before.has(canonicalJobKey(j))).length;
         store.state.syncs[key] = {ok:true,at:now(),count:jobs.length,matched:scored.length};
         await store.save(); jobs = scored;
@@ -151,7 +163,7 @@ export async function discoverJobs(task, store, queue, config = {}, fetcher = fe
 async function contactCoolingDown(store,email,campaignId="") {
   return !!await store.db.prepare("SELECT task_id FROM outreach_send_log WHERE contact_email=? AND campaign_id!=? AND status IN ('queued','sending','accepted','unknown') AND updated_at>?").get(email.toLowerCase(),campaignId,Date.now()-30*86400000);
 }
-export async function enrichCompany(task,store,queue,config = {},fetcher = fetch,lookupMx) {
+export async function enrichCompany(task,store,queue,config = {},fetcher = fetch,lookupMx,contactPages) {
   const p=await activePolicy(store,task.payload.policyId),run=decodeRun(await store.db.prepare("SELECT * FROM autopilot_runs WHERE id=?").get(task.payload.runId));
   if (!p || !run || run.policyId!==p.id || ["review","queued","completed"].includes(run.status)) return {status:"cancelled"};
   const j=store.state.jobs.find(j=>j.id===run.jobId);
@@ -159,14 +171,14 @@ export async function enrichCompany(task,store,queue,config = {},fetcher = fetch
   try {
     const blockers=await pipelineBlockers(store,config,p);
     if (blockers.contacts.length) fail(blockers.contacts[0],503);
-    const company=await resolveCompany(j,fetcher);
+    const company=await resolveCompany(j,fetcher,store);
     if (!company) fail(`Company domain for ${j.company} is ambiguous or unavailable. No contact lookup was made.`,409);
     const otherRuns=await store.db.prepare("SELECT id,body FROM autopilot_runs WHERE status IN ('review','queued','completed') AND updated_at>?").all(Date.now()-7*86400000);
     if(otherRuns.some(r=>r.id!==run.id && JSON.parse(r.body).domain===company.domain)) fail(`Another ${j.company} role already has outreach in this week's pipeline.`,409);
     await store.db.prepare("INSERT INTO companies(domain,name,body) VALUES(?,?,?) ON CONFLICT(domain) DO UPDATE SET body=excluded.body").run(company.domain,j.company,JSON.stringify(company));
     const period=Math.floor(Date.now()/(7*86400000)), call=(key,provider,fn)=>providerCall(store,`${period}:${key}`,provider,p.maxContactLookupsPerDay,fn);
-    let candidates=[], warnings=[];
-    if(config.APOLLO_API_KEY) {
+    let candidates=store.state.contacts.filter(c=>!c.isDemo && !c.suppressed && c.emailStatus==='verified' && (c.companyDomain===company.domain || c.email?.split('@')[1]===company.domain)).slice(0,p.contactsPerCompany), warnings=[];
+    if(candidates.length<p.contactsPerCompany && p.allowContactCredits && config.APOLLO_API_KEY) {
       try {
         const titles=[...targetTitles(j.employeeCount),"CTO","Founder","Head of People"].slice(0,6).join(",");
         const people=await call(`search:${company.domain}`,"Apollo",()=>searchApollo({domain:company.domain,titles,limit:p.contactsPerCompany},config.APOLLO_API_KEY,fetcher));
@@ -176,9 +188,14 @@ export async function enrichCompany(task,store,queue,config = {},fetcher = fetch
         }
       } catch {warnings.push("Apollo unavailable; trying configured Hunter fallback.");}
     }
-    if(candidates.filter(c=>c.email && c.emailStatus==="verified").length<p.contactsPerCompany && config.HUNTER_API_KEY) {
-      const fallback=await call(`domain:${company.domain}`,"Hunter",()=>searchHunter(company.domain,config.HUNTER_API_KEY,p.contactsPerCompany,fetcher));
-      candidates.push(...fallback);
+    if(candidates.filter(c=>c.email && c.emailStatus==="verified").length<p.contactsPerCompany && p.allowContactCredits && config.HUNTER_API_KEY) {
+      try {
+        const fallback=await call(`domain:${company.domain}`,"Hunter",()=>searchHunter(company.domain,config.HUNTER_API_KEY,p.contactsPerCompany,fetcher));
+        candidates.push(...fallback);
+      } catch {warnings.push('Hunter unavailable or at its budget limit; public contacts remain available.');}
+    }
+    if(p.freeContactFallback && candidates.filter(c=>c.email && c.emailStatus==='verified').length<p.contactsPerCompany) {
+      candidates.push(...await findPublicContacts(j,company,{config,fetcher,pages:contactPages,allowSearch:p.useSearchAPI && p.allowContactCredits,call:fn=>call(`xray:${company.domain}`,'SerpApi',fn)}));
     }
     const unique=[...new Map(candidates.filter(c=>c.email && !sampleEmail(c.email)).map(c=>[c.email.toLowerCase(),c])).values()].slice(0,p.contactsPerCompany);
     const contactIds=[];
@@ -188,19 +205,22 @@ export async function enrichCompany(task,store,queue,config = {},fetcher = fetch
       if(await contactCoolingDown(store,candidate.email)) continue;
       const dns=await checkEmailDomain(candidate.email,lookupMx);
       if(dns) Object.assign(candidate,dns);
-      else if(config.HUNTER_API_KEY) Object.assign(candidate,await call(`verify:${candidate.email}`,"Hunter",()=>verifyWorkEmail(candidate.email,config,fetcher,lookupMx)));
+      else if(candidate.emailStatus!=='verified' && p.allowContactCredits && config.HUNTER_API_KEY) {
+        try {Object.assign(candidate,await call(`verify:${candidate.email}`,"Hunter",()=>verifyWorkEmail(candidate.email,config,fetcher,lookupMx)));} catch {warnings.push('Mailbox verification unavailable; this contact stays unverified.');}
+      }
       // Provider-verified corporate emails can be used without Hunter. MX alone cannot verify a guessed address.
-      if(candidate.emailStatus!=="verified") continue;
       await store.refresh();
       if(!await activePolicy(store,p.id)) return {status:"cancelled"};
       const old=store.state.contacts.find(c=>c.email?.toLowerCase()===candidate.email.toLowerCase());
       if(old?.suppressed) continue;
       let c=old;
       if(!c) {c={...candidate,jobId:j.id,companyDomain:company.domain,company:j.company};store.state.contacts.push(c);}
-      else if(c.isDemo || c.emailStatus!=="verified") continue;
-      contactIds.push(c.id);await store.save();
+      else if(c.isDemo) continue;
+      else if(candidate.emailStatus==='verified') Object.assign(c,candidate,{id:c.id});
+      Object.assign(c,{jobId:j.id,companyDomain:company.domain});
+      if(c.emailStatus==='verified') contactIds.push(c.id);await store.save();
     }
-    if(!contactIds.length) fail("No verified corporate contacts were available within the lookup limit. No email was queued.",409);
+    if(!contactIds.length) fail("No verified corporate contacts were available. Public or guessed candidates stay in Contacts for verification; no email was queued.",409);
     await updateRun(store,run,"enriched",{domain:company.domain,contactIds,warnings});
     await queue.enqueue("AUTO_DRAFT_PERSONALIZED_EMAIL",{runId:run.id,policyId:p.id},{dedupeKey:`draft-${run.id}-${p.id}`});
     await activity(store,"contacts",`Found ${contactIds.length} verified contacts for ${j.company}'s ${j.title} role.`,contactIds.length);
@@ -259,7 +279,11 @@ export async function autopilotStatus(store,config = {}) {
   const blockers=await pipelineBlockers(store,config,p);
   if(p.enabled && p.scope!==profileScope(store.state)) blockers.discovery.push("Your profile or résumé changed. Review and save Autopilot settings to resume.");
   const review=store.state.campaigns.filter(c=>c.autopilot?.policyId===p.id && !c.deliveries.length && c.status==="Awaiting review");
-  return {policy:p,matrix:row ? JSON.parse(row.body) : null,schedule:await store.db.prepare("SELECT * FROM autopilot_schedule WHERE id='local'").get() || null,
+  const outcomes=await store.db.prepare('SELECT status,count(*) AS count FROM outreach_send_log GROUP BY status').all();
+  const domains=Number((await store.db.prepare('SELECT count(*) AS count FROM companies').get()).count);
+  const contactCounts=store.state.contacts.filter(c=>!c.isDemo).reduce((counts,c)=>{const key=/Apollo/i.test(c.source) ? 'apollo' : /Hunter/i.test(c.source) ? 'hunter' : /Public|pattern/i.test(c.source) ? 'public' : 'other';counts[key]++;return counts;},{apollo:0,hunter:0,public:0,other:0});
+  const funnel={jobs:store.state.jobs.filter(j=>!j.isDemo && !j.archived).length,highMatches:store.state.jobs.filter(j=>!j.archived && (j.discoveryMatch?.score || j.autopilotMatch?.score || 0)>=p.minimumMatchScore).length,domains,contacts:contactCounts,scheduled:Number(outcomes.find(r=>r.status==='queued')?.count || 0),sent:Number(outcomes.find(r=>r.status==='accepted')?.count || 0)};
+  return {policy:p,funnel,matrix:row ? JSON.parse(row.body) : null,schedule:await store.db.prepare("SELECT * FROM autopilot_schedule WHERE id='local'").get() || null,
     blockers,reviewCount:review.length,activity:await store.db.prepare("SELECT * FROM autopilot_activity ORDER BY at DESC LIMIT 30").all(),
     runs:(await store.db.prepare("SELECT * FROM autopilot_runs ORDER BY updated_at DESC LIMIT 30").all()).map(decodeRun),
     lookupsToday:Number((await store.db.prepare("SELECT count(*) AS count FROM provider_requests WHERE day=?").get(new Date().toISOString().slice(0,10))).count),

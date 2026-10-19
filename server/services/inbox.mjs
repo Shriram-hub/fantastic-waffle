@@ -1,4 +1,23 @@
 import { id, now, suggestStage, safeUrl } from "../domain.mjs";
+export const INBOX_SYNC_INTERVAL=15*60000;
+// Polling is also a fallback when Gmail Pub/Sub or Graph webhooks are not set up.
+export async function scheduleMailboxSync(store,queue,clock=Date.now()) {
+  let queued=0;
+  for(const account of await store.db.prepare('SELECT id FROM mail_accounts').all()) {
+    const key=`mailbox:${account.id}`;
+    await store.db.exec('BEGIN IMMEDIATE');
+    try {
+      const schedule=await store.db.prepare('SELECT next_run FROM autopilot_schedule WHERE id=?').get(key);
+      if(!schedule || schedule.next_run<=clock) {
+        await queue.enqueue('inbox.sync',{accountId:account.id},{dedupeKey:`periodic-inbox-${account.id}-${Math.floor(clock/INBOX_SYNC_INTERVAL)}`});
+        await store.db.prepare('INSERT INTO autopilot_schedule(id,next_run,cursor) VALUES(?,?,0) ON CONFLICT(id) DO UPDATE SET next_run=excluded.next_run').run(key,clock+INBOX_SYNC_INTERVAL);
+        queued++;
+      }
+      await store.db.exec('COMMIT');
+    } catch(error) {await store.db.exec('ROLLBACK');throw error;}
+  }
+  return queued;
+}
 const address = from => from.match(/<?([^\s<>]+@[^\s<>]+)>?/)?.[1]?.toLowerCase() || "";
 const clean = s => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 export function shouldClassify(message, state) {
@@ -58,12 +77,15 @@ export async function ingestMessage(message, store) {
   const latest=String(message.body || '').split(/\nOn .+wrote:|\n_{5,}|\nFrom:/i)[0];
   if (/\bunsubscribe\b|\bremove me\b|\bstop (?:emailing|contacting) me\b/i.test(latest))
     for (const contact of s.contacts) if (contact.email?.toLowerCase() === sender) {contact.suppressed=true;contact.suppressedAt=now();}
-  // Replies stop outreach even if the email is not a job-status update.
+  // A reply from an actual recipient stops that company's follow-ups even if
+  // it arrives in a new thread. An unrelated newsletter cannot stop sequences.
+  const replyDomains=new Set(s.contacts.filter(c=>c.email?.toLowerCase()===sender).map(c=>c.companyDomain || c.email.split('@')[1]));
   for (const c of s.campaigns) for (const d of c.deliveries || []) {
     const recipient = s.contacts.find(x => x.id === d.contactId);
-    if (recipient?.email?.toLowerCase() === address(message.from) && (!d.threadId || message.threadId === d.threadId)) {
+    if (recipient && replyDomains.has(recipient.companyDomain || recipient.email?.split('@')[1])) {
       d.repliedAt = message.receivedAt;
       d.followupStopped = true;
+      if(d.followupTaskId) await store.db.prepare("UPDATE tasks SET status='cancelled',updated_at=? WHERE id=? AND kind='campaign.followup' AND status='queued'").run(Date.now(),d.followupTaskId);
     }
   }
   if (s.inbox.some(x => x.messageId === message.id)) {
@@ -79,6 +101,13 @@ export async function ingestMessage(message, store) {
     };
   }
   const result = classifyEmail(message, s);
+  if(result.applicationId && ['Interview','Interview scheduled','Offer','Rejected'].includes(result.proposedStage)) {
+    const application=s.applications.find(a=>a.id===result.applicationId),job=s.jobs.find(j=>j.id===application?.jobId);
+    if(job) for(const campaign of s.campaigns.filter(c=>c.jobId===job.id || job.companyDomain && c.autopilot?.domain===job.companyDomain)) for(const delivery of campaign.deliveries || []) {
+      delivery.followupStopped=true;
+      if(delivery.followupTaskId) await store.db.prepare("UPDATE tasks SET status='cancelled',updated_at=? WHERE id=? AND kind='campaign.followup' AND status='queued'").run(Date.now(),delivery.followupTaskId);
+    }
+  }
   if (!result.proposedStage && !result.deadline) {
     await store.save();
     return {

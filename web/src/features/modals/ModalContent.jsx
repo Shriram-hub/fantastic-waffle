@@ -11,6 +11,7 @@ export function ModalContent({ modal, close }) {
     [textValue, setText] = useState(""),
     [result, setResult] = useState(null);
   useEffect(() => {
+    if(modal.type==='job') api(`/jobs/${modal.id}`).then(setResult).catch(e=>notify(e.message,true));
     if (modal.type === "task-logs")
       api(`/tasks/${modal.id}/logs`)
         .then(setResult)
@@ -20,7 +21,7 @@ export function ModalContent({ modal, close }) {
     return <CampaignPreview id={modal.id} close={close} />;
   if (modal.type === "apollo") return <ApolloModal close={close} />;
   if (modal.type === "job") {
-    const j = data.jobs.find((j) => j.id === modal.id);
+    const j = result?.job?.id===modal.id ? result.job : data.jobs.find((j) => j.id === modal.id);
     return (
       <Modal title="A closer look" onClose={close}>
         <div className="spread">
@@ -32,7 +33,7 @@ export function ModalContent({ modal, close }) {
           {j.company} · {j.location}
         </p>
         <div className="match-card">
-          <strong>{j.match.score ?? "—"}% keyword profile match</strong>
+          <strong>{j.match.score!==null ? `${j.match.score}% explained profile match` : 'Set target roles to personalize your match'}</strong>
           <ul>
             {j.match.reasons.map((r) => (
               <li key={r}>{r}</li>
@@ -44,7 +45,7 @@ export function ModalContent({ modal, close }) {
             </p>
           )}
         </div>
-        <p className="detail-description">{j.description}</p>
+        {j.descriptionTruncated && !result?.job ? <p className="detail-description">Loading the full job description…</p> : <p className="detail-description">{j.description}</p>}
         <div className="app-detail-links">
           {j.url && (
             <a className="btn" href={j.url} target="_blank" rel="noreferrer">

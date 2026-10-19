@@ -57,6 +57,32 @@ function docxText(buffer) {
   }
   fail("No readable document text was found in the DOCX.");
 }
+export function resumeSuggestions(resumeText) {
+  const known=['JavaScript','TypeScript','React','Node.js','Python','SQL','Java','Figma','Tableau','Excel','Docker','Kubernetes','PyTorch','TensorFlow','AWS','SEO','Research','Accounting','Auditing','Financial Modeling','Valuation','Taxation','IFRS','GAAP','Power BI','Google Ads','Content Marketing','Recruiting','Salesforce','Customer Success','Project Management','Business Analysis'];
+  const skills=known.filter(s=>new RegExp(`(^|[^a-z])${s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}([^a-z]|$)`,'i').test(resumeText));
+  const email=resumeText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || '';
+  return {email,skills};
+}
+export async function parseResumeAsync(file) {
+  const result=parseResume(file);
+  if(/\.pdf$/i.test(file.name) && !result.resume.text) {
+    try {
+      const {extractText,getDocumentProxy}=await import('unpdf');
+      const pdf=await getDocumentProxy(new Uint8Array(Buffer.from(file.base64,'base64')));
+      try {
+        if(pdf.numPages>30) fail('Upload a résumé with 30 pages or fewer.');
+        const extracted=await extractText(pdf,{mergePages:true});
+        result.resume.text=text(extracted.text,100000);
+        result.suggestions=resumeSuggestions(result.resume.text);
+        result.warning=result.resume.text ? '' : 'This PDF has no readable text. Paste your résumé text to personalize matches.';
+      } finally {await pdf.loadingTask.destroy();}
+    } catch(error) {
+      if(error.status) throw error;
+      result.warning='We could not extract this PDF. Paste its text or upload a text-based PDF, DOCX, or TXT résumé.';
+    }
+  }
+  return result;
+}
 export function parseResume({ name, base64 }) {
   name = text(name, 180).replace(/[\r\n"/\\]/g, "_");
   if (!/\.(pdf|docx|txt)$/i.test(name))
@@ -97,33 +123,6 @@ export function parseResume({ name, base64 }) {
     warning =
       "File saved, but no text was found. Paste your résumé text below; image-only PDFs need OCR.";
   const resumeText = extracted.slice(0, 100_000).trim();
-  const known = [
-    "JavaScript",
-    "TypeScript",
-    "React",
-    "Node.js",
-    "Python",
-    "SQL",
-    "Java",
-    "Figma",
-    "Tableau",
-    "Excel",
-    "Docker",
-    "Kubernetes",
-    "PyTorch",
-    "TensorFlow",
-    "AWS",
-    "SEO",
-    "Research",
-  ];
-  const skills = known.filter((s) =>
-    new RegExp(
-      `(^|[^a-z])${s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z]|$)`,
-      "i",
-    ).test(resumeText),
-  );
-  const email =
-    resumeText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || "";
   return {
     resume: {
       name,
@@ -132,7 +131,7 @@ export function parseResume({ name, base64 }) {
       text: resumeText,
       uploadedAt: new Date().toISOString(),
     },
-    suggestions: { email, skills },
+    suggestions: resumeSuggestions(resumeText),
     warning,
   };
 }

@@ -38,6 +38,8 @@ test("React views render populated/empty states and escape untrusted profile and
       tasks: { tasks: [], applications: [] },
       vault: { versions: [], links: [] },
       integrations: {},
+      setup: {jsearchConfigured:false,serpapiConfigured:false},
+      search: {preferences:{roles:[],location:'',country:'',workMode:'Any',experience:'Any',enabled:true,sources:{}},plan:{roles:[],personalized:false},run:null,sources:[],indexed:data.jobs.length,matches:null},
       autopilot: {policy:AUTOPILOT_DEFAULTS,reviewCount:0,activity:[{id:'activity-1',at:Date.now(),kind:'discovery',message:'<script>alert(1)</script>'}],blockers:{discovery:[],contacts:[],sending:[]},runs:[],lookupsToday:0},
       perform() {},
       notify() {},
@@ -63,6 +65,8 @@ test("React views render populated/empty states and escape untrusted profile and
         ),
       );
       assert.ok(html.length > 100);
+      if(name==='Jobs') {assert.match(html,/Discover your next role/);assert.match(html,/Save &amp; find jobs/);assert.match(html,/Choose discovery sources/);}
+      if(name==='Connections') assert.match(html,/Free job discovery/);
       if(name === "Automation") {assert.match(html,/Autopilot Mode/);assert.match(html,/Enable Autopilot/);assert.match(html,/Approve|review queue/);}
       assert.ok(!html.includes("<script>alert(1)</script>"));
       assert.ok(!html.includes("<img src=x"));

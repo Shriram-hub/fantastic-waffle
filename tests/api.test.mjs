@@ -24,6 +24,7 @@ async function workspace(
     throw Error("Unexpected external request");
   },
 ) {
+  config={ENABLE_JOB_DISCOVERY:"false",...config};
   const app = createApp({ dataDir: ":memory:", config, fetcher });
   await new Promise((resolve) => app.server.listen(0, "127.0.0.1", resolve));
   t.after(async () => {
