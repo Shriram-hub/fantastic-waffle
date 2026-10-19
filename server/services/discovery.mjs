@@ -8,7 +8,8 @@ import {knownBoards,rememberBoards} from '../providers/jobs/registry.mjs';
 import {providerCall} from './provider-budget.mjs';
 
 export const DISCOVERY_INTERVAL=2*3600000;
-const BATCH_SIZE=20,MAX_INDEX=1500;
+// Keep retained provider payloads small enough for Render's shared free instance.
+const BATCH_SIZE=6,MAX_INDEX=1500;
 const sourceKey=d=>hash([d.source,d.board,d.page || 1,d.location || '',d.country || '']);
 export const SOURCE_DEFAULTS=Object.freeze({'Remotive':true,'Arbeitnow':true,'Remote OK':true,'Jobicy':true,'Himalayas':true,'Greenhouse':true,'Lever':true,'Ashby':true,'Google Jobs':false});
 export async function getSearchConfig(store) {
@@ -148,7 +149,7 @@ export async function discoverBatch(task,store,queue,config={},fetcher=fetch) {
   progress.descriptors=descriptors;
   await store.db.prepare("UPDATE job_search_runs SET status='running',updated_at=? WHERE id=?").run(Date.now(),row.id);
   const results=[];let next=0,failed=0;
-  await Promise.all(Array.from({length:Math.min(3,batch.length)},async()=>{
+  await Promise.all(Array.from({length:Math.min(2,batch.length)},async()=>{
     for(;;) {
       const index=next++;if(index>=batch.length) break;
       const descriptor=batch[index];

@@ -143,7 +143,7 @@ The Discover jobs screen and `/api/jobs/discover` run the `jobs.discover` worker
 pipeline without requiring a résumé, mailbox or contact provider. Roles can be
 entered once or derived from résumé text. Source preferences, progress, health,
 compressed response caches and search runs persist in PostgreSQL/SQLite. A run
-uses bounded batches with three concurrent public requests, deduplicates by
+uses six-source batches with two concurrent public requests, deduplicates by
 company/title/location and explains matching. Free sources and 110 curated ATS
 boards continue if an optional search provider fails. The Explore index retains
 1,500 best jobs plus tracked jobs. Source coverage is bounded by those providers,

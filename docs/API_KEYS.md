@@ -20,6 +20,7 @@ Then connect the mailbox there; saved credentials alone do not connect an accoun
 | Google Jobs and available LinkedIn, Indeed, Glassdoor or company application links | **Either** `JSEARCH_API_KEY` **or** `SERPAPI_API_KEY` | [JSearch on RapidAPI](https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch) or [SerpApi](https://serpapi.com/manage-api-key) | Enable **Google Jobs** in job search sources. JSearch needs an active subscription to that API; SerpApi needs search quota. |
 | Recruiter search and corporate email enrichment | `APOLLO_API_KEY` | [Apollo API settings](https://app.apollo.io/#/settings/integrations/api) | Enable contact-credit use in Autopilot and set its API limit. API access/enrichment depends on the Apollo account. |
 | Company contacts and independent email verification | `HUNTER_API_KEY` | [Hunter API dashboard](https://hunter.io/api) | Enable contact-credit use. Verification requires available quota; catch-all/invalid/unverified addresses are skipped. |
+| Public LinkedIn profile snippets and additional ATS search | `SERPAPI_API_KEY` | [SerpApi](https://serpapi.com/manage-api-key) | Enable the optional search-API setting in Autopilot. The same key can serve Google Jobs; JSearch alone does not enable this extra search. |
 | Gmail sending and automatic application/reply updates | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | [Google Cloud credentials](https://console.cloud.google.com/apis/credentials) | Create a Web application OAuth client, use the exact callback below, then **Connect Google**. |
 | AI résumé extraction and personalized pitches | `LLM_API_KEY`, `LLM_MODEL`; optional `LLM_BASE_URL` | Your OpenAI-compatible provider's API dashboard | Choose the exact supported model ID and enable AI drafting if wanted. The default base URL is `https://api.openai.com/v1`. |
 
@@ -55,6 +56,7 @@ for polling. Free-host cold starts can delay checks.
 | Resend instead of native mailbox sending | `RESEND_API_KEY`, `EMAIL_FROM` | [Resend API keys](https://resend.com/api-keys). Verify the sender domain. Resend alone does not provide reply detection, so automatic follow-ups require a connected inbox. |
 | Semantic embedding matching | `EMBEDDING_MODEL` | Use a supported embedding model from the same configured LLM provider; request semantic matching in the app. |
 | Adzuna provider | `ADZUNA_APP_ID`, `ADZUNA_APP_KEY`, `ADZUNA_COUNTRY` | [Adzuna developer portal](https://developer.adzuna.com/). Optional provider access, separate from the free discovery sources. |
+| Optional authenticated Himalayas access | `HIMALAYAS_API_KEY` | Only if Himalayas provides you a credential for its supported API access. The public feed already works without this key. |
 | Gmail push instead of relying only on polling | `GOOGLE_PUBSUB_TOPIC`, `GOOGLE_PUBSUB_AUDIENCE`, `GOOGLE_PUBSUB_SERVICE_ACCOUNT` | Configure Google Cloud Pub/Sub and the authenticated notification endpoint. These are a topic resource, OIDC audience and service-account email. |
 | S3/R2 résumé storage | `S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | Optional. Private résumé bytes already persist in Supabase Postgres, so no bucket is needed now. |
 
@@ -97,8 +99,9 @@ The backend connects directly through `DATABASE_URL`.
    when ready to send; approve the review batch in Orbit. Full automatic mode has
    its own explicit in-app activation.
 
-Defaults are 40 emails/day, 3–8 minute spacing, at most three contacts/company
-in 14 days, one threaded follow-up after four business days, and stop on reply.
+Defaults are 40 emails/day, 3–8 minute spacing, and at most three contacts/company
+in 14 days. If you enable follow-ups with a connected inbox, one threaded bump
+is scheduled after four business days and stops on reply.
 These controls reduce risk; no tool can guarantee inbox placement or prevent
 every provider suspension. API credits and free hosting have finite allowances.
 

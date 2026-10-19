@@ -37,10 +37,11 @@ test('job search starts from preferences without a resume, name, mailbox, contac
   assert.ok(status.schedule.next_run>Date.now()+DISCOVERY_INTERVAL-10000);
 });
 test('a multi-batch sweep indexes public feeds and all company boards, deduplicates and isolates a failed source',async t=>{
-  const store=clean(t),queue=taskQueue(store),requests=[];
+  const store=clean(t),queue=taskQueue(store),requests=[];let active=0,peak=0;
   await saveSearchConfig({roles:['Frontend Engineer'],sources:{...SOURCE_DEFAULTS,'Google Jobs':false}},store,queue,{});
   const fetcher=async input=>{
     const u=String(input);requests.push(u);
+    active++;peak=Math.max(peak,active);await new Promise(resolve=>setImmediate(resolve));active--;
     if(u.includes('remotive.com')) return json({jobs:[{id:1,company_name:'Stripe',title:'Frontend Engineer',candidate_required_location:'Remote',url:'https://remotive.com/remote-jobs/stripe-1',description:'React TypeScript'},...Array.from({length:30},(_,i)=>({id:i+2,company_name:`Business ${i}`,title:i%2 ? 'Frontend Engineer' : 'Financial Analyst',candidate_required_location:'Worldwide',url:`https://remotive.com/remote-jobs/${i}`,description:'Financial modeling and React'}))]});
     if(u.includes('arbeitnow')) return new Response('{}',{status:503});
     if(u.includes('remoteok')) return json([]);
@@ -58,6 +59,7 @@ test('a multi-batch sweep indexes public feeds and all company boards, deduplica
   assert.ok(store.state.jobs.filter(j=>j.title==='Financial Analyst').every(j=>!j.archived),'Other fields remain in the index, available under All live jobs');
   assert.ok(!requests.some(u=>u.endsWith('/stripe/jobs')),'Curated boards do not need a second validation request');
   assert.ok(!requests.some(u=>/api\.(apollo|hunter|resend)\./.test(u)));
+  assert.ok(peak<=2,'Provider concurrency stays within the free-host memory budget');
 });
 test('resume-derived roles include finance, while country, experience and work-mode preferences filter unsuitable roles',()=>{
   const state=initialState(false);state.resume={text:'Financial modeling, valuation, bookkeeping and accounting. Built dashboards in Power BI.',suggestions:{skills:['Excel','Financial modeling']}};

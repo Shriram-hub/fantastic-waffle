@@ -574,7 +574,9 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   let stopping = false;
   let child;
   if (process.env.RUN_EMBEDDED_WORKER === "true") {
-    child = spawn(process.execPath,[fileURLToPath(new URL("./worker.mjs",import.meta.url))],{stdio:"inherit",env:{...process.env,RUN_EMBEDDED_WORKER:"false"}});
+    // Leave room for the API, network buffers, and PDF parsing on Render Free.
+    const workerArgs=[...(process.env.RENDER_EXTERNAL_URL ? ['--max-old-space-size=160'] : []),fileURLToPath(new URL("./worker.mjs",import.meta.url))];
+    child = spawn(process.execPath,workerArgs,{stdio:"inherit",env:{...process.env,RUN_EMBEDDED_WORKER:"false"}});
     child.on("error",() => { console.error("Embedded worker could not start."); shutdown(1); });
     child.on("exit",() => { if (!stopping) { console.error("Embedded worker exited; restarting the service."); shutdown(1); } });
   }
