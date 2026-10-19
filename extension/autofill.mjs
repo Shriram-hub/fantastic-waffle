@@ -33,9 +33,15 @@ export function fillApplication(answers, resume) {
     String(s || "")
       .toLowerCase()
       .replace(/[^a-z0-9]/g, "");
-  const challenge = document.querySelector(
+  const queryAllDeep = (selector, root = document, seen = new Set()) => {
+    if (seen.has(root)) return []; seen.add(root);
+    const found=[...root.querySelectorAll(selector)];
+    for (const element of root.querySelectorAll("*")) if (element.shadowRoot) found.push(...queryAllDeep(selector,element.shadowRoot,seen));
+    return found;
+  };
+  const challenge = queryAllDeep(
     'iframe[src*="recaptcha"],iframe[src*="hcaptcha"],iframe[src*="challenges.cloudflare"],input[name="cf-turnstile-response"],.h-captcha,.g-recaptcha',
-  );
+  )[0];
   if (challenge)
     return {
       status: "blocked",
@@ -43,7 +49,7 @@ export function fillApplication(answers, resume) {
     };
   let filled = 0;
   const missing = [];
-  for (const input of document.querySelectorAll("input,textarea,select")) {
+  for (const input of queryAllDeep("input,textarea,select")) {
     if (
       input.disabled ||
       input.readOnly ||

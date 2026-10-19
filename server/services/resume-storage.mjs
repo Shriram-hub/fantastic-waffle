@@ -44,6 +44,10 @@ export async function persistResume(resume, store, config = {}, client) {
       storage: { kind: "s3", key },
     };
   }
+  if (store.kind === "postgres") {
+    await store.db.prepare("INSERT INTO resume_objects(content_hash,bytes) VALUES(?,?) ON CONFLICT(content_hash) DO NOTHING").run(contentHash,bytes);
+    return {...resume,base64:undefined,contentHash,storage:{kind:"postgres",key:contentHash}};
+  }
   if (store.directory === ":memory:") return { ...resume, contentHash };
   const root = resolve(store.directory, "resume-objects");
   await mkdir(root, { recursive: true, mode: 0o700 });
@@ -61,7 +65,11 @@ export async function hydrateResume(resume, store, config = {}, client) {
   const storage = resume.storage;
   if (!storage) fail("Original résumé bytes are unavailable.", 404);
   let bytes;
-  if (storage.kind === "local") {
+  if (storage.kind === "postgres") {
+    const row = await store.db.prepare("SELECT bytes FROM resume_objects WHERE content_hash=?").get(storage.key);
+    if (!row) fail("Original résumé bytes are unavailable.",404);
+    bytes = Buffer.from(row.bytes);
+  } else if (storage.kind === "local") {
     if (!/^[a-f0-9]{64}$/.test(storage.key))
       fail("Invalid stored résumé object.", 500);
     bytes = await readFile(

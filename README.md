@@ -1,8 +1,12 @@
-# Orbit v0.2 · Career workspace
+# Orbit v0.3 · Career workspace
 
 A working personal workspace for job discovery, résumé preparation, application tracking, browser-assisted filling, inbox updates, company contacts, and reviewed outreach.
 
-This upgrade follows the brief’s **SQLite-first implementation sequence**. It replaces the single JSON workspace row with relational tables, moves slow work into a separate process, and replaces the vanilla frontend with React + Vite + Tailwind. It includes a PostgreSQL/pgvector schema and a core-record export tool; **PostgreSQL is not the running API/worker database yet**. OAuth connects mailboxes; it is not multi-user application sign-in.
+SQLite remains the local default. Set `DATABASE_URL` to use the real PostgreSQL runtime, including durable jobs, send logs, encrypted mailbox credentials, and private resume objects. `RUN_EMBEDDED_WORKER=true` supervises a worker alongside the API on a single hosting service. OAuth connects mailboxes; this is one private personal workspace.
+
+## Free online hosting
+
+Use Render Free + Supabase Free with no PC running: [complete hosting instructions](docs/FREE_HOSTING.md). The web service and worker sleep together on the free plan; queued work survives in PostgreSQL and resumes after wake. Provider API access is separate from hosting.
 
 ## Start locally
 
@@ -86,9 +90,9 @@ Model operations explicitly disclose that source text is sent to the configured 
 2. Generate a pairing token in Orbit’s **Connections**. Enter the Orbit address and token in the extension popup. A deployed HTTPS origin requires a one-time browser permission for that origin.
 3. Queue supported opportunities and choose **Open & fill next application**. The extension operates one form per click in your actual browser session.
 4. After opening a multi-step form or completing a verification challenge yourself, use **Fill the current application again**. If the lease expires, requeue it in Automation.
-5. Review and submit manually. Only the owner’s explicit confirmation reference changes the browser task to confirmed/Applied. Revoke extension tokens when finished.
+5. Review and submit manually. An observed ATS success panel after a submission attempt can confirm Applied; otherwise enter the employer confirmation reference yourself. A Submit click alone stays pending. Revoke extension tokens when finished.
 
-Recognized fields on Greenhouse, Lever, Ashby, Workday and LinkedIn job pages are attempted; custom controls, embedded cross-origin frames, login walls, and multi-step flows can require manual completion. Tokens expire in 24 hours and are stored only in the extension’s session storage. CAPTCHA/verification challenges are never solved or bypassed.
+Recognized fields on Greenhouse, Lever, Ashby, Workday and LinkedIn job pages are attempted; custom controls, inaccessible frames or closed shadow roots, login walls, and multi-step flows can require manual completion. Tokens expire in 24 hours and are stored only in the extension’s session storage. CAPTCHA/verification challenges are never solved or bypassed.
 
 ## Outreach behavior
 
@@ -138,3 +142,7 @@ Tests exercise migration, actual HTTP routes, cross-connection updates/claims, a
 Credentialed provider tests, actual Chrome/form interaction and visual QA, Redis/Docker deployment, and PostgreSQL export were not available in this environment. Provider tests use mocks and do not send real email or consume credits. React rendering tests are not a browser test.
 
 See [architecture](docs/ARCHITECTURE.md), [API reference](docs/API.md), and [provider setup](docs/SETUP.md).
+
+## v0.3 hardening
+
+Feature views live under `web/src/features/`. Authenticated `/api/events` streams worker transitions to React. The extension fills open shadow roots and permitted frames and syncs observed ATS confirmations. Both databases enforce unique outreach recipient/sequence steps, and ambiguous sends are held for reconciliation. Mail includes real unsubscribe links and list headers; GET asks for confirmation and POST performs the opt-out. Hunter verification first checks MX records, with temporary DNS failures held for review. Structured AI and embeddings use persistent content/model/provider caches.

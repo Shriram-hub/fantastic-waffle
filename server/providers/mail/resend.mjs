@@ -23,6 +23,10 @@ export async function sendResend(
         reply_to: message.replyTo,
         subject: message.subject,
         text: message.body,
+        headers: {
+          ...(message.unsubscribeUrl ? {"List-Unsubscribe":`<${message.unsubscribeUrl}>`,"List-Unsubscribe-Post":"List-Unsubscribe=One-Click"} : {}),
+          ...(message.inReplyTo ? {"In-Reply-To":message.inReplyTo,"References":message.references || message.inReplyTo} : {}),
+        },
         ...(attachment
           ? {
               attachments: [

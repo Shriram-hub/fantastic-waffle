@@ -1,0 +1,138 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { readFile } from 'node:fs/promises';
+import pg from 'pg';
+import { collections } from '../store.mjs';
+import { initialState } from '../fixtures.mjs';
+import { fail } from '../domain.mjs';
+
+const tables = ['workspace_meta', 'user_profiles', 'resumes', ...Object.values(collections)];
+const runtimeTables = [...tables, 'tasks', 'task_logs', 'mail_accounts', 'oauth_states', 'inbox_messages', 'resume_versions', 'embeddings', 'apply_tasks', 'extension_tokens', 'send_leases', 'send_budget', 'public_resumes', 'outreach_send_log', 'unsubscribe_tokens', 'ai_cache', 'resume_objects', 'migrations'];
+export function postgresSQL(sql) {
+  let result = sql.replace(/INSERT OR IGNORE INTO/gi, 'INSERT INTO');
+  if (/INSERT OR IGNORE INTO/i.test(sql)) result += ' ON CONFLICT DO NOTHING';
+  result = result.replace(/json_extract\(payload,'\$\.accountId'\)/g, "(payload::jsonb->>'accountId')").replace(/\browid\b/g, 'row_order').replace(/SET count=count\+1/g, 'SET count=orbit_runtime.send_budget.count+1');
+  // Only table positions are qualified; column names and string literals stay intact.
+  result = result.replace(/\b(FROM|JOIN|INTO|UPDATE|REFERENCES)\s+([a-z_]+)\b/gi, (all, keyword, table) => runtimeTables.includes(table) ? `${keyword} orbit_runtime.${table}` : all);
+  let quoted = false, parameter = 0, output = '';
+  for (let i = 0; i < result.length; i++) {
+    const c = result[i];
+    if (c === "'") {
+      if (quoted && result[i + 1] === "'") { output += "''"; i++; continue; }
+      quoted = !quoted;
+    }
+    output += c === '?' && !quoted ? `$${++parameter}` : c;
+  }
+  return output;
+}
+export async function openPostgresStore(config = process.env, suppliedPool) {
+  const pool = suppliedPool || new pg.Pool({connectionString: config.DATABASE_URL, max: 4, connectionTimeoutMillis: 10000, idleTimeoutMillis: 30000, statement_timeout: 20000, application_name: 'orbit'});
+  // pg returns int8 strings by default; these columns contain JS-safe millisecond timestamps.
+  if (!suppliedPool) pool.on('error', () => console.error('PostgreSQL connection unavailable; reconnecting.'));
+  const session = new AsyncLocalStorage(), context = new AsyncLocalStorage();
+  const withSession = async (fn) => {
+    if (session.getStore()) return fn();
+    const scope = {client: null};
+    return session.run(scope, async () => {
+      try { return await fn(); }
+      finally { if (scope.client) { try { await scope.client.query('ROLLBACK'); } finally { scope.client.release(); scope.client = null; } } }
+    });
+  };
+  function normalize(row) {
+    return Object.fromEntries(Object.entries(row).map(([key, value]) => [key, ['run_at','attempts','max_attempts','lease_until','created_at','updated_at','at','expires','revoked','views','count','not_before','sequence_step'].includes(key) && value !== null ? Number(value) : value]));
+  }
+  const query = async (sql, values = []) => (session.getStore()?.client || pool).query(postgresSQL(sql), values.map(v => v === undefined ? null : v));
+  const db = {
+    withSession,
+    prepare(sql) {
+      return {
+        async all(...args) { return (await query(sql, args)).rows.map(normalize); },
+        async get(...args) { return (await this.all(...args))[0]; },
+        async run(...args) { const result = await query(sql, args); return {changes: result.rowCount}; },
+      };
+    },
+    async exec(sql) {
+      const scope = session.getStore();
+      if (/^BEGIN/.test(sql)) {
+        if (!scope || scope.client) throw Error('Transaction needs an isolated database session.');
+        scope.client = await pool.connect();
+        await scope.client.query('BEGIN');
+        // A small, private workspace serializes writers across API/worker processes.
+        await scope.client.query('SELECT pg_advisory_xact_lock(193731, 1)');
+      } else if (/^(COMMIT|ROLLBACK)$/.test(sql)) {
+        if (!scope?.client) throw Error('No active transaction.');
+        const client = scope.client;
+        try { await client.query(sql); } finally { scope.client = null; client.release(); }
+      } else await query(sql);
+    },
+  };
+  const entries = (state) => {
+    const {profile, resume, ...meta} = state;
+    for (const key of Object.keys(collections)) delete meta[key];
+    return {workspace_meta: [{id:'local', value:meta}], user_profiles: [{id:'local',value:profile}], resumes: resume ? [{id:'current',value:resume}] : [], ...Object.fromEntries(Object.entries(collections).map(([key, table]) => [table, (state[key] || []).map(value => ({id:value.id,value}))]))};
+  };
+  const write = async (table, id, value, existing) => {
+    const columns = {id, body:JSON.stringify(value)};
+    if (table === 'job_listings') Object.assign(columns,{company:value.company,title:value.title});
+    if (table === 'applications') Object.assign(columns,{job_id:value.jobId,stage:value.stage});
+    if (table === 'contacts') Object.assign(columns,{email:value.email || null,suppressed:value.suppressed ? 1:0});
+    if (table === 'campaigns') Object.assign(columns,{status:value.status || 'Draft'});
+    if (table === 'inbox_updates') Object.assign(columns,{application_id:value.applicationId || null});
+    const names = Object.keys(columns);
+    if (existing) {
+      const mutable = names.filter(n => n !== 'id');
+      await db.prepare(`UPDATE ${table} SET ${mutable.map(n => `${n}=?`).join(',')} WHERE id=?`).run(...mutable.map(n => columns[n]),id);
+    } else await db.prepare(`INSERT INTO ${table}(${names.join(',')}) VALUES(${names.map(() => '?').join(',')})`).run(...Object.values(columns));
+  };
+  const read = async () => {
+    const result = await query(tables.map(t => `SELECT '${t}' AS collection,body,row_order FROM ${t}`).join(' UNION ALL ') + ' ORDER BY collection,row_order');
+    const groups = Object.fromEntries(tables.map(t => [t, []]));
+    for (const row of result.rows) groups[row.collection].push(JSON.parse(row.body));
+    return {...(groups.workspace_meta[0] || {}),profile:groups.user_profiles[0] || {},resume:groups.resumes[0] || null,...Object.fromEntries(Object.entries(collections).map(([key, table]) => [key, groups[table]]))};
+  };
+  const snapshot = async () => { const state = await read(); return {state,base:structuredClone(state)}; };
+  const overwrite = async (state) => {
+    for (const table of [...runtimeTables].reverse()) if (table !== 'migrations') await db.exec(`DELETE FROM ${table}`);
+    for (const [table, values] of Object.entries(entries(state))) for (const row of values) await write(table,row.id,row.value,false);
+  };
+  if (config.DATABASE_AUTO_MIGRATE !== 'false') await pool.query(await readFile(new URL('./runtime.sql',import.meta.url),'utf8'));
+  await withSession(async () => {
+    await db.exec('BEGIN');
+    try {
+      if (!await db.prepare("SELECT id FROM workspace_meta WHERE id='local'").get()) {
+        for (const [table, values] of Object.entries(entries(initialState()))) for (const row of values) await write(table,row.id,row.value,false);
+      }
+      await db.exec('COMMIT');
+    } catch (e) { await db.exec('ROLLBACK'); throw e; }
+  });
+  let root = await snapshot();
+  return {
+    kind:'postgres', directory:':postgres:', db,
+    get state() { return (context.getStore() || root).state; },
+    async run(fn) { return withSession(async () => context.run(await snapshot(),fn)); },
+    async refresh() { const next = await snapshot(), current = context.getStore(); if (current) Object.assign(current,next); else root=next; return next.state; },
+    async save(inTransaction=false) {
+      return withSession(async () => {
+        const local=context.getStore() || root, before=entries(local.base), after=entries(local.state);
+        if (!inTransaction) await db.exec('BEGIN');
+        try {
+          for (const table of Object.keys(before).reverse()) for (const old of before[table]) if (!after[table].some(v => v.id === old.id)) {
+            const current=await db.prepare(`SELECT body FROM ${table} WHERE id=?`).get(old.id);
+            if (current?.body !== JSON.stringify(old.value)) fail('This record changed. Refresh and retry.',409);
+            await db.prepare(`DELETE FROM ${table} WHERE id=?`).run(old.id);
+          }
+          for (const [table, values] of Object.entries(after)) for (const {id,value} of values) {
+            const old=before[table].find(v => v.id === id);
+            if (old && JSON.stringify(old.value) === JSON.stringify(value)) continue;
+            const current=await db.prepare(`SELECT body FROM ${table} WHERE id=?`).get(id);
+            if ((current && (!old || current.body !== JSON.stringify(old.value))) || (old && !current)) fail('This record changed. Refresh and retry.',409);
+            await write(table,id,value,Boolean(current));
+          }
+          if (!inTransaction) await db.exec('COMMIT');
+          local.base=structuredClone(local.state);
+        } catch(e) { if (!inTransaction) await db.exec('ROLLBACK'); throw e; }
+      });
+    },
+    async replace(next) { return withSession(async () => {await db.exec('BEGIN');try {await overwrite(next);await db.exec('COMMIT');const local=context.getStore()||root;local.state=next;local.base=structuredClone(next);}catch(e){await db.exec('ROLLBACK');throw e;}}); },
+    async close() { await pool.end(); },
+  };
+}

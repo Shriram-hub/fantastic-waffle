@@ -1,6 +1,8 @@
+import { postgresQueue } from "./queue-postgres.mjs";
 import { randomUUID } from "node:crypto";
 import { fail } from "./domain.mjs";
 export function taskQueue(store) {
+  if (store.kind === "postgres") return postgresQueue(store);
   const db = store.db;
   const decode = (row) =>
     row && {
@@ -43,6 +45,7 @@ export function taskQueue(store) {
         "SELECT id,kind,payload FROM tasks WHERE status='unknown' AND lease_until IS NOT NULL AND kind IN ('campaign.send','campaign.followup')",
       )
       .all()) {
+      db.prepare("UPDATE outreach_send_log SET status='unknown',updated_at=? WHERE task_id=? AND status='sending'").run(Date.now(),task.id);
       const payload = JSON.parse(task.payload),
         row = db
           .prepare("SELECT body FROM campaigns WHERE id=?")

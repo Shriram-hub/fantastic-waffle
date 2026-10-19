@@ -3,6 +3,7 @@ services:
     build: .
     env_file: .env
     environment:
+      RUN_EMBEDDED_WORKER: "false"
       HOST: 0.0.0.0
       DATA_DIR: /app/data
       REDIS_URL: redis://redis:6379

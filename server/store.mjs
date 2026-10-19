@@ -5,14 +5,14 @@ import { resolve } from "node:path";
 import { initialState } from "./fixtures.mjs";
 import { fail } from "./domain.mjs";
 
-const collections = {
+export const collections = {
   jobs: "job_listings",
   applications: "applications",
   contacts: "contacts",
   campaigns: "campaigns",
   inbox: "inbox_updates",
 };
-const schema = `
+export const schema = `
 CREATE TABLE IF NOT EXISTS migrations(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS workspace_meta(id TEXT PRIMARY KEY, body TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS user_profiles(id TEXT PRIMARY KEY, body TEXT NOT NULL);
@@ -37,6 +37,10 @@ CREATE TABLE IF NOT EXISTS apply_tasks(id TEXT PRIMARY KEY, application_id TEXT 
 CREATE TABLE IF NOT EXISTS extension_tokens(id TEXT PRIMARY KEY, expires INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS send_leases(account_id TEXT PRIMARY KEY, not_before INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS send_budget(account_id TEXT NOT NULL,day TEXT NOT NULL,count INTEGER NOT NULL,PRIMARY KEY(account_id,day));
+
+CREATE TABLE IF NOT EXISTS outreach_send_log(user_id TEXT NOT NULL DEFAULT 'local',contact_email TEXT NOT NULL,campaign_id TEXT NOT NULL,sequence_step INTEGER NOT NULL DEFAULT 0,task_id TEXT NOT NULL,status TEXT NOT NULL,provider_id TEXT,updated_at INTEGER NOT NULL,PRIMARY KEY(user_id,contact_email,campaign_id,sequence_step));
+CREATE TABLE IF NOT EXISTS unsubscribe_tokens(id TEXT PRIMARY KEY,email TEXT NOT NULL,created_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS ai_cache(id TEXT PRIMARY KEY,body TEXT NOT NULL,created_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS public_resumes(id TEXT PRIMARY KEY, resume_hash TEXT NOT NULL, expires INTEGER NOT NULL, revoked INTEGER DEFAULT 0, views INTEGER DEFAULT 0);
 `;
 export function openStore(directory) {
@@ -114,6 +118,9 @@ export function openStore(directory) {
   }
   function overwrite(state) {
     for (const table of [
+      "outreach_send_log",
+      "unsubscribe_tokens",
+      "ai_cache",
       "mail_accounts",
       "oauth_states",
       "send_leases",

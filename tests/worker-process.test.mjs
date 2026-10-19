@@ -64,3 +64,18 @@ test("a real separate worker process claims persisted work and stores private re
   assert.match(resume.text, /React/);
   assert.match(output, /worker started/);
 });
+
+test('embedded worker starts with the hosted API and shuts down with its parent',async t=>{
+  const dir=mkdtempSync(join(tmpdir(),'orbit-embedded-'));
+  const child=spawn(process.execPath,['server/index.mjs'],{cwd:new URL('../',import.meta.url),env:{...process.env,HOST:'127.0.0.1',PORT:'0',DATA_DIR:dir,DATABASE_URL:'',RUN_EMBEDDED_WORKER:'true',REDIS_URL:'',ENABLE_LIVE_SEND:'false'},stdio:['ignore','pipe','pipe']});
+  let output='';child.stdout.on('data',data=>output+=data);child.stderr.on('data',data=>output+=data);
+  t.after(async()=>{if(child.exitCode===null){child.kill('SIGTERM');await new Promise(resolve=>child.once('exit',resolve));}rmSync(dir,{recursive:true,force:true});});
+  for(let i=0;i<100 && !/http:\/\/127\.0\.0\.1:\d+/.test(output);i++)await pause(50);
+  const origin=output.match(/http:\/\/127\.0\.0\.1:\d+/)?.[0];assert.ok(origin,output);
+  const response=await fetch(origin+'/api/resume',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'hosted.txt',base64:Buffer.from('Hosted worker test\nReact and SQL').toString('base64')})});
+  assert.equal(response.status,202);const task=(await response.json()).task;
+  let current;
+  for(let i=0;i<100;i++){const data=await (await fetch(origin+'/api/tasks')).json();current=data.tasks.find(value=>value.id===task.id);if(current?.status==='completed')break;await pause(50);}
+  assert.equal(current.status,'completed',output);
+  const exited=new Promise(resolve=>child.once('exit',resolve));child.kill('SIGTERM');assert.equal(await exited,0);assert.match(output,/worker started/);
+});

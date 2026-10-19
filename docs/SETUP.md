@@ -64,4 +64,4 @@ Sending is limited/paced by policy. The app makes no claim that personal OAuth s
 
 ## Verification limits
 
-Local automated tests use mocked provider responses; no real email was sent and no paid enrichment/model call was executed. A real separate SQLite worker process is tested. Chrome UI/form interaction, credentialed provider acceptance, Redis/Docker deployment, and the PostgreSQL export still need environment-specific validation. Do not interpret a configured key or compiled adapter as a verified production integration.
+Local automated tests use mocked provider responses; no real email was sent and no paid enrichment/model call was executed. Real separate SQLite worker processing and a PostgreSQL-compatible runtime are tested. Chrome UI/form interaction, credentialed provider acceptance, Redis/Docker deployment, and the optional PostgreSQL export still need environment-specific validation. Do not interpret a configured key or compiled adapter as a verified production integration.

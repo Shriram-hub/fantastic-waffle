@@ -1,58 +1,72 @@
-# Orbit v0.2 architecture
+# Orbit v0.3 runtime
 
-## Running topology
+Orbit is a private, single-user workspace with a React/Vite frontend, HTTP API,
+worker process, and companion Chrome extension. It does not yet implement public
+SaaS tenant registration or isolation.
 
-React/Vite calls a same-origin Node 24 API. The API validates input and writes durable relational records and outbox tasks to SQLite. A separate worker processes CPU-heavy résumé extraction, HTTP provider imports, model requests, inbox sync/classification, verification, and paced email delivery. BullMQ/Redis can dispatch those same durable task IDs; SQLite remains the source of task/domain state.
+## Persistence
 
-| Module                       | Responsibility                                                                                                                   |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `web/src/App.jsx`            | React workspace views, forms, previews and visible task state.                                                                   |
-| `server/index.mjs`           | HTTP boundary, authentication, origin controls, static build, core profile/tracker APIs.                                         |
-| `server/upgrades.mjs`        | Queue-oriented APIs, OAuth routes, authenticated webhooks, extension pairing, private/public file routes.                        |
-| `server/store.mjs`           | Migration, relational entities/indexes, request-local snapshots, per-record compare-and-swap.                                    |
-| `server/queue.mjs`           | Durable tasks, atomic claims, leases, retry/cancel rules, logs, ambiguous-send holds.                                            |
-| `server/worker.mjs`          | Task registry, separate worker, optional BullMQ dispatcher, inbox watch renewal.                                                 |
-| `server/providers/jobs/`     | Core ATS/public feeds, Ashby/Arbeitnow/Adzuna adapters, canonical deduplication.                                                 |
-| `server/providers/contacts/` | Current Apollo search/enrichment; Hunter work-email verification and role targeting.                                             |
-| `server/providers/mail/`     | Encrypted OAuth tokens, native MIME/Graph sends, history/delta cursors, watches; optional Resend.                                |
-| `server/services/`           | Structured model operations, semantic vectors, fact-preserving tailoring, inbox state machine, outreach, private résumé objects. |
-| `extension/`                 | Chrome MV3 pairing and user-initiated form filling.                                                                              |
-| `server/db/`                 | Drizzle PostgreSQL/pgvector target schema; export preparation, not runtime cutover.                                              |
+`openConfiguredStore` selects local relational SQLite or remote PostgreSQL when
+`DATABASE_URL` is present. PostgreSQL stores the live workspace in `orbit_runtime`
+with compare-and-swap record writes, a serialized workspace write lock, and atomic
+queue claims using `FOR UPDATE SKIP LOCKED`. The free deployment uses a restricted
+`orbit_app` login with private-schema RLS policies, not a public Supabase API key.
+Resume objects live in the private database for this configuration; local private
+files and S3/R2 remain supported. OAuth secrets use random-IV AES-256-GCM.
 
-## Persistence and concurrency
+`server/db/runtime.sql` is the actual private-workspace runtime schema.
+`server/db/postgres.sql`, Drizzle and the pgvector exporter are a separate optional
+export representation. They do not replace the runtime schema or provide SaaS auth.
 
-Profiles, résumés, jobs, applications, contacts, campaigns, and inbox updates each have their own relational table. Each record retains a JSON body for evolving metadata; application job references, unique job tracking, email indexes, stages, and queue scheduling have explicit columns/indexes. This is no longer a single JSON workspace row.
+## Work and events
 
-Each API request and worker handler receives a snapshot in AsyncLocalStorage. Saves write only changed records and reject a stale edit to the same row. Independent edits in separate processes do not overwrite one another. Queue claims use an immediate transaction and unique lease token; stale workers cannot finish another worker’s claim.
+The API enqueues slow operations and returns immediately. A separate worker leases,
+heartbeats and finishes durable tasks. `RUN_EMBEDDED_WORKER=true` supervises that
+worker as a child process inside one hosting service. Compose keeps API and worker
+in separate containers. Optional Redis dispatch uses the same durable task records.
 
-The durable outbox and campaign approval are committed atomically. Outbound jobs are not automatically reclaimed and resent after an expired lease. Accepted/sending/unknown recipient attempts block duplicates. Retryable read-only work has bounded backoff. Unknown sends require provider reconciliation rather than blind retries.
+Expired read tasks can retry. Interrupted outbound tasks become unknown and require
+reconciliation. The unique send log reserves user, normalized recipient, campaign
+and sequence step before outbound I/O; follow-ups have their own step. Sending also
+checks approved content, verification, suppression, reply state, shared daily
+budgets, business hours and randomized pacing. Provider acceptance is not delivery.
 
-## Application assistance
+Authenticated `/api/events` serves SSE task transitions from a single shared database
+watcher. React refreshes views and shows completion/failure toasts without periodic
+browser polling. The watcher supports workers in another process. Events omit mail
+payloads, provider secrets and resumes.
 
-The API only queues allowlisted ATS/job-page destinations. A paired extension receives an expiring task lease and the approved profile/answer bank. It fills recognized standard controls, can attach the résumé, and reports missing fields or a challenge. It never presses Submit or invents an eligibility answer. The owner records an employer receipt/reference after submitting. Generic headless submission workers are not implemented.
+## Mail and models
 
-## Inbox state machine
+Mailbox synchronization uses Gmail history cursors and Graph delta links, with
+optional authenticated push notifications and subscription renewal. Updates remain
+reviewable unless the owner enables supported automatic transitions. Replies stop
+follow-ups; explicit unsubscribe replies suppress the contact. Opaque opt-out links
+show a confirmation on GET and suppress on POST, including RFC one-click requests.
+Native MIME and Resend carry list unsubscribe and reply/reference headers.
 
-Authenticated provider notifications are wake-ups. Gmail history IDs and Graph delta links retrieve message data incrementally. Initial Gmail sync captures its starting history cursor before paging, avoiding the loss of messages received during that scan. Notifications and stored message IDs are deduplicated.
+Verification checks MX before using Hunter; temporary DNS errors are held, not
+marked verified or permanently invalid. No SMTP probing or CAPTCHA solving is used.
+Structured model output is schema-validated and persistently cached by full input,
+schema, provider, model and instruction. Embeddings cache exact text/model/provider
+fingerprints. Printable tailoring reorders existing bullets without inventing facts.
+Resume HTML remains semantic and single-column with no flex/grid reading-order traps.
 
-Outreach reply detection runs even when a message is not a status update. Application classification is prefiltered by ATS/subject signals or known company/role context. Optional model classification uses a strict schema and exact evidence quote, and is separately enabled because it transmits email content to the model provider.
+## Browser assistant
 
-Automatic stage updates are opt-in. They require a unique role match, current timestamp, a nonterminal existing state, and a supported forward transition. Ambiguous, old, or terminal-stage messages remain in review. The model does not choose an arbitrary application ID.
+The API only queues allowlisted ATS destinations. An expiring paired token receives
+one task, its approved profile, resume, and answer bank. Native prototype setters
+trigger input/change events. Filling traverses open shadow roots and permitted
+frames; closed roots, inaccessible frames and custom multi-step controls may need
+manual input. It never clicks Submit or answers unknown screening questions.
 
-## Résumé matching and generation
+A user Submit attempt records pending status. A subsequent explicit ATS success
+panel in the same queued tab/origin can confirm Applied. The backend checks the
+lease, origin, prior attempt and confirmation evidence. Otherwise the owner records
+the employer receipt manually. A button click alone cannot confirm an application.
 
-Keyword scores explain their inputs. Optional embedding requests compute real cosine similarity, cache model/content fingerprints, and invalidate displayed scores when the résumé or job text changes. SQLite stores vectors for this first stage. The PostgreSQL target defines a pgvector cosine index with 1536 dimensions and must be adapted to the selected model before migration.
+## Free hosting limits
 
-Structured extraction produces suggestions, never an automatic profile overwrite. The Tailor action highlights and reorders relevant existing bullets verbatim and retains the original text. It creates a printable HTML version rather than inventing missing skills or experience. A reviewed browser print can save it as PDF.
-
-## Outreach lifecycle
-
-Campaign previews include the sender account, each personalized message, attachment, and follow-up text. Approval binds to those inputs. Sending is opt-in at the server and campaign levels. A durable queue enforces caps, business windows, and paced dispatch, with a shared account budget/lease so multiple workers do not burst sends together.
-
-One approved follow-up uses native thread identifiers, checks the inbox before dispatch, and stops on a detected reply, suppression, pause, invalid approval, missing account, or unknown original send. Recipient verification provenance remains visible: imported labels are not independent Orbit verification. Link-request counts are not presented as recruiter reads.
-
-## Production work still required
-
-Multi-user account sign-in, tenant isolation, async PostgreSQL repositories and runtime cutover, paginated SQL queries for large datasets, bounce/delivery webhooks, comprehensive unsubscribe handling, file-retention/deletion, real provider acceptance tests, Chrome/form QA, Redis/Docker validation, and operational backup/restore remain required before offering a public SaaS service.
-
-Mailbox OAuth is account authorization for a personal workspace. Basic Authentication is retained for the workspace owner; it is not presented as Clerk/NextAuth or a multi-user login system.
+Render Free sleeps, pausing the API and embedded worker. Durable tasks and files
+survive in PostgreSQL and resume on wake. This is a usable personal pilot, not an
+always-on scheduling guarantee. See [free hosting](FREE_HOSTING.md).

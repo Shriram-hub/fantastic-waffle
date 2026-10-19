@@ -8,6 +8,8 @@ export function mimeMessage(message, sender, attachment) {
     sender,
     message.subject,
     message.inReplyTo || "",
+    message.references || "",
+    message.unsubscribeUrl || "",
   ])
     if (/[\r\n]/.test(v)) fail("Mail headers cannot contain newlines.");
   const boundary = `orbit-${hash([message.to, message.subject, message.body]).slice(0, 20)}`;
@@ -18,10 +20,11 @@ export function mimeMessage(message, sender, attachment) {
     `Subject: =?UTF-8?B?${encode(message.subject)}?=`,
     `Message-ID: ${messageId}`,
     "MIME-Version: 1.0",
+    ...(message.unsubscribeUrl ? [`List-Unsubscribe: <${message.unsubscribeUrl}>`, "List-Unsubscribe-Post: List-Unsubscribe=One-Click"] : []),
     ...(message.inReplyTo
       ? [
           `In-Reply-To: ${message.inReplyTo}`,
-          `References: ${message.inReplyTo}`,
+          `References: ${message.references || message.inReplyTo}`,
         ]
       : []),
     `Content-Type: multipart/mixed; boundary="${boundary}"`,
@@ -107,37 +110,11 @@ export async function sendNative(
         }
       : { status: "unknown", error: "Gmail did not return a message ID." };
   }
-  const draftBody = {
-    subject: message.subject,
-    body: { contentType: "Text", content: message.body },
-    toRecipients: [{ emailAddress: { address: message.to } }],
-    ...(attachment
-      ? {
-          attachments: [
-            {
-              "@odata.type": "#microsoft.graph.fileAttachment",
-              name: attachment.name,
-              contentBytes: attachment.base64,
-            },
-          ],
-        }
-      : {}),
-  };
-  const draft = message.replyToProviderId
-    ? await remoteJSON(
-        `https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(message.replyToProviderId)}/createReply`,
-        {
-          method: "POST",
-          headers,
-          body: JSON.stringify({ message: draftBody }),
-        },
-        fetcher,
-      )
-    : await remoteJSON(
-        "https://graph.microsoft.com/v1.0/me/messages",
-        { method: "POST", headers, body: JSON.stringify(draftBody) },
-        fetcher,
-      );
+  const mime = mimeMessage(message,a.email,attachment);
+  const draftUrl = message.replyToProviderId
+    ? `https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(message.replyToProviderId)}/createReply`
+    : "https://graph.microsoft.com/v1.0/me/messages";
+  const draft = await remoteJSON(draftUrl,{method:"POST",headers:{...headers,"Content-Type":"text/plain"},body:Buffer.from(mime.raw,"base64url").toString("base64")},fetcher);
   if (!draft.id) fail("Outlook did not return a draft ID.", 502);
   await beforeSend({
     providerId: draft.id,

@@ -97,3 +97,14 @@ export const tasks = pgTable("tasks", {
   runAt: timestamp("run_at", { withTimezone: true }).notNull(),
   attempts: integer("attempts").notNull().default(0),
 });
+
+export const outreachSendLog = pgTable("outreach_send_log", {
+  userId: text("user_id").notNull().references(() => users.id),
+  contactEmail: text("contact_email").notNull(),
+  campaignId: text("campaign_id").notNull().references(() => campaigns.id),
+  sequenceStep: integer("sequence_step").notNull().default(0),
+  taskId: text("task_id"),
+  status: text("status").notNull(),
+  providerId: text("provider_id"),
+  updatedAt: timestamp("updated_at",{withTimezone:true}).notNull().defaultNow(),
+}, table => [uniqueIndex("outreach_recipient_step").on(table.userId,table.contactEmail,table.campaignId,table.sequenceStep)]);

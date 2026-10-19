@@ -1,3 +1,8 @@
+export function combineResults(results) {
+  const reports=results.map(r => r.result).filter(Boolean);
+  if(!reports.length)return null;
+  return {status:reports.some(r=>r.status === 'blocked') ? 'blocked' : 'needs-review',filled:reports.reduce((sum,r)=>sum+(r.filled||0),0),missing:[...new Set(reports.flatMap(r=>r.missing || []))].slice(0,50)};
+}
 import { buildAnswers, fillApplication } from "./autofill.mjs";
 async function request(path, body) {
   const { base, token } = await chrome.storage.session.get(["base", "token"]);
@@ -48,11 +53,11 @@ async function next() {
   });
   const resume = task.resume ? await request("resume") : null;
   const results = await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
+    target: { tabId: tab.id, allFrames: true },
     func: fillApplication,
     args: [buildAnswers(task.profile, task.qa), resume],
   });
-  const report = results[0]?.result || {
+  const report = combineResults(results) || {
     status: "needs-review",
     missing: ["Could not inspect this form."],
   };
@@ -78,11 +83,11 @@ async function refill() {
     );
   const resume = task.resume ? await request("resume") : null,
     results = await chrome.scripting.executeScript({
-      target: { tabId },
+      target: { tabId, allFrames: true },
       func: fillApplication,
       args: [buildAnswers(task.profile, task.qa), resume],
     });
-  const report = results[0]?.result || {
+  const report = combineResults(results) || {
     status: "needs-review",
     missing: ["Form is not available."],
   };
@@ -99,5 +104,27 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
   (message.type === "refill" ? refill() : next())
     .then(respond)
     .catch((error) => respond({ error: error.message }));
+  return true;
+});
+
+chrome.runtime.onMessage.addListener((message,sender,respond) => {
+  if (!['submission-attempt','application-confirmation'].includes(message.type)) return;
+  (async () => {
+    const {currentTask}=await chrome.storage.session.get('currentTask');
+    if(!currentTask || sender.tab?.id !== currentTask.tabId) throw Error('This tab has no active Orbit task.');
+    const source=new URL(sender.url),target=new URL(currentTask.task.url);
+    if(source.hostname !== target.hostname) throw Error('Confirmation origin does not match this task.');
+    if(message.type === 'submission-attempt') {
+      await request('submission',{taskId:currentTask.task.id,status:'submission-pending',url:source.href});
+      await chrome.storage.session.set({submissionAttempt:{taskId:currentTask.task.id,at:Date.now()}});
+    } else {
+      const {submissionAttempt}=await chrome.storage.session.get('submissionAttempt');
+      if(submissionAttempt?.taskId !== currentTask.task.id || Date.now()-submissionAttempt.at > 15*60000) return;
+      await request('submission',{taskId:currentTask.task.id,status:'confirmed',url:source.href,evidence:message.evidence});
+      await chrome.storage.session.set({lastResult:{status:'confirmed',company:currentTask.task.company,role:currentTask.task.role}});
+      await chrome.storage.session.remove(['submissionAttempt','currentTask']);
+    }
+    return {ok:true};
+  })().then(respond).catch(error=>respond({error:error.message}));
   return true;
 });

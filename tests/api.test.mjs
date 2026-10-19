@@ -616,3 +616,59 @@ test("mail tokens are never returned and Graph notifications require stored clie
     503,
   );
 });
+
+test('SSE requires workspace authentication and streams completed worker tasks', async t => {
+  const w=await workspace(t,{WORKSPACE_PASSWORD:'events-test-password'});
+  assert.equal((await w.call('/api/events')).status,401);
+  const headers={Authorization:`Basic ${Buffer.from('orbit:events-test-password').toString('base64')}`};
+  const controller=new AbortController();
+  t.after(()=>controller.abort());
+  const stream=await fetch(`${w.base}/api/events`,{headers,signal:controller.signal});
+  assert.equal(stream.headers.get('content-type'),'text/event-stream; charset=utf-8');
+  const reader=stream.body.getReader();
+  assert.match(new TextDecoder().decode((await reader.read()).value),/event: ready/);
+  const task=w.queue.enqueue('test.complete',{});
+  await runOne(w.store,w.queue,{'test.complete':async()=>({count:1})},task.id);
+  let output='';
+  const deadline=AbortSignal.timeout(6000);
+  while(!output.includes(task.id)) {
+    const chunk=await Promise.race([reader.read(),new Promise((_,reject)=>deadline.addEventListener('abort',()=>reject(Error('SSE task event timed out')),{once:true}))]);
+    output+=new TextDecoder().decode(chunk.value);
+  }
+  assert.match(output,/event: task/);assert.match(output,/"status":"completed"/);
+  controller.abort();
+});
+test('extension submit attempts stay pending until a matching ATS confirmation is reported',async t=>{
+  const w=await workspace(t);
+  await w.call('/api/workspace/reset',{confirm:'START_FRESH'});
+  await w.call('/api/profile',profile,'PUT');
+  const job=(await w.call('/api/jobs/manual',{title:'Engineer',company:'Acme',url:'https://boards.greenhouse.io/acme/jobs/99'})).json.job;
+  await w.call('/api/apply/queue',{approved:true,jobIds:[job.id]});
+  const token=(await w.call('/api/extension/token',{})).json.token,headers={Authorization:`Bearer ${token}`};
+  const task=(await w.call('/api/extension/next',undefined,'GET',headers)).json.task;
+  const report={taskId:task.id,url:job.url,status:'confirmed',evidence:'Your application has been received. Thank you for applying.'};
+  assert.equal((await w.call('/api/extension/submission',report,'POST',headers)).status,409);
+  assert.equal((await w.call('/api/extension/submission',{...report,status:'submission-pending'},'POST',headers)).status,200);
+  assert.equal((await w.call('/api/state')).json.applications[0].stage,'Ready');
+  assert.equal((await w.call('/api/extension/submission',{...report,url:'https://other.greenhouse.io/wrong'},'POST',headers)).status,400);
+  assert.equal((await w.call('/api/extension/submission',report,'POST',headers)).status,200);
+  assert.equal((await w.call('/api/state')).json.applications[0].stage,'Applied');
+});
+test('outreach sends opt-out headers, GET cannot unsubscribe, and one-click POST suppresses future mail',async t=>{
+  t.mock.timers.enable({apis:['Date'],now:new Date('2026-10-19T09:00:00Z')});
+  let message;
+  const w=await live(t,async(url,options)=>{message=JSON.parse(options.body);return new Response(JSON.stringify({id:'mock-only'}));});
+  const p=(await w.call(`/api/campaigns/${w.campaign.id}/preview`,{})).json;
+  const q=await w.call(`/api/campaigns/${w.campaign.id}/send`,{previewId:p.previewId,approved:true,confirmCount:1});
+  await w.work(q.json.deliveries[0].taskId);
+  assert.match(message.headers['List-Unsubscribe'],/^<http:\/\/127\.0\.0\.1:3000\/u\/[\w-]{43}>$/);
+  assert.equal(message.headers['List-Unsubscribe-Post'],'List-Unsubscribe=One-Click');
+  const link=new URL(message.headers['List-Unsubscribe'].slice(1,-1));
+  assert.equal((await fetch(w.base+link.pathname)).status,200);
+  assert.equal((await w.call('/api/state')).json.contacts[0].suppressed,false);
+  const r=await fetch(w.base+link.pathname,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'List-Unsubscribe=One-Click'});
+  assert.equal(r.status,200);assert.equal((await w.call('/api/state')).json.contacts[0].suppressed,true);
+  const ledger=w.store.db.prepare('SELECT * FROM outreach_send_log').get();
+  assert.equal(ledger.status,'accepted');
+  assert.throws(()=>w.store.db.prepare("INSERT INTO outreach_send_log(user_id,contact_email,campaign_id,sequence_step,task_id,status,updated_at) VALUES(?,?,?,?,?,'queued',?)").run('local',ledger.contact_email,ledger.campaign_id,0,'duplicate',Date.now()),/UNIQUE/);
+});
