@@ -1,0 +1,13 @@
+import React,{useState,useEffect} from 'react';
+import {useApp,api,fmt} from '../../shared/workspace.jsx';
+import {Button,Field} from '../../shared/ui.jsx';
+export function JobDocuments({jobId,onReady}) {
+  const {tasks,perform,notify,integrations}=useApp(),[documents,setDocuments]=useState([]),[useAI,setUseAI]=useState(false),[approved,setApproved]=useState(false),[error,setError]=useState('');
+  const signature=JSON.stringify(tasks?.tasks?.filter(t=>t.kind==='documents.build').map(t=>[t.id,t.status,t.updated_at]));
+  async function refresh(){try{setDocuments((await api(`/documents?jobId=${encodeURIComponent(jobId)}`)).documents);setError('');}catch(e){setError(e.message);}}
+  useEffect(()=>{setDocuments([]);if(jobId)refresh();},[jobId,signature]);
+  const latest=documents.find(d=>d.current) || documents[0];
+  useEffect(()=>{if(latest && onReady)onReady(latest.current===false ? null : latest);},[latest?.id,latest?.current]);
+  if(!jobId)return null;
+  return <section className="job-documents"><div><span className="eyebrow">APPLICATION DOCUMENTS</span><h3>One role. A focused introduction.</h3><p>Single-column PDFs using your saved experience and STAR examples. Review both files before sending.</p></div>{error && <p role="alert" className="error-box">{error}</p>}<label className="checkbox-group"><input type="checkbox" checked={useAI} disabled={!integrations?.ai} onChange={e=>{setUseAI(e.target.checked);setApproved(false);}}/>Let Gemini select relevant original evidence</label>{useAI && <label className="checkbox-group"><input type="checkbox" checked={approved} onChange={e=>setApproved(e.target.checked)}/>Use my saved background and this role with the configured AI provider.</label>}<Button small disabled={useAI && !approved} onClick={()=>perform(async()=>{const result=await api('/documents',{jobId,useAI,confirmed:approved});notify(result.cached ? 'Saved documents are ready.' : 'Documents queued. Downloads appear here when ready.');await refresh();})}>Generate résumé & cover letter</Button>{latest && <div className="document-downloads"><p className="hint">{latest.current===false ? 'Earlier profile snapshot · regenerate before use' : latest.method} · {fmt(latest.createdAt)} · {latest.wordCount} words in cover letter</p><a className="btn small" href={`/api/documents/${latest.id}/resume`}>Download tailored résumé</a><a className="btn small" href={`/api/documents/${latest.id}/coverLetter`}>Download cover letter</a><details><summary>Evidence used</summary>{latest.evidence.map(e=><blockquote key={e.id}><strong>{e.label}</strong><p>{e.text}</p></blockquote>)}</details></div>}</section>;
+}

@@ -6,6 +6,16 @@ import {contactProviderError} from './errors.mjs';
 export const searchHunter=async(domain,key,limit=3,fetcher=fetch)=>(await hunterSearch({domain},key,limit,fetcher)).contacts;
 export const searchHunterCompany=(company,key,limit=3,fetcher=fetch)=>hunterSearch({company},key,limit,fetcher);
 const normalizedName=value=>String(value || '').toLowerCase().replace(/\b(inc|incorporated|llc|ltd|limited|corporation)\b/g,'').replace(/[^a-z0-9]/g,'');
+export async function findHunterEmail(person,domain,key,fetcher=fetch) {
+  const parts=person.name.trim().split(/\s+/),url=new URL('https://api.hunter.io/v2/email-finder');
+  if(parts.length<2 || !companyDomain(domain))return null;
+  url.search=new URLSearchParams({domain,first_name:parts[0],last_name:parts.at(-1),api_key:key});
+  let result;try{result=await remoteJSON(url.href,{},fetcher,30000);}catch(error){throw contactProviderError('Hunter',error);}
+  const data=result.data;
+  if(!emailValid(data?.email || '') || data.email.split('@')[1].toLowerCase()!==domain)return null;
+  const checked=data.verification?.status,status=data.accept_all || checked==='accept_all' ? 'catch-all' : data.disposable || data.webmail ? 'invalid' : checked==='valid' ? 'verified' : checked==='invalid' ? 'invalid' : 'unverified';
+  return {...person,email:data.email.toLowerCase(),companyDomain:domain,emailStatus:status,verification:{provider:'Hunter Email Finder',status,at:now(),reference:person.linkedinUrl,result:status==='verified' ? 'Finder returned a verified corporate mailbox' : 'Mailbox verification still required'}};
+}
 async function hunterSearch(query, key, limit = 3, fetcher = fetch) {
   if(!key)fail('Configure HUNTER_API_KEY to use Hunter discovery.',503);
   let domain=companyDomain(query.domain);if(!domain && !query.company)fail('Enter a corporate company domain.');

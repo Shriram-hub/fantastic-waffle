@@ -39,11 +39,16 @@ export async function saveCareerStory(data,store,storyId) {
   const story={...parsed.data,id:storyId || id(),createdAt:createdAt || now(),updatedAt:now()};if(old)Object.assign(old,story);else career.stories.unshift(story);
   career.updatedAt=now();await store.save();return story;
 }
-export const prepFingerprint=(store,job,useAI)=>hash(['interview-prep-v1',job.id,job.title,job.description,store.state.resume?.text || '',store.state.profile.master || store.state.profile.skills,useAI]);
+export const prepFingerprint=(store,job,useAI)=>hash(['interview-prep-v2',job.id,job.title,job.description,store.state.resume?.text || '',store.state.profile.master || store.state.profile.skills,(store.state.career?.stories || []).filter(s=>!s.archived),useAI]);
 export function templatePrep(store,job) {
   const snippets=String(job.description || '').split(/\n|(?<=[.!?])\s+/).map(s=>s.trim()).filter(s=>s.length>25 && s.length<=600).slice(0,5);
   const skills=(job.tags || []).filter(s=>typeof s==='string' && s.length<60).slice(0,3);
-  const questions=[{question:`Walk me through the experience that prepares you for this ${job.title} role.`,jobQuote:snippets[0] || ''},{question:'Describe a difficult problem you owned. What did you do and how did you measure the result?',jobQuote:''},...skills.map(skill=>({question:`How have you used ${skill}, and what would you review before this interview?`,jobQuote:snippets.find(s=>s.toLowerCase().includes(skill.toLowerCase())) || ''})),{question:'Tell me about a time you received feedback and changed your approach.',jobQuote:''}].slice(0,7);
+  const finance=/financ|account|investment|valuation|fp&a/i.test(`${job.title} ${job.description}`) ? [
+    {question:'Walk through how the financial statements connect. How can profit rise while operating cash flow falls?',jobQuote:snippets.find(s=>/financial statements|cash flow/i.test(s)) || ''},
+    {question:'Practice case: which assumptions would you test in a valuation or forecast, and how would you explain sensitivity to them?',jobQuote:snippets.find(s=>/valuation|forecast|model/i.test(s)) || ''},
+    {question:'How would you investigate a reconciliation variance and document the evidence for review?',jobQuote:snippets.find(s=>/reconcil|account|variance/i.test(s)) || ''},
+  ] : [];
+  const questions=[{question:`Walk me through the experience that prepares you for this ${job.title} role.`,jobQuote:snippets[0] || ''},{question:'Describe a difficult problem you owned. What did you do and how did you measure the result?',jobQuote:''},...finance,...skills.map(skill=>({question:`How have you used ${skill}, and what would you review before this interview?`,jobQuote:snippets.find(s=>s.toLowerCase().includes(skill.toLowerCase())) || ''})),{question:'Tell me about a time you received feedback and changed your approach.',jobQuote:''}].slice(0,8);
   return {questions,companyQuestions:['What would success look like in the first 90 days?','Which problems would this role tackle first?','How does the team give feedback and support development?'],requirements:snippets};
 }
 export async function buildInterviewPrep(task,store,queue,config={},fetcher=fetch) {
@@ -59,7 +64,11 @@ export async function buildInterviewPrep(task,store,queue,config={},fetcher=fetc
   }
   await store.refresh();const latest=store.state.jobs.find(j=>j.id===job.id);if(!latest || prepFingerprint(store,latest,task.payload.useAI)!==task.payload.fingerprint)return {status:'cancelled'};
   const career=mutable(store),old=career.prep.find(p=>p.fingerprint===task.payload.fingerprint);if(old)return {prepId:old.id,cached:true};
-  const prep={id:id(),jobId:job.id,company:job.company,role:job.title,jobUrl:job.url,fingerprint:task.payload.fingerprint,method,createdAt:now(),...result,questions:result.questions.map(q=>({...q,id:id(),answerNotes:''}))};
+  const stories=career.stories.filter(s=>!s.archived),tokens=v=>new Set(String(v).toLowerCase().match(/[a-z]{4,}/g) || []);
+  const prep={id:id(),jobId:job.id,company:job.company,role:job.title,jobUrl:job.url,fingerprint:task.payload.fingerprint,method,trigger:task.payload.trigger || 'manual',createdAt:now(),...result,questions:result.questions.map(q=>{
+    const words=tokens(`${q.question} ${q.jobQuote} ${job.title}`),score=s=>[...tokens(`${s.title} ${s.situation} ${s.task} ${s.action} ${s.result}`)].filter(t=>words.has(t)).length;
+    return {...q,id:id(),answerNotes:'',storyIds:stories.filter(s=>score(s)>0).sort((a,b)=>score(b)-score(a)).slice(0,2).map(s=>s.id)};
+  })};
   career.prep=[prep,...career.prep].slice(0,50);career.updatedAt=now();await store.save();return {prepId:prep.id};
 }
 export function careerOverview(state){const value=careerStatus({state});return {weeklyGoal:value.weeklyGoal,updatedAt:state.career?.updatedAt || null,stats:value.stats,due:value.due.slice(0,5).map(({notes,...task})=>task)};}

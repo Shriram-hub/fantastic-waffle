@@ -1,3 +1,5 @@
+import {JobDocuments} from '../resume/JobDocuments.jsx';
+import {startBrowserBatch} from '../../shared/browser-batch.mjs';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp, api, stages, split, fmt } from '../../shared/workspace.jsx';
 import { Button, Badge, Heading, Empty, Panel, Field, Company, Modal, ConfirmAction, Sample } from '../../shared/ui.jsx';
@@ -76,6 +78,7 @@ export function ModalContent({ modal, close }) {
             Prepare application
           </Button>
         </div>
+        <JobDocuments jobId={j.id}/>
         <p className="hint">
           Original requirements and eligibility always take precedence over a
           score.
@@ -248,7 +251,7 @@ export function ModalContent({ modal, close }) {
     verify:
       "Hunter may charge credits to verify this contact’s work email. Catch-all, invalid, and unknown results remain blocked from sending.",
     'verify-contacts': `Verify ${modal.ids?.length || 0} selected work emails using Hunter. This may consume provider credits and is limited by your daily contact API budget. Unknown, catch-all and invalid results remain excluded.`,
-    "browser-batch": `${modal.ids?.length} selected opportunities will be queued for your paired Chrome extension. It fills recognized fields and your approved answers, then stops for review. It does not solve verification challenges or submit an application.`,
+    "browser-batch": `${Math.min(modal.ids?.length || 0,10)} selected opportunities will be queued for your paired Chrome extension. It fills recognized fields and your approved answers, then stops for review. It does not solve verification challenges or submit an application.`,
   };
   const action = async () => {
     if (modal.type === "reset") {
@@ -269,8 +272,10 @@ export function ModalContent({ modal, close }) {
     if (modal.type === "verify")
       await api(`/contacts/${modal.id}/verify`, { confirmed: true });
     if(modal.type==='verify-contacts'){const r=await api('/contacts/verify-batch',{ids:modal.ids,confirmed:true});notify(`${r.queued} verification tasks queued.`);}
-    if (modal.type === "browser-batch")
-      await api("/apply/queue", { approved: true, jobIds: modal.ids });
+    if (modal.type === "browser-batch") {
+      const result=await api('/apply/queue',{approved:true,jobIds:modal.ids.slice(0,10)});
+      notify(await startBrowserBatch(result.taskIds.slice(0,10)));
+    }
     close();
   };
   return (

@@ -42,7 +42,7 @@ export function taskQueue(store) {
   function reconcileExpired() {
     for (const task of db
       .prepare(
-        "SELECT id,kind,payload FROM tasks WHERE status='unknown' AND lease_until IS NOT NULL AND kind IN ('campaign.send','campaign.followup')",
+        "SELECT id,kind,payload FROM tasks WHERE status='unknown' AND lease_until IS NOT NULL AND kind IN ('campaign.send','campaign.followup','alert.send')",
       )
       .all()) {
       db.prepare("UPDATE outreach_send_log SET status='unknown',updated_at=? WHERE task_id=? AND status='sending'").run(Date.now(),task.id);
@@ -75,10 +75,10 @@ export function taskQueue(store) {
     db.exec("BEGIN IMMEDIATE");
     try {
       db.prepare(
-        "UPDATE tasks SET status='unknown',error='Worker lease expired during an outbound send. Reconcile with the provider.',updated_at=? WHERE status='running' AND lease_until<? AND kind IN ('campaign.send','campaign.followup')",
+        "UPDATE tasks SET status='unknown',error='Worker lease expired during an outbound send. Reconcile with the provider.',updated_at=? WHERE status='running' AND lease_until<? AND kind IN ('campaign.send','campaign.followup','alert.send')",
       ).run(clock, clock);
       db.prepare(
-        "UPDATE tasks SET status=CASE WHEN attempts>=max_attempts THEN 'failed' ELSE 'queued' END,lease_token=NULL,updated_at=? WHERE status='running' AND lease_until<? AND kind NOT IN ('campaign.send','campaign.followup')",
+        "UPDATE tasks SET status=CASE WHEN attempts>=max_attempts THEN 'failed' ELSE 'queued' END,lease_token=NULL,updated_at=? WHERE status='running' AND lease_until<? AND kind NOT IN ('campaign.send','campaign.followup','alert.send')",
       ).run(clock, clock);
       reconcileExpired();
       const row = wantedId
@@ -89,7 +89,7 @@ export function taskQueue(store) {
             .get(wantedId, clock)
         : db
             .prepare(
-              "SELECT * FROM tasks WHERE status='queued' AND run_at<=? ORDER BY run_at,created_at LIMIT 1",
+              "SELECT * FROM tasks WHERE status='queued' AND run_at<=? ORDER BY CASE WHEN kind='alert.send' THEN 0 ELSE 1 END,run_at,created_at LIMIT 1",
             )
             .get(clock);
       if (!row) {
@@ -109,7 +109,7 @@ export function taskQueue(store) {
   }
   function finish(task, result, error) {
     const clock = Date.now(),
-      outbound = ["campaign.send", "campaign.followup"].includes(task.kind),
+      outbound = ["campaign.send", "campaign.followup", "alert.send"].includes(task.kind),
       status = error
         ? outbound
           ? "unknown"
@@ -151,10 +151,10 @@ export function taskQueue(store) {
       db.exec("BEGIN IMMEDIATE");
       try {
         db.prepare(
-          "UPDATE tasks SET status='unknown',error='Outbound send lease expired; reconcile before retrying.',lease_token=NULL,updated_at=? WHERE status='running' AND lease_until<? AND kind IN ('campaign.send','campaign.followup')",
+          "UPDATE tasks SET status='unknown',error='Outbound send lease expired; reconcile before retrying.',lease_token=NULL,updated_at=? WHERE status='running' AND lease_until<? AND kind IN ('campaign.send','campaign.followup','alert.send')",
         ).run(clock, clock);
         db.prepare(
-          "UPDATE tasks SET status=CASE WHEN attempts>=max_attempts THEN 'failed' ELSE 'queued' END,lease_token=NULL,updated_at=? WHERE status='running' AND lease_until<? AND kind NOT IN ('campaign.send','campaign.followup')",
+          "UPDATE tasks SET status=CASE WHEN attempts>=max_attempts THEN 'failed' ELSE 'queued' END,lease_token=NULL,updated_at=? WHERE status='running' AND lease_until<? AND kind NOT IN ('campaign.send','campaign.followup','alert.send')",
         ).run(clock, clock);
         reconcileExpired();
         db.exec("COMMIT");
@@ -201,7 +201,7 @@ export function taskQueue(store) {
       if (
         !t ||
         t.status !== "failed" ||
-        ["campaign.send", "campaign.followup"].includes(t.kind)
+        ["campaign.send", "campaign.followup", "alert.send"].includes(t.kind)
       )
         fail("Only failed non-sending tasks can be retried.", 409);
       db.prepare(

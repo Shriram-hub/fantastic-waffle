@@ -188,3 +188,5 @@ See [architecture](docs/ARCHITECTURE.md), [API reference](docs/API.md), and [pro
 ## v0.3 hardening
 
 Feature views live under `web/src/features/`. Authenticated `/api/events` streams worker transitions to React. The extension fills open shadow roots and permitted frames and syncs observed ATS confirmations. Both databases enforce unique outreach recipient/sequence steps, and ambiguous sends are held for reconciliation. Mail includes real unsubscribe links and list headers; GET asks for confirmation and POST performs the opt-out. Hunter verification first checks MX records, with temporary DNS failures held for review. Structured AI and embeddings use persistent content/model/provider caches.
+
+For regional discovery, alumni contacts, tailored PDFs, threaded sequences, copilot batches, résumé activity, phone alerts and automatic interview kits, see [the career workspace guide](docs/CAREER_WORKSPACE.md).

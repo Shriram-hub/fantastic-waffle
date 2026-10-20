@@ -1,3 +1,4 @@
+import {warmHook} from './warm-connections.mjs';
 import { resumeHash } from "./resume-storage.mjs";
 import { z } from "zod";
 import { remoteJSON } from "../providers/http.mjs";
@@ -50,7 +51,8 @@ export async function draftAutopilotPitch(state, job, contact, resumeURL, policy
   const clean = value => String(value || "").replace(/[\r\n{}]/g," ").slice(0,180);
   const first = clean(contact.name).split(" ")[0] || "there";
   const skillLine = skills.length ? `My background includes ${skills.map(clean).join(", ")}.` : "I have included my résumé so you can assess my background for this position.";
-  let body = `Hi ${first},\n\nI saw the ${clean(job.title)} opening at ${clean(job.company)} and wanted to reach out about the role. ${skillLine}`;
+  const hook=warmHook(contact,state);
+  let body = `Hi ${first},\n\n${hook ? `${hook} ` : ''}I saw the ${clean(job.title)} opening at ${clean(job.company)} and wanted to reach out about the role. ${skillLine}`;
   if (evidence.length) body += ` Relevant work from my résumé: ${evidence.map(e => `“${e}”`).join("; ")}.`;
   body += `\n\n${resumeURL ? `My résumé: ${resumeURL}` : "My résumé is attached."}\nRole: ${job.url}\n\nWould you be the right person to discuss this opportunity, or could you point me to the hiring team? Thank you for your time.`;
   return {subject:`${clean(job.title)} at ${clean(job.company)} — ${clean(p.name)}`.slice(0,350),body,evidence,method:policy.useAI ? "AI-selected, source-checked résumé excerpts" : "Factual template"};

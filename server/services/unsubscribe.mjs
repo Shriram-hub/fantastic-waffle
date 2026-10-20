@@ -1,3 +1,4 @@
+import {stopFollowups} from './sequences.mjs';
 import { randomBytes, createHash } from 'node:crypto';
 import { fail, now } from '../domain.mjs';
 const tokenHash = value => createHash('sha256').update(value).digest('hex');
@@ -18,7 +19,7 @@ export async function unsubscribeRoute(req,res,url,store,queue) {
     if (new URLSearchParams(body).get('List-Unsubscribe') !== 'One-Click' && new URLSearchParams(body).get('confirm') !== 'yes') fail('Confirm the unsubscribe request.',400);
     const ids=new Set();
     for(const contact of store.state.contacts) if (contact.email?.toLowerCase() === row.email) {contact.suppressed=true;contact.suppressedAt=now();ids.add(contact.id);}
-    for(const campaign of store.state.campaigns) for(const delivery of campaign.deliveries || []) if(ids.has(delivery.contactId)) {delivery.followupStopped=true;if(delivery.followupTaskId)await queue.cancel(delivery.followupTaskId);if(delivery.taskId)await queue.cancel(delivery.taskId);}
+    for(const campaign of store.state.campaigns) for(const delivery of campaign.deliveries || []) if(ids.has(delivery.contactId)) {await stopFollowups(delivery,store);if(delivery.taskId)await queue.cancel(delivery.taskId);}
     await store.save();
     res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});res.end('<!doctype html><html lang="en"><meta charset="utf-8"><title>Unsubscribed</title><h1>You are unsubscribed</h1><p>This workspace will stop sending outreach to your address.</p></html>');
   } else if(req.method === 'GET') {

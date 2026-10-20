@@ -1,3 +1,11 @@
+import {sameApplicationLocation,sameApplicationHost} from '../extension/location.mjs';
+import {documentFingerprint,documentSummary} from './services/job-documents.mjs';
+import {warmHook} from './services/warm-connections.mjs';
+import {extensionEnhancements} from './extension-routes.mjs';
+import {notificationRoutes} from './notification-routes.mjs';
+import {serveResumeLink,ensureCampaignLinks,resumeLinkSummaries} from './services/engagement.mjs';
+import {normalizeSequence,sequenceSteps} from './services/sequences.mjs';
+import {documentRoutes} from './document-routes.mjs';
 import { unsubscribeRoute } from "./services/unsubscribe.mjs";
 import { autopilotRoutes } from "./autopilot-routes.mjs";
 import { discoveryRoutes } from './discovery-routes.mjs';
@@ -51,6 +59,8 @@ export function upgradeRoutes(store, config, fetcher) {
   const candidate=candidateRoutes(store,queue,config,fetcher);
   const contacts=contactRoutes(store,queue,config,fetcher);
   const career=careerRoutes(store,queue,config);
+  const documents=documentRoutes(store,queue,config);
+  const notifications=notificationRoutes(store,config);
   async function publicRoute(req, res, u, {
     json,
     bodyJSON
@@ -122,28 +132,20 @@ export function upgradeRoutes(store, config, fetcher) {
     }
     const share = path.match(/^\/r\/([A-Za-z0-9_-]{40,100})$/);
     if (share && req.method === "GET") {
-      const record = await store.db.prepare("SELECT * FROM public_resumes WHERE id=? AND revoked=0 AND expires>?").get(hash(share[1]), Date.now()),
-        r = store.state.resume;
-      if (!record || !r || record.resume_hash !== resumeHash(r)) fail("This résumé link has expired or was revoked.", 404);
-      await store.db.prepare("UPDATE public_resumes SET views=views+1 WHERE id=?").run(record.id);
-      res.writeHead(200, {
-        "Content-Type": /\.pdf$/i.test(r.name) ? "application/pdf" : "application/octet-stream",
-        "Content-Disposition": `inline; filename="${r.name.replace(/[^a-z0-9._-]/gi, "_")}"`,
-        "X-Robots-Tag": "noindex, nofollow, noarchive"
-      });
-      res.end(Buffer.from((await hydrateResume(r, store, config)).base64, "base64"));
+      await serveResumeLink(req,res,share[1],store,queue,config);
       return true;
     }
-    if (["/api/extension/next", "/api/extension/report", "/api/extension/submission", "/api/extension/resume",'/api/extension/profile','/api/extension/context','/api/extension/import-linkedin','/api/extension/questions'].includes(path)) {
+    if (["/api/extension/next", "/api/extension/report", "/api/extension/submission", "/api/extension/resume",'/api/extension/profile','/api/extension/context','/api/extension/import-linkedin','/api/extension/questions','/api/extension/documents','/api/extension/copilot'].includes(path)) {
       const token = req.headers.authorization?.replace(/^Bearer /, "") || "",
         valid = await store.db.prepare("SELECT id FROM extension_tokens WHERE id=? AND expires>?").get(hash(token), Date.now());
       if (!valid) fail("The extension token expired or was revoked.", 401);
+      if(await extensionEnhancements(req,res,u,{json,bodyJSON,valid,store,queue,config,fetcher}))return true;
       if(path==='/api/extension/profile' && req.method==='GET') {json(res,200,{profile:{...store.state.profile,master:candidateProfile(store.state.profile)},qa:store.state.settings.qaBank || [],resume:!!store.state.resume});return true;}
       if(path==='/api/extension/context' && req.method==='POST') {
         const data=await bodyJSON(req),row=await store.db.prepare("SELECT * FROM apply_tasks WHERE id=? AND token_hash=? AND status IN ('leased','needs-review','blocked')").get(data.taskId,valid.id);
         if(!row)fail('This application is no longer assigned to the paired browser.',409);
         const application=store.state.applications.find(a=>a.id===row.application_id),job=store.state.jobs.find(j=>j.id===application?.jobId),source=safeUrl(data.url);
-        if(!job || !source || new URL(source).origin!==new URL(job.url).origin || !['Saved','Ready'].includes(application.stage))fail('Return to the queued application before filling.',409);
+        if(!job || !source || !sameApplicationLocation(job.url,source) || !['Saved','Ready'].includes(application.stage))fail('Return to the queued application before filling.',409);
         await store.db.prepare('UPDATE apply_tasks SET lease_until=? WHERE id=? AND token_hash=?').run(Date.now()+600000,row.id,valid.id);
         json(res,200,{profile:{...store.state.profile,master:candidateProfile(store.state.profile)},qa:store.state.settings.qaBank || [],resume:!!store.state.resume});return true;
       }
@@ -168,10 +170,13 @@ export function upgradeRoutes(store, config, fetcher) {
         });
         return true;
       }
-      if (path === "/api/extension/next" && req.method === "GET") {
+      if (path === "/api/extension/next" && ["GET","POST"].includes(req.method)) {
+        const selection=req.method==='POST' ? (await bodyJSON(req)).taskIds : null;
+        if(selection && (!Array.isArray(selection) || !selection.length || selection.length>10 || selection.some(v=>typeof v!=='string')))fail('Choose 1–10 queued application IDs.');
         await store.db.exec("BEGIN IMMEDIATE");
         try {
-          const row = await store.db.prepare("SELECT * FROM apply_tasks WHERE status='queued' OR (status='leased' AND lease_until<?) ORDER BY rowid LIMIT 1").get(Date.now());
+          const filter=selection ? ` AND id IN (${selection.map(()=>'?').join(',')})` : '';
+          const row = await store.db.prepare(`SELECT * FROM apply_tasks WHERE (status='queued' OR (status='leased' AND lease_until<?))${filter} ORDER BY rowid LIMIT 1`).get(Date.now(),...(selection || []));
           if (!row) {
             await store.db.exec("COMMIT");
             json(res, 200, {
@@ -209,10 +214,11 @@ export function upgradeRoutes(store, config, fetcher) {
         const job=find(store.state.jobs,application.jobId,"Job");
         const sourceUrl=safeUrl(data.url);if(!sourceUrl)fail("Invalid confirmation URL.");
         const source=new URL(sourceUrl);
-        if(!extensionAllowed(source.href) || source.hostname !== new URL(job.url).hostname)fail("Confirmation origin does not match this application.",400);
         const details=JSON.parse(row.body);
+        if(!extensionAllowed(source.href) || !sameApplicationHost(job.url,source.href) && !(details.formOrigins || []).includes(source.origin))fail("Confirmation origin does not match this application.",400);
         if(row.status === "confirmed") {json(res,200,{ok:true});return true;}
         if(data.status === "submission-pending") {
+          if(sameApplicationHost(job.url,source.href) ? !sameApplicationLocation(job.url,source.href) : !sameApplicationLocation(job.url,data.topUrl))fail('Submit only the queued job, or its observed embedded application form.',409);
           details.submitAttemptAt=now();details.submitUrl=source.href;
           await store.db.prepare("UPDATE apply_tasks SET status='submission-pending',body=?,lease_until=? WHERE id=?").run(JSON.stringify(details),Date.now()+15*60000,row.id);
         } else if(data.status === "confirmed") {
@@ -233,6 +239,12 @@ export function upgradeRoutes(store, config, fetcher) {
         if (!row) fail("Application lease expired.", 409);
         if (!["needs-review", "blocked"].includes(data.status)) fail("The extension may report review or a blocker, never submission.");
         const details = JSON.parse(row.body);
+        if(data.formOrigins!==undefined) {
+          const application=find(store.state.applications,row.application_id,'Application'),job=find(store.state.jobs,application.jobId,'Job'),page=safeUrl(data.pageUrl);
+          if(!page || !sameApplicationLocation(job.url,page) || !Array.isArray(data.formOrigins) || data.formOrigins.length>30)fail('Report frames from the queued application page only.');
+          const top=new URL(job.url).origin;
+          details.formOrigins=[...new Set(data.formOrigins.filter(origin=>{try{const u=new URL(origin);return u.origin===origin && u.protocol==='https:' && (origin===top || /(^|\.)(greenhouse\.io|lever\.co|ashbyhq\.com|myworkdayjobs\.com|myworkdaysite\.com|smartrecruiters\.com|icims\.com|taleo\.net)$/.test(u.hostname));}catch{return false;}}))];
+        }
         details.report = {
           missing: Array.isArray(data.missing) ? data.missing.map(x => text(x, 200)).slice(0, 50) : [],
           at: now()
@@ -251,6 +263,8 @@ export function upgradeRoutes(store, config, fetcher) {
     json,
     bodyJSON
   }) {
+    if (await notifications(req,res,u,{json,bodyJSON})) return true;
+    if (await documents(req,res,u,{json,bodyJSON})) return true;
     if (await candidate(req,res,u,{json,bodyJSON})) return true;
     if (await contacts(req,res,u,{json,bodyJSON})) return true;
     if (await career(req,res,u,{json,bodyJSON})) return true;
@@ -307,7 +321,7 @@ export function upgradeRoutes(store, config, fetcher) {
           title: JSON.parse(r.body).title,
           createdAt: r.created_at
         })),
-        links: await store.db.prepare("SELECT id,expires,revoked,views FROM public_resumes").all()
+        links: resumeLinkSummaries(await store.db.prepare("SELECT id,expires,revoked,views FROM public_resumes").all(),store.state)
       });
       return true;
     }
@@ -545,15 +559,18 @@ export function upgradeRoutes(store, config, fetcher) {
         }]
       });
       await store.save();
+      const taskIds=[];
       for (const j of jobs) {
         const a = s.applications.find(a => a.jobId === j.id);
-        if (!(await store.db.prepare("SELECT id FROM apply_tasks WHERE application_id=? AND status IN ('queued','leased','needs-review')").get(a.id))) await store.db.prepare("INSERT INTO apply_tasks(id,application_id,status,body) VALUES(?,?,?,?)").run(id(), a.id, "queued", JSON.stringify({
+        const existing=await store.db.prepare("SELECT id FROM apply_tasks WHERE application_id=? AND status IN ('queued','leased','needs-review','blocked','submission-pending')").get(a.id);
+        const taskId=existing?.id || id();taskIds.push(taskId);
+        if(!existing) await store.db.prepare("INSERT INTO apply_tasks(id,application_id,status,body) VALUES(?,?,?,?)").run(taskId, a.id, "queued", JSON.stringify({
           createdAt: now(),
           jobId: j.id
         }));
       }
       json(res, 202, {
-        count: jobs.length
+        count: jobs.length,taskIds
       });
       return true;
     }
@@ -608,8 +625,10 @@ export function upgradeRoutes(store, config, fetcher) {
         return true;
       }
       if (cpath[2] === "preview") {
-        const c = find(s.campaigns, cpath[1], "Campaign"),
-          preview = previewCampaign(c, s),
+        const c = find(s.campaigns, cpath[1], "Campaign");
+        for(const cid of c.contactIds){const contact=s.contacts.find(x=>x.id===cid);if(contact)contact.warmOpener=warmHook(contact,s);}
+        await ensureCampaignLinks(c,store,config);
+        const preview = previewCampaign(c, s),
           previewId = id();
         s.previews[previewId] = {
           campaignId: c.id,
@@ -624,9 +643,11 @@ export function upgradeRoutes(store, config, fetcher) {
           campaignId: c.id,
           sender: c.accountId ? (await store.db.prepare("SELECT email FROM mail_accounts WHERE id=?").get(c.accountId))?.email : config.EMAIL_FROM || s.profile.email,
           sequence: c.sequence,
+          documents:(s.jobDocuments || []).find(d=>d.id===c.documentSetId) ? documentSummary(s.jobDocuments.find(d=>d.id===c.documentSetId)) : null,
           followupMessages: c.sequence?.enabled ? preview.messages.map(m => ({
             contactId: m.contactId,
-            body: renderTemplate(c.sequence.body, find(s.contacts, m.contactId, "Contact"), s.profile)
+            steps:sequenceSteps(c.sequence).map(step=>({...step,body:renderTemplate(step.body,find(s.contacts,m.contactId,"Contact"),{...s.profile,resumeUrl:c.resumeLinks?.[m.contactId]?.url || s.profile.resumeUrl})})),
+            body: renderTemplate(sequenceSteps(c.sequence)[0]?.body || "", find(s.contacts, m.contactId, "Contact"), s.profile)
           })) : [],
           liveSendReady: config.ENABLE_LIVE_SEND === "true" && Boolean(c.accountId || config.RESEND_API_KEY && config.EMAIL_FROM)
         });
@@ -641,20 +662,19 @@ export function upgradeRoutes(store, config, fetcher) {
         deliveries: []
       };
       if (c.deliveries.length) fail("Create a new campaign after any delivery or queue attempt.", 409);
-      const seq = data.sequence?.enabled ? {
-        enabled: true,
-        afterBusinessDays: Math.max(1, Math.min(30, Number(data.sequence.afterBusinessDays) || 4)),
-        body: text(data.sequence.body, 3000)
-      } : {
-        enabled: false
-      };
-      if (seq.enabled && (!data.accountId || !seq.body)) fail("Follow-ups require a connected mailbox and an approved follow-up message.");
+      const seq=normalizeSequence(data.sequence,data.accountId);
+      const job=data.jobId ? find(s.jobs,data.jobId,'Job') : null;
+      const document=data.documentSetId ? (s.jobDocuments || []).find(d=>d.id===data.documentSetId) : null;
+      if(data.documentSetId && (!document || document.jobId!==job?.id || document.fingerprint!==documentFingerprint(s,job,document.useAI)))fail('Generate current tailored documents for the selected job before saving.',409);
+      if(data.attachCoverLetter && !document)fail('Generate and select a tailored cover letter first.');
+      if(document && selected.some(cid=>{const contact=find(s.contacts,cid,'Contact');return contact.company.toLowerCase()!==job.company.toLowerCase() && (!job.companyDomain || contact.companyDomain!==job.companyDomain);}))fail('The selected tailored documents belong to a different company. Select contacts for this job.');
       Object.assign(c, {
         name: text(data.name, 150),
         subject: text(data.subject, 500),
         body: text(data.body, 15000),
         contactIds: selected,
         attachResume: data.attachResume === true,
+        attachCoverLetter:data.attachCoverLetter===true,documentSetId:document?.id || null,jobId:job?.id || null,trackResume:data.trackResume===true,
         accountId: text(data.accountId, 100) || null,
         sequence: seq,
         status: "Draft"

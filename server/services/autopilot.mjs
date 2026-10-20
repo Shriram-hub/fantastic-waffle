@@ -1,3 +1,9 @@
+import {getSearchConfig} from './discovery.mjs';
+import {buildSearchPlan,rankOpportunity} from './search-plan.mjs';
+import {prioritizeWarmContacts} from './warm-connections.mjs';
+import {ensureJobDocuments} from './job-documents.mjs';
+import {ensureCampaignLinks} from './engagement.mjs';
+import {DEFAULT_FOLLOWUPS} from './sequences.mjs';
 import { randomBytes } from "node:crypto";
 import { fail, hash, id, now, scoreJob, campaignFingerprint, previewCampaign, sampleEmail } from "../domain.mjs";
 import { fetchJobs, canonicalJobKey, mergeJobListings } from "../providers/jobs/index.mjs";
@@ -53,10 +59,12 @@ export async function scheduleAutopilot(store, queue, config = {}, clock = Date.
   } catch(e) { await store.db.exec("ROLLBACK"); throw e; }
 }
 export function scoreDiscoveredJob(job, state, matrix, policy = {}) {
-  if (job.isDemo || job.archived || !matrix.target_roles.length) return {score:0};
+  if (job.isDemo || job.archived || job.requiresSourceReview || !matrix.target_roles.length) return {score:0};
   if(job.expiresAt && (typeof job.expiresAt === 'number' ? job.expiresAt*1000 : Date.parse(job.expiresAt))<Date.now()) return {score:0};
   if (state.profile.workMode !== "Any" && state.profile.workMode && job.workMode !== state.profile.workMode) return {score:0};
-  if(job.workMode !== "Remote" && state.profile.location && !job.location.toLowerCase().includes(state.profile.location.toLowerCase())) return {score:0};
+  const plan=buildSearchPlan(state,{roles:matrix.target_roles,location:state.profile.location || '',country:policy.country || '',experience:policy.searchExperience || 'Any',workMode:state.profile.workMode || 'Any'});
+  plan.country=policy.country || '';
+  if(!rankOpportunity(job,plan).eligible)return {score:0};
   const senior=/\b(senior|staff|principal|lead|director|manager|head|vp)\b/i;
   if(senior.test(job.title) && !matrix.target_roles.some(r=>senior.test(r))) return {score:0};
   const restrictions=job.locationRestrictions || [];
@@ -77,6 +85,8 @@ const decodeRun = row => row && ({id:row.id,jobId:row.job_id,policyId:row.policy
 export async function discoverJobs(task, store, queue, config = {}, fetcher = fetch) {
   const p = await activePolicy(store,task.payload.policyId);
   if (!p) return {status:"cancelled",reason:"Autopilot is paused or the profile/settings changed."};
+  const searchPreferences=await getSearchConfig(store);
+  p.country ||= searchPreferences.country; p.searchExperience=searchPreferences.experience;
   const matrix = await ensureSearchMatrix(store,config,fetcher);
   if (!matrix.target_roles.length) {
     await activity(store,"blocked","Add target roles or supported skills to build a search plan.");
@@ -197,6 +207,8 @@ export async function enrichCompany(task,store,queue,config = {},fetcher = fetch
     if(p.freeContactFallback && candidates.filter(c=>c.email && c.emailStatus==='verified').length<p.contactsPerCompany) {
       candidates.push(...await findPublicContacts(j,company,{config,fetcher,pages:contactPages,allowSearch:p.useSearchAPI && p.allowContactCredits,call:fn=>call(`xray:${company.domain}`,'SerpApi',fn)}));
     }
+    const warm=await prioritizeWarmContacts(candidates,j,store,config,fetcher,p.useSearchAPI);
+    candidates=warm.contacts;warnings.push(...warm.warnings);
     const unique=[...new Map(candidates.filter(c=>c.email && !sampleEmail(c.email)).map(c=>[c.email.toLowerCase(),c])).values()].slice(0,p.contactsPerCompany);
     const contactIds=[];
     for(const candidate of unique) {
@@ -217,7 +229,7 @@ export async function enrichCompany(task,store,queue,config = {},fetcher = fetch
       if(!c) {c={...candidate,jobId:j.id,companyDomain:company.domain,company:j.company};store.state.contacts.push(c);}
       else if(c.isDemo) continue;
       else if(candidate.emailStatus==='verified') Object.assign(c,candidate,{id:c.id});
-      Object.assign(c,{jobId:j.id,companyDomain:company.domain});
+      Object.assign(c,{jobId:j.id,jobTitle:j.title,jobUrl:j.url,companyDomain:company.domain});
       if(c.emailStatus==='verified') contactIds.push(c.id);await store.save();
     }
     if(!contactIds.length) fail("No verified corporate contacts were available. Public or guessed candidates stay in Contacts for verification; no email was queued.",409);
@@ -244,21 +256,20 @@ export async function draftPitches(task,store,queue,config = {},fetcher = fetch)
     const campaignId=`auto-${hash([run.id,p.id,contact.email]).slice(0,40)}`;
     let campaign=store.state.campaigns.find(c=>c.id===campaignId);
     if(!campaign) {
-      let resumeURL="",resumeShare=null;
-      if(p.resumeMode==="link") {
-        const token=randomBytes(32).toString("base64url"), expires=Date.now()+7*86400000;
-        await store.db.prepare("INSERT INTO public_resumes(id,resume_hash,expires) VALUES(?,?,?)").run(hash(token),resumeHash(store.state.resume),expires);
-        resumeURL=`${String(config.PUBLIC_BASE_URL || "http://localhost:3000").replace(/\/$/,"")}/r/${token}`;
-        resumeShare={id:hash(token),expires};
-      }
+      const documents=await ensureJobDocuments(job,store,queue,config,fetcher,p.useAI);
+      if(!documents)return {status:'cancelled'};
+      const resumeURL=p.resumeMode==='link' ? '{{resume_url}}' : '';
+      let resumeShare=null;
       const draft=await draftAutopilotPitch(store.state,job,contact,resumeURL,p,config,fetcher,store);
       await store.refresh();
       if(!await activePolicy(store,p.id)) return {status:"cancelled"};
       campaign={id:campaignId,name:`${job.company} · ${job.title}`,jobId:job.id,contactIds:[contact.id],subject:draft.subject,body:draft.body,
-        attachResume:p.resumeMode==="attachment",resumeShare,accountId:p.accountId || null,deliveries:[],createdAt:now(),status:"Awaiting review",
-        sequence:p.followup ? {enabled:true,afterBusinessDays:4,body:`Hi {{first_name}}, just following up on my note about the ${job.title.replace(/[{}\r\n]/g," ")} opening. I would appreciate any guidance on the hiring process. Thank you.`} : {enabled:false},
+        documentSetId:documents.id,trackResume:p.resumeMode==="link",attachResume:p.resumeMode==="attachment",resumeShare,accountId:p.accountId || null,deliveries:[],createdAt:now(),status:"Awaiting review",
+        sequence:p.followup ? {enabled:true,steps:DEFAULT_FOLLOWUPS} : {enabled:false},
         autopilot:{policyId:p.id,runId:run.id,domain:run.body.domain,method:draft.method},evidence:draft.evidence};
-      store.state.campaigns.push(campaign);await store.save();
+      store.state.campaigns.push(campaign);await ensureCampaignLinks(campaign,store,config);
+      if(campaign.resumeLinks?.[contact.id])campaign.resumeShare={id:campaign.resumeLinks[contact.id].id,expires:campaign.resumeLinks[contact.id].expires};
+      await store.save();
     }
     campaignIds.push(campaign.id);
     if(p.approvalMode==="automatic" && !campaign.deliveries.length) await approvePreparedCampaign(campaign,store,queue,config,p);
@@ -314,7 +325,7 @@ export async function retryHeldLookups(data,store,queue) {
 }
 export async function reviewAutopilot(store) {
   const p=await getPolicy(store),campaigns=store.state.campaigns.filter(c=>c.autopilot?.policyId===p.id && c.status==="Awaiting review" && !c.deliveries.length);
-  const messages=campaigns.map(c=>({campaignId:c.id,jobId:c.jobId,company:c.name,method:c.autopilot.method,sequence:c.sequence,attachment:c.attachResume ? store.state.resume?.name : null,...previewCampaign(c,store.state).messages[0]}));
+  const messages=campaigns.map(c=>({campaignId:c.id,jobId:c.jobId,company:c.name,method:c.autopilot.method,sequence:c.sequence,documentId:c.documentSetId || null,attachment:c.attachResume ? (store.state.jobDocuments || []).find(d=>d.id===c.documentSetId)?.resume.name || store.state.resume?.name : null,...previewCampaign(c,store.state).messages[0]}));
   return {messages,fingerprint:hash(campaigns.map(c=>campaignFingerprint(c,store.state)))};
 }
 export async function approveReview(data,store,queue,config) {

@@ -301,7 +301,7 @@ export function Profile() {
                 .map((link) => (
                   <div className="spread mt" key={link.id}>
                     <span className="view-count">
-                      {link.views} link requests · expires {fmt(link.expires)}
+                      {link.company && <strong>{link.company} · {link.contactName}<br/></strong>}{link.views} link requests · expires {fmt(link.expires)}{link.lastActivityAt && <><br/>Latest activity: {fmt(link.lastActivityAt)}</>}
                     </span>
                     <Button
                       small

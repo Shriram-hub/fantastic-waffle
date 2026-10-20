@@ -1,3 +1,4 @@
+import {stopFollowups} from './sequences.mjs';
 import { id, now, suggestStage, safeUrl } from "../domain.mjs";
 export const INBOX_SYNC_INTERVAL=15*60000;
 // Polling is also a fallback when Gmail Pub/Sub or Graph webhooks are not set up.
@@ -85,7 +86,7 @@ export async function ingestMessage(message, store) {
     if (recipient && replyDomains.has(recipient.companyDomain || recipient.email?.split('@')[1])) {
       d.repliedAt = message.receivedAt;
       d.followupStopped = true;
-      if(d.followupTaskId) await store.db.prepare("UPDATE tasks SET status='cancelled',updated_at=? WHERE id=? AND kind='campaign.followup' AND status='queued'").run(Date.now(),d.followupTaskId);
+      await stopFollowups(d,store);
     }
   }
   if (s.inbox.some(x => x.messageId === message.id)) {
@@ -105,7 +106,7 @@ export async function ingestMessage(message, store) {
     const application=s.applications.find(a=>a.id===result.applicationId),job=s.jobs.find(j=>j.id===application?.jobId);
     if(job) for(const campaign of s.campaigns.filter(c=>c.jobId===job.id || job.companyDomain && c.autopilot?.domain===job.companyDomain)) for(const delivery of campaign.deliveries || []) {
       delivery.followupStopped=true;
-      if(delivery.followupTaskId) await store.db.prepare("UPDATE tasks SET status='cancelled',updated_at=? WHERE id=? AND kind='campaign.followup' AND status='queued'").run(Date.now(),delivery.followupTaskId);
+      await stopFollowups(delivery,store);
     }
   }
   if (!result.proposedStage && !result.deadline) {

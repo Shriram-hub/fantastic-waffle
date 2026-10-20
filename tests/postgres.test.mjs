@@ -1,3 +1,4 @@
+import {ensureJobDocuments,hydrateDocument} from '../server/services/job-documents.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PGlite } from '@electric-sql/pglite';
@@ -37,6 +38,13 @@ test('PostgreSQL runtime persists API records, private files, and worker state a
   assert.ok(reopened.state.profile.master.skills.technical.includes('SQL'));
   assert.equal((await taskQueue(reopened).get(result.task.id)).status,'completed');
   assert.equal((await reopened.db.prepare('SELECT count(*) AS count FROM resume_objects').get()).count,1);
+  const job={id:'pdf-job',company:'Example Company',title:'Analyst',description:'Build SQL models and review financial statements.',url:'https://company.test/jobs/1'};reopened.state.jobs.push(job);await reopened.save();
+  const documents=await ensureJobDocuments(job,reopened,taskQueue(reopened));assert.ok(documents);
+  const durable=await openPostgresStore({},pool),saved=durable.state.jobDocuments.find(d=>d.id===documents.id);
+  assert.equal(saved.resume.base64,undefined);assert.equal(saved.resume.storage.kind,'postgres');
+  assert.ok(Buffer.from((await hydrateDocument(saved,'resume',durable,{})).base64,'base64').subarray(0,5).toString()==='%PDF-');
+  assert.ok(Buffer.from((await hydrateDocument(saved,'coverLetter',durable,{})).base64,'base64').subarray(0,5).toString()==='%PDF-');
+
 });
 test('PostgreSQL rejects stale writes and atomically deduplicates queue tasks',async t=>{
   const db=new PGlite();t.after(()=>db.close());const pool=poolFor(db);

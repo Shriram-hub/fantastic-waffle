@@ -1,3 +1,4 @@
+import {AlertSettings} from './AlertSettings.jsx';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp, api, stages, split, fmt } from '../../shared/workspace.jsx';
 import { Button, Badge, Heading, Empty, Panel, Field, Company, Modal, ConfirmAction, Sample } from '../../shared/ui.jsx';
@@ -20,6 +21,7 @@ export function Connections() {
         subtitle="Explicit connections. Server-side secrets. A clear view of what is configured."
       />
       <SetupChecklist/>
+      <AlertSettings/>
       <section className="notice mb"><strong>Free job discovery is included</strong><p>Greenhouse, Lever, Ashby and public feeds work without API keys. Optional JSEARCH_API_KEY or SERPAPI_API_KEY broadens coverage through Google Jobs. Save these in Render → Environment, then enable Google Jobs in search sources.</p><p>JSearch: {setup.jsearchConfigured ? 'key saved' : 'not configured'} · SerpApi: {setup.serpapiConfigured ? 'key saved' : 'not configured'}. Source health shows whether live provider requests succeed.</p></section>
       <div className="provider-grid">
         <section className="connection-card">

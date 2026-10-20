@@ -62,7 +62,7 @@ export function rankOpportunity(job,plan) {
   }
   if(plan.roles.length && roleFit<.85) {eligible=false;gaps.push(roleFit>=.45 ? 'Adjacent role rather than an exact target title' : 'Title is outside your target roles');}
   if(plan.workMode!=='Any' && job.workMode!==plan.workMode) {eligible=false;gaps.push('Work arrangement differs');}
-  const intern=/\bintern(ship)?\b|trainee|apprentice/i.test(job.title);
+  const intern=/\bintern(ship)?\b|trainee|apprentice/i.test(`${job.title} ${job.type || ''}`);
   if(plan.experience==='Internship' && !intern) {eligible=false;hardBlocked=true;gaps.push('Not an internship');}
   if(plan.experience==='Entry level' && senior.test(job.title)) {eligible=false;hardBlocked=true;gaps.push('Senior position');}
   if(plan.experience==='Senior' && intern) {eligible=false;hardBlocked=true;gaps.push('Internship rather than senior role');}

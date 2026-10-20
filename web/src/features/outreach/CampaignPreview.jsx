@@ -29,7 +29,7 @@ export function CampaignPreview({ id, close }) {
             <p className="small muted">
               {preview.messages.length} initial messages
               {preview.sequence?.enabled
-                ? ` + up to ${preview.messages.length} follow-ups`
+                ? ` + up to ${preview.messages.length*(preview.sequence.steps?.length || 1)} follow-ups`
                 : ""}{" "}
               · {preview.excluded.length} excluded
             </p>
@@ -57,26 +57,12 @@ export function CampaignPreview({ id, close }) {
             <div className="email-body">{m.body}</div>
             {preview.attachment && (
               <div className="attachment">
-                Attachment: {preview.attachment.name}
+                Attachment: {preview.attachment.name}{c?.attachCoverLetter && preview.documents ? ` + ${preview.documents.coverLetter.name}` : ''}
               </div>
             )}
           </div>
-          {preview.sequence?.enabled && (
-            <div className="notice mt">
-              <strong>
-                Approved follow-up after {preview.sequence.afterBusinessDays}{" "}
-                business days
-              </strong>
-              <p className="pre">
-                {preview.followupMessages?.[index]?.body ||
-                  preview.sequence.body}
-              </p>
-              <p className="hint">
-                Stopped by a detected reply, suppression, pause, content
-                changes, or a stale inbox sync.
-              </p>
-            </div>
-          )}
+          {preview.documents && <div className="document-downloads"><strong>Tailored files for {preview.documents.company}</strong><a className="btn small" href={`/api/documents/${preview.documents.id}/resume`}>Review résumé PDF</a><a className="btn small" href={`/api/documents/${preview.documents.id}/coverLetter`}>Review cover letter PDF</a></div>}
+          {preview.sequence?.enabled && <div className="notice mt">{(preview.followupMessages?.[index]?.steps || [{afterBusinessDays:preview.sequence.afterBusinessDays,body:preview.followupMessages?.[index]?.body}]).map((step,i)=><div className="sequence-step" key={i}><strong>Follow-up {i+1} · {step.afterBusinessDays} business days after the first email</strong><p className="pre">{step.body}</p></div>)}<p className="hint">Stopped by a company reply, suppression, pause, changed content, or stale inbox sync.</p></div>}
           {preview.excluded.length > 0 && (
             <p className="hint">
               {preview.excluded
@@ -142,7 +128,8 @@ export function CampaignPreview({ id, close }) {
                     </p>
                   </div>
                   <Badge value={d.status} />
-                  {d.followupStatus && (
+                  {d.followups?.map(step=><Badge key={step.step} value={`Step ${step.step}: ${step.status}`}/>)}
+                  {!d.followups?.length && d.followupStatus && (
                     <Badge value={`Follow-up: ${d.followupStatus}`} />
                   )}
                 </div>

@@ -12,8 +12,8 @@ export function mimeMessage(message, sender, attachment) {
     message.unsubscribeUrl || "",
   ])
     if (/[\r\n]/.test(v)) fail("Mail headers cannot contain newlines.");
-  const boundary = `orbit-${hash([message.to, message.subject, message.body]).slice(0, 20)}`;
-  const messageId = `<orbit-${hash([message.to, message.subject, message.body]).slice(0, 32)}@${sender.split("@")[1]}>`;
+  const boundary = `orbit-${hash([message.to, message.subject, message.body,message.messageKey || ""]).slice(0, 20)}`;
+  const messageId = `<orbit-${hash([message.to, message.subject, message.body,message.messageKey || ""]).slice(0, 32)}@${sender.split("@")[1]}>`;
   const lines = [
     `From: ${sender}`,
     `To: ${message.to}`,
@@ -37,14 +37,14 @@ export function mimeMessage(message, sender, attachment) {
       .match(/.{1,76}/g)
       .join("\r\n"),
   ];
-  if (attachment)
+  for(const file of (Array.isArray(attachment) ? attachment : attachment ? [attachment] : []))
     lines.push(
       `--${boundary}`,
       "Content-Type: application/octet-stream",
-      `Content-Disposition: attachment; filename="${attachment.name.replace(/["\r\n/\\]/g, "_")}"`,
+      `Content-Disposition: attachment; filename="${file.name.replace(/["\r\n/\\]/g, "_")}"`,
       "Content-Transfer-Encoding: base64",
       "",
-      attachment.base64.match(/.{1,76}/g).join("\r\n"),
+      file.base64.match(/.{1,76}/g).join("\r\n"),
     );
   lines.push(`--${boundary}--`, "");
   return {

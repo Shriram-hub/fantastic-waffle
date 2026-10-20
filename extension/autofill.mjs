@@ -56,11 +56,12 @@ export async function fillApplication(answers,resume,options={}) {
     if(!visible(el) || ['hidden','password','submit','button','reset','image'].includes(el.type))return;
     const name=label(el),identityText=identity(el);
     if(el.type==='file') {
-      if(!resume || !/resume|résumé|\bcv\b|curriculum/i.test(identityText) || el.files?.length)return;
-      const mime=/\.pdf$/i.test(resume.name) ? 'application/pdf' : /\.docx$/i.test(resume.name) ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'text/plain';
-      const accept=(el.accept || '').toLowerCase(),extension=`.${resume.name.split('.').at(-1).toLowerCase()}`;
-      if(accept && !accept.split(',').some(t=>[extension,mime,'application/*','*/*'].includes(t.trim()))){missing.push(`${name}: upload a résumé in an accepted format`);return;}
-      try {const w=el.ownerDocument.defaultView,bytes=Uint8Array.from(atob(resume.base64),c=>c.charCodeAt(0)),dt=new w.DataTransfer();dt.items.add(new w.File([bytes],resume.name,{type:mime}));el.files=dt.files;emit(el);filled++;}catch {missing.push('Attach your résumé manually.');}
+      const attachment=/cover[ _-]?letter|motivation[ _-]?letter|covering letter/i.test(identityText) ? options.coverLetter : /resume|résumé|\bcv\b|curriculum/i.test(identityText) ? resume : null;
+      if(!attachment || el.files?.length)return;
+      const mime=/\.pdf$/i.test(attachment.name) ? 'application/pdf' : /\.docx$/i.test(attachment.name) ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'text/plain';
+      const accept=(el.accept || '').toLowerCase(),extension=`.${attachment.name.split('.').at(-1).toLowerCase()}`;
+      if(accept && !accept.split(',').some(t=>[extension,mime,'application/*','*/*'].includes(t.trim()))){missing.push(`${name}: upload a document in an accepted format`);return;}
+      try {const w=el.ownerDocument.defaultView,bytes=Uint8Array.from(atob(attachment.base64),c=>c.charCodeAt(0)),dt=new w.DataTransfer();dt.items.add(new w.File([bytes],attachment.name,{type:mime}));el.files=dt.files;emit(el);filled++;}catch {missing.push(`Attach ${/cover/i.test(identityText) ? 'your cover letter' : 'your résumé'} manually.`);}
       return;
     }
     if(el.type==='radio') {
@@ -119,7 +120,7 @@ export async function fillApplication(answers,resume,options={}) {
     if(options.addRepeating && entries.length)for(let attempt=0;current.length<entries.length && attempt<30;attempt++) {
       const last=current.at(-1);let button=last ? null : deep('button,[role="button"]').find(el=>visible(el) && /add/i.test(el.textContent || '') && new RegExp(kind==='education' ? 'education|school' : 'work.*experience|employment','i').test(`${el.textContent} ${el.getAttribute('aria-label') || ''}`));
       for(let scope=last?.parentElement;scope && !button;scope=scope.parentElement)button=[...scope.querySelectorAll('button,[role="button"]')].find(el=>visible(el) && /add/i.test(`${el.textContent} ${el.getAttribute('aria-label') || ''}`) && (new RegExp(kind==='education' ? 'education|school|academic' : 'work|employment|experience','i').test(`${el.textContent} ${el.getAttribute('aria-label') || ''}`) || /^(\+\s*)?add (another|more)$/i.test(el.textContent.trim()) && ![...scope.querySelectorAll('fieldset,section')].some(e=>groupKind(e) && groupKind(e)!==kind)));
-      if(!button)break;const before=current.length;button.click();const increased=await waitFor(()=>groups(kind).length>before);if(!increased)break;current=groups(kind);added++;
+      if(!button || button.type==='submit')break;const before=current.length;button.click();const increased=await waitFor(()=>groups(kind).length>before);if(!increased)break;current=groups(kind);added++;
     }
     for(const [index,container] of current.entries())for(const el of fields(container)){processed.add(el);if(entries[index]){const local=rowAnswers(kind,entries[index]);let token=identity(el);for(let parent=el.parentElement,depth=0;parent && depth<3;parent=parent.parentElement,depth++)token+=` ${parent.id} ${parent.getAttribute('data-automation-id') || ''} ${parent.getAttribute('aria-label') || ''}`;token=key(token);for(const [prefix,alternate] of [['start','from'],['end','to']]){const direction=`(?:${prefix}|${alternate})`;const part=new RegExp(`${direction}.*month`).test(token) ? 'month' : new RegExp(`${direction}.*year`).test(token) ? 'year' : new RegExp(`${direction}date`).test(token) ? 'date' : '';if(part && local[`${prefix}${part}`]!==undefined)local[key(label(el))]=local[`${prefix}${part}`];}await fill(el,local);}else if(el.required)missing.push(`${kind} ${index+1}: add this entry to your candidate vault`);}
     if(entries.length>current.length)missing.push(`${entries.length-current.length} ${kind==='education' ? 'education' : 'work experience'} entries need additional form sections. Use Auto-add entries or review manually.`);

@@ -23,6 +23,7 @@ form.addEventListener("submit", async (event) => {
       base: u.origin,
       token: data.get("token"),
     });
+    await chrome.runtime.sendMessage({type:'register-workspace'});
     status.textContent =
       "Paired. Add jobs to the queue, then open the next one.";
   } catch (error) {
@@ -78,3 +79,5 @@ for(const [selector,type,options] of [['#current','fill-current',{}],['#history'
   }catch(error){status.textContent=error.message;}finally{event.target.disabled=false;}
 });
 document.querySelector('#suggest').addEventListener('click',async event=>{event.target.disabled=true;try{const result=await chrome.runtime.sendMessage({type:'suggest-answers'});status.textContent=result.error || result.message;}catch(error){status.textContent=error.message;}finally{event.target.disabled=false;}});
+
+for(const [selector,type] of [['#pause-batch','batch-pause'],['#resume-batch','batch-resume'],['#skip-batch','batch-skip']])document.querySelector(selector).addEventListener('click',async()=>{const r=await chrome.runtime.sendMessage({type});status.textContent=r.error || r.message;});

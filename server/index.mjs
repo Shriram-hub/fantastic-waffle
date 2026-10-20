@@ -1,3 +1,6 @@
+import {resumeLinkSummaries} from './services/engagement.mjs';
+import {inboxActions} from './services/inbox-actions.mjs';
+import {ensureJobDocuments} from './services/job-documents.mjs';
 import { taskEvents } from "./events.mjs";
 import { ensureSearchMatrix } from "./services/autopilot.mjs";
 import { profileScope } from "./services/autopilot-policy.mjs";
@@ -36,7 +39,7 @@ function publicState(s,preferences) {
   const {
     previews,
     apolloResults,
-    career,contactDiscoveryRuns,
+    career,contactDiscoveryRuns,jobDocuments,resumeTracking,alertConfig,
     ...rest
   } = s;
   return {
@@ -118,7 +121,7 @@ export function createApp({
     const setup=setupReadiness(store,config);
     return {data:publicState(store.state,preferences),search,autopilot,accounts,setup,
       integrations:{remotive:true,greenhouse:true,lever:true,ashby:true,arbeitnow:true,himalayas:true,apollo:setup.apolloConfigured,hunter:setup.hunterConfigured,googleOAuth:setup.googleConfigured,microsoftOAuth:setup.microsoftConfigured,gmail:accounts.some(a=>a.provider==='google'),outlook:accounts.some(a=>a.provider==='microsoft'),resend:setup.resendConfigured,liveSendEnabled:setup.liveSendEnabled,ai:setup.aiConfigured,embeddings:!!(config.LLM_API_KEY && config.EMBEDDING_MODEL),adzuna:!!(config.ADZUNA_APP_ID && config.ADZUNA_APP_KEY),queueDriver:config.REDIS_URL ? 'BullMQ + Redis' : store.kind==='postgres' ? 'PostgreSQL' : 'SQLite',autoApply:'assisted'},
-      vault:{versions:versions.map(v=>({id:v.id,kind:v.kind,title:JSON.parse(v.body).title,createdAt:v.created_at})),links},
+      vault:{versions:versions.map(v=>({id:v.id,kind:v.kind,title:JSON.parse(v.body).title,createdAt:v.created_at})),links:resumeLinkSummaries(links,store.state)},
       tasks:{tasks,applications:applications.map(a=>({...a,details:JSON.parse(a.body)}))}};
   }
   const server = createServer((req, res) => ready.then(() => store.run(async () => {
@@ -134,8 +137,14 @@ export function createApp({
         const supplied=Buffer.from(String(req.headers['x-orbit-scheduler'] || '')),expected=Buffer.from(config.AUTOPILOT_CRON_SECRET || '');
         if(!expected.length || supplied.length!==expected.length || !timingSafeEqual(supplied,expected))fail('Invalid scheduler credential.',401);
         const result=await bootstrap(),contacts=await contactDiscoveryStatus(store,config);
+        let documentCheck;
+        if(publicUrl.searchParams.get('checkDocuments')==='true') {
+          const job=store.state.jobs.find(j=>!j.isDemo && !j.archived && !j.requiresSourceReview && j.discoveryMatch?.recommendable) || store.state.jobs.find(j=>!j.isDemo && !j.archived && !j.requiresSourceReview);
+          const document=job ? await ensureJobDocuments(job,store,upgrade.queue,config,fetcher,false) : null;
+          documentCheck=document ? {ok:true,documentId:document.id,resumeBytes:document.resume.size,coverLetterBytes:document.coverLetter.size,coverLetterWords:document.wordCount,storage:document.resume.storage?.kind || 'memory'} : {ok:false,reason:'No active role or the source profile changed.'};
+        }
         return json(res,200,{ok:true,indexed:result.search.indexed,matches:result.search.matches,storage:store.kind || 'sqlite',googleConfigured:result.setup.googleConfigured,
-          contactDiscovery:{hunterConfigured:contacts.hunterConfigured,dailyLimit:contacts.dailyLimit,usedToday:contacts.usedToday},career:{available:true,openTasks:result.data.careerSummary.stats.openTasks},mail:{connectedAccounts:result.accounts.length,liveSending:result.setup.liveSendEnabled},providerChecks:publicUrl.searchParams.get('checkContacts')==='true' ? await checkContactProviders(store,config,fetcher) : undefined});
+          contactDiscovery:{hunterConfigured:contacts.hunterConfigured,dailyLimit:contacts.dailyLimit,usedToday:contacts.usedToday},career:{available:true,openTasks:result.data.careerSummary.stats.openTasks},features:{regionalBoards:true,documents:true,sequenceSteps:3,copilotVersion:"0.7.0",phoneAlerts:true,automaticInterviewPrep:true},documentCheck,mail:{connectedAccounts:result.accounts.length,liveSending:result.setup.liveSendEnabled},providerChecks:publicUrl.searchParams.get('checkContacts')==='true' ? await checkContactProviders(store,config,fetcher) : undefined});
       }
       if(await auth.handle(req,res,publicUrl,{json,bodyJSON}))return;
       if (await upgrade.publicRoute(req, res, publicUrl, {
@@ -525,6 +534,8 @@ export function createApp({
               source: `Reviewed email: ${item.subject}`
             });
             item.status = "Accepted";
+            item.messageId ||= `manual-${item.id}`;item.receivedAt ||= item.createdAt;
+            await inboxActions(item,store,upgrade.queue,config);
           } else item.status = "Dismissed";
           await store.save();
           return json(res, 200, {

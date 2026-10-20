@@ -4,13 +4,16 @@ import {careerData,careerStatus,saveCareerTask,saveCareerStory,prepFingerprint,p
 export function careerRoutes(store,queue,config) {
   return async(req,res,url,{json,bodyJSON})=>{
     const path=url.pathname;if(!path.startsWith('/api/career'))return false;
-    if(path==='/api/career' && req.method==='GET'){json(res,200,{...careerStatus(store),aiConfigured:!!(config.LLM_API_KEY && config.LLM_MODEL)});return true;}
+    if(path==='/api/career' && req.method==='GET'){json(res,200,{...careerStatus(store),autoInterviewPrep:store.state.settings.autoInterviewPrep!==false,autoInterviewPrepAI:store.state.settings.autoInterviewPrepAI===true,aiConfigured:!!(config.LLM_API_KEY && config.LLM_MODEL)});return true;}
     if(path==='/api/career/calendar.ics' && req.method==='GET') {res.writeHead(200,{'Content-Type':'text/calendar; charset=utf-8','Content-Disposition':'attachment; filename="orbit-career-planner.ics"'});res.end(plannerCalendar(store));return true;}
     if(!['POST','PATCH'].includes(req.method))fail('Career endpoint not found.',404);
     const data=await bodyJSON(req);
     if(path==='/api/career/preferences' && req.method==='PATCH') {
-      if(!Number.isInteger(data.weeklyGoal)||data.weeklyGoal<1||data.weeklyGoal>100)fail('Choose a weekly target between 1 and 100 applications.');
-      store.state.career={...careerData(store),weeklyGoal:data.weeklyGoal,updatedAt:now()};await store.save();json(res,200,{ok:true});return true;
+      if(data.weeklyGoal!==undefined && (!Number.isInteger(data.weeklyGoal)||data.weeklyGoal<1||data.weeklyGoal>100))fail('Choose a weekly target between 1 and 100 applications.');
+      for(const key of ['autoInterviewPrep','autoInterviewPrepAI'])if(data[key]!==undefined && typeof data[key]!=='boolean')fail('Choose valid interview preparation preferences.');
+      if(data.autoInterviewPrepAI===true && (data.confirmed!==true || !config.LLM_API_KEY))fail('Approve using your saved evidence with AI for automatic interview kits.');
+      for(const key of ['autoInterviewPrep','autoInterviewPrepAI'])if(data[key]!==undefined)store.state.settings[key]=data[key];
+      store.state.career={...careerData(store),weeklyGoal:data.weeklyGoal ?? careerData(store).weeklyGoal,updatedAt:now()};await store.save();json(res,200,{ok:true});return true;
     }
     const task=path.match(/^\/api\/career\/tasks(?:\/([^/]+))?$/);
     if(task && req.method===(task[1] ? 'PATCH' : 'POST')){json(res,task[1] ? 200 : 201,{task:await saveCareerTask(data,store,task[1])});return true;}

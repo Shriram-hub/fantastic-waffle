@@ -10,6 +10,9 @@ import { verifyWorkEmail } from "./providers/contacts/verification.mjs";
 import {discoverCompanyTask} from './services/contact-discovery.mjs';
 import {providerCall} from './services/provider-budget.mjs';
 import {getPolicy} from './services/autopilot-policy.mjs';
+import {buildJobDocuments} from './services/job-documents.mjs';
+import {deliverAlert} from './services/notifications.mjs';
+import {inboxActions} from './services/inbox-actions.mjs';
 import {buildInterviewPrep} from './services/career.mjs';
 import { extractStructuredResume, extractCandidateProfile, generateIcebreaker, classifyInboxAI, embedTexts, cosineSimilarity, factPreservingTailor } from "./services/ai.mjs";
 import {candidateFromText,saveCandidate} from './services/candidate-profile.mjs';
@@ -45,6 +48,8 @@ export function handlers(store, queue, config = {}, fetcher = fetch, dependencie
     };
   }
   return {
+    async 'alert.send'(task){return deliverAlert(task,store,config,fetcher);},
+    async 'documents.build'(task){return buildJobDocuments(task,store,queue,config,fetcher);},
     async 'career.prep'(task){return buildInterviewPrep(task,store,queue,config,fetcher);},
     async 'contacts.discover'(task){return discoverCompanyTask(task,store,queue,config,fetcher,dependencies);},
     async 'profile.import'(task) {
@@ -238,6 +243,7 @@ export function handlers(store, queue, config = {}, fetcher = fetch, dependencie
       const m = JSON.parse(row.body);
       if (shouldClassify(m, store.state) && store.state.settings.inboxUseAI && config.LLM_API_KEY && config.LLM_MODEL) m.aiClassification = await classifyInboxAI(m, config, fetcher, store);
       const result = await ingestMessage(m, store);
+      await inboxActions(result.item || store.state.inbox.find(i=>i.messageId===m.id),store,queue,config);
       m.classifiedAt = now();
       await store.db.prepare("UPDATE inbox_messages SET body=? WHERE id=?").run(JSON.stringify(m), m.id);
       return {
@@ -266,6 +272,7 @@ export function handlers(store, queue, config = {}, fetcher = fetch, dependencie
         const m = JSON.parse(row.body);
         if (!m.classifiedAt) {
           await ingestMessage(m, store);
+          await inboxActions(store.state.inbox.find(i=>i.messageId===m.id),store,queue,config);
           m.classifiedAt = now();
           await store.db.prepare("UPDATE inbox_messages SET body=? WHERE id=?").run(JSON.stringify(m), m.id);
         }
@@ -292,7 +299,7 @@ export async function runOne(store, queue, registry, wantedId) {
       const c = store.state.campaigns.find(c => c.id === task.payload.campaignId),
         d = c?.deliveries.find(d => d.taskId === (task.payload.parentTaskId || task.id));
       if (d) {
-        if (task.kind === "campaign.followup") d.followupStatus = "cancelled";else d.status = "cancelled";
+        if (task.kind === "campaign.followup") {d.followupStatus = "cancelled";const step=d.followups?.find(s=>s.step===(task.payload.sequenceStep || 1));if(step)step.status="cancelled";}else d.status = "cancelled";
         d.error = result.reason || "Cancelled before sending.";
         c.status = "Needs attention";
         await store.save();
@@ -310,7 +317,7 @@ export async function runOne(store, queue, registry, wantedId) {
           const c = store.state.campaigns.find(c => c.id === task.payload.campaignId),
             d = c?.deliveries.find(d => d.taskId === (task.payload.parentTaskId || task.id));
           if (d) {
-            if (task.kind === "campaign.followup") d.followupStatus = "unknown";else d.status = "unknown";
+            if (task.kind === "campaign.followup") {d.followupStatus = "unknown";const step=d.followups?.find(s=>s.step===(task.payload.sequenceStep || 1));if(step)step.status="unknown";}else d.status = "unknown";
             d.error = "Worker interrupted this outbound task. Reconcile with the provider.";
             c.status = "Needs attention";
             await store.save();

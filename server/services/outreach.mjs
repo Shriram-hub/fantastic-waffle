@@ -1,3 +1,4 @@
+import {hydrateDocument} from './job-documents.mjs';
 import { unsubscribeLink } from "./unsubscribe.mjs";
 import { hydrateResume } from "./resume-storage.mjs";
 import { randomInt } from "node:crypto";
@@ -5,6 +6,7 @@ import { fail, now, hash, renderTemplate, previewCampaign, campaignFingerprint, 
 import { accessAccount } from "../providers/mail/oauth.mjs";
 import { sendNative } from "../providers/mail/native.mjs";
 import { sendResend } from "../providers/mail/resend.mjs";
+import {sequenceSteps} from './sequences.mjs';
 import { getPolicy, policyAllows, activity } from "./autopilot-policy.mjs";
 export function businessSlot(earliest, timeZone = "UTC") {
   let time = Math.ceil(earliest / 60000) * 60000;
@@ -127,6 +129,10 @@ export async function deliverTask(task, store, queue, config, fetcher = fetch) {
   if (c?.autopilot && !await policyAllows(store,c)) return {status:"cancelled",reason:"Autopilot was paused, or its settings/profile changed."};
   if (c?.autopilot && (!s.jobs.some(j=>j.id===c.jobId && !j.archived))) return {status:"cancelled",reason:"This discovered job is no longer active."};
   const policy = c?.autopilot ? await getPolicy(store) : null;
+  if(c?.trackResume) {
+    const link=c.resumeLinks?.[contact?.id],record=link && await store.db.prepare('SELECT revoked,expires FROM public_resumes WHERE id=?').get(link.id);
+    if(!record || record.revoked || record.expires<Date.now())return {status:'cancelled',reason:'The recipient résumé link expired or was revoked. Review a fresh draft.'};
+  }
   if (c?.resumeShare) {
     const share=await store.db.prepare("SELECT revoked,expires FROM public_resumes WHERE id=?").get(c.resumeShare.id);
     if (!share || share.revoked || share.expires<Date.now()) return {status:"cancelled",reason:"The résumé link expired or was revoked. Review a fresh draft."};
@@ -140,6 +146,11 @@ export async function deliverTask(task, store, queue, config, fetcher = fetch) {
     status: "cancelled"
   };
   const followup = task.kind === "campaign.followup";
+  const stepNumber=followup ? Number(task.payload.sequenceStep || 1) : 0;
+  const approvedStep=sequenceSteps(c.sequence)[stepNumber-1];
+  const stepRecord=followup ? (d.followups ||= []).find(s=>s.step===stepNumber) || {step:stepNumber,taskId:task.id} : d;
+  if(followup && !d.followups.includes(stepRecord))d.followups.push(stepRecord);
+  if(followup && (!approvedStep || ['accepted','unknown','sending'].includes(stepRecord.status) || stepNumber>1 && !d.followups.some(s=>s.step===stepNumber-1 && s.status==='accepted')))return {status:'cancelled',reason:'The sequence step changed or its preceding step was not accepted.'};
   if (followup && (d.repliedAt || d.followupStopped || !c.sequence?.enabled)) return {
     status: "cancelled",
     reason: "A reply, pause, or suppression stopped the sequence."
@@ -168,11 +179,16 @@ export async function deliverTask(task, store, queue, config, fetcher = fetch) {
     };
   }
   if (followup) {
-    m.body = `${renderTemplate(c.sequence.body, contact, s.profile)}\n\n${s.profile.name}\n${s.profile.email}\nReply with “unsubscribe” to stop receiving messages.`;
+    m.body = `${renderTemplate(approvedStep.body, contact, {...s.profile,resumeUrl:c.resumeLinks?.[contact.id]?.url || s.profile.resumeUrl})}\n\n${s.profile.name}\n${s.profile.email}\nReply with “unsubscribe” to stop receiving messages.`;
     m.threadId = d.threadId;
-    m.inReplyTo = d.internetMessageId;
-    m.replyToProviderId = d.providerId;
+    const previous=stepNumber>1 ? d.followups.find(s=>s.step===stepNumber-1) : d;
+    m.inReplyTo = previous?.internetMessageId || d.internetMessageId;
+    m.references=[d.internetMessageId,...d.followups.filter(s=>s.step<stepNumber).map(s=>s.internetMessageId)].filter(Boolean).join(' ');
+    m.replyToProviderId = previous?.providerId || d.providerId;
   }
+  const documents=(s.jobDocuments || []).find(item=>item.id===c.documentSetId);
+  if(c.documentSetId && !documents)fail('The approved tailored documents are unavailable. Review a new draft.',409);
+  const attachments=followup ? [] : [c.attachResume ? documents ? await hydrateDocument(documents,'resume',store,config) : await hydrateResume(s.resume,store,config) : null,c.attachCoverLetter && documents ? await hydrateDocument(documents,'coverLetter',store,config) : null].filter(Boolean);
   const currentTime = Date.now(),
     zone = policy?.timeZone || s.settings.sendTimeZone || "UTC",
     slot = businessSlot(currentTime, zone);
@@ -194,7 +210,7 @@ export async function deliverTask(task, store, queue, config, fetcher = fetch) {
         runAt: businessSlot(used >= limit ? currentTime + 86400000 : lease.not_before, zone)
       };
     }
-    const claimed = await store.db.prepare("INSERT INTO outreach_send_log(user_id,contact_email,campaign_id,sequence_step,task_id,status,updated_at) VALUES('local',?,?,?,?,'sending',?) ON CONFLICT(user_id,contact_email,campaign_id,sequence_step) DO UPDATE SET status='sending',updated_at=excluded.updated_at WHERE outreach_send_log.status='queued' AND outreach_send_log.task_id=excluded.task_id").run(contact.email.toLowerCase(),c.id,followup ? 1 : 0,task.id,Date.now());
+    const claimed = await store.db.prepare("INSERT INTO outreach_send_log(user_id,contact_email,campaign_id,sequence_step,task_id,status,updated_at) VALUES('local',?,?,?,?,'sending',?) ON CONFLICT(user_id,contact_email,campaign_id,sequence_step) DO UPDATE SET status='sending',updated_at=excluded.updated_at WHERE outreach_send_log.status='queued' AND outreach_send_log.task_id=excluded.task_id").run(contact.email.toLowerCase(),c.id,stepNumber,task.id,Date.now());
     if (!claimed.changes) {
       await store.db.exec("COMMIT");
       return {status:"cancelled",reason:"This campaign step was already attempted for this address; reconcile its send log."};
@@ -206,21 +222,24 @@ export async function deliverTask(task, store, queue, config, fetcher = fetch) {
     await store.db.exec("ROLLBACK");
     throw error;
   }
+  stepRecord.status='sending';
   if (followup) d.followupStatus = "sending";else d.status = "sending";
   d.at = now();
   await store.save();
+  m.messageKey=task.id;
   m.unsubscribeUrl = await unsubscribeLink(contact.email,store,config);
   m.body += `\n\nUnsubscribe: ${m.unsubscribeUrl}`;
   await queue.log(task.id, "Sending the approved message.");
-  const result = c.accountId ? await sendNative(m, c.accountId, store, config, c.attachResume && !followup ? await hydrateResume(s.resume, store, config) : null, fetcher, async metadata => {
-    Object.assign(d, metadata);
+  const result = c.accountId ? await sendNative(m, c.accountId, store, config, attachments, fetcher, async metadata => {
+    Object.assign(stepRecord, metadata);
     await store.save();
   }) : await sendResend({
     ...m,
     replyTo: s.profile.email
-  }, config, c.attachResume ? await hydrateResume(s.resume, store, config) : null, d.key, fetcher);
+  }, config, attachments, followup ? `${d.key}-step-${stepNumber}` : d.key, fetcher);
   await store.db.prepare("UPDATE outreach_send_log SET status=?,provider_id=?,updated_at=? WHERE task_id=?").run(result.status,result.providerId || null,Date.now(),task.id);
   await store.db.prepare('UPDATE outreach_company_budget SET status=?,updated_at=? WHERE task_id=?').run(result.status,Date.now(),task.id);
+  Object.assign(stepRecord,result,{at:now()});
   if (followup) d.followupStatus = result.status;else Object.assign(d, result);
   d.at = now();
   const latest = [...new Map(c.deliveries.map(x => [x.contactId, x])).values()];
@@ -228,17 +247,18 @@ export async function deliverTask(task, store, queue, config, fetcher = fetch) {
   await store.save();
   if(c.autopilot) await activity(store,"delivery",`${c.name}: ${followup ? "follow-up" : "pitch"} ${result.status === "accepted" ? "accepted by the mail provider" : result.status}.`,1);
   if (result.status === "accepted" && !followup && c.sequence?.enabled && c.accountId) {
-    const runAt = businessSlot(afterBusinessDays(Date.now(), c.sequence.afterBusinessDays || 4), policy?.timeZone || s.settings.sendTimeZone || "UTC");
-    const next = await queue.enqueue("campaign.followup", {
-      ...task.payload,
-      parentTaskId: task.id
-    }, {
-      runAt,
-      dedupeKey: `followup-${task.id}`,
-      maxAttempts: 1
-    });
-    d.followupTaskId = next.id;
-    await store.save();
+    await store.db.exec('BEGIN IMMEDIATE');
+    try {
+      d.followups=[];d.acceptedAt=now();
+      for(const [index,step] of sequenceSteps(c.sequence).entries()) {
+        const runAt=businessSlot(afterBusinessDays(Date.now(),step.afterBusinessDays),zone),sequenceStep=index+1;
+        const next=await queue.enqueue('campaign.followup',{...task.payload,parentTaskId:task.id,sequenceStep},{runAt,dedupeKey:`followup-${task.id}-${sequenceStep}`,maxAttempts:1});
+        await store.db.prepare("INSERT OR IGNORE INTO outreach_send_log(user_id,contact_email,campaign_id,sequence_step,task_id,status,updated_at) VALUES('local',?,?,?,?,'queued',?)").run(contact.email.toLowerCase(),c.id,sequenceStep,next.id,Date.now());
+        d.followups.push({step:sequenceStep,taskId:next.id,status:'queued',scheduledAt:new Date(runAt).toISOString()});
+      }
+      d.followupTaskId=d.followups[0]?.taskId;
+      await store.save(true);await store.db.exec('COMMIT');
+    } catch(error){await store.db.exec('ROLLBACK');throw error;}
   }
   return result;
 }

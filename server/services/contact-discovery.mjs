@@ -1,16 +1,17 @@
 import {hash,id,now,fail,text,sampleEmail} from '../domain.mjs';
 import {resolveCompany,companyDomain} from '../providers/contacts/company.mjs';
-import {searchHunter,searchHunterCompany} from '../providers/contacts/hunter.mjs';
+import {searchHunter,searchHunterCompany,findHunterEmail} from '../providers/contacts/hunter.mjs';
 import {findPublicContacts} from '../providers/contacts/free-xray.mjs';
 import {verifyWorkEmail,checkEmailDomain} from '../providers/contacts/verification.mjs';
 import {getPolicy,activity} from './autopilot-policy.mjs';
 import {providerCall} from './provider-budget.mjs';
 import {buildSearchPlan,rankOpportunity} from './search-plan.mjs';
 import {getSearchConfig} from './discovery.mjs';
+import {prioritizeWarmContacts} from './warm-connections.mjs';
 
 const week=()=>Math.floor(Date.now()/(7*86400000));
 const retryFor=error=>error.status===429 ? Date.UTC(new Date().getUTCFullYear(),new Date().getUTCMonth(),new Date().getUTCDate()+1,0,5) : null;
-export async function findCompanyContacts(job,company,{store,config={},fetcher=fetch,pages,lookupMx,allowCredits=false,limit=3,dailyLimit=20,seedContacts=[],hunterSearched=false}={}) {
+export async function findCompanyContacts(job,company,{store,config={},fetcher=fetch,pages,lookupMx,allowCredits=false,allowWarmSearch=false,limit=3,dailyLimit=20,seedContacts=[],hunterSearched=false}={}) {
   const warnings=[],existing=store.state.contacts.filter(c=>!c.isDemo && !c.suppressed && c.emailStatus==='verified' && c.email?.split('@')[1]===company.domain);
   let candidates=[...existing,...seedContacts],retryAt=null;
   const call=(key,fn)=>providerCall(store,`contacts-v2:${week()}:${key}`,'Hunter',dailyLimit,fn);
@@ -26,8 +27,18 @@ export async function findCompanyContacts(job,company,{store,config={},fetcher=f
   for(const c of candidates)if(c.email && !sampleEmail(c.email) && c.email.split('@')[1]?.toLowerCase()===company.domain) {
     const old=byEmail.get(c.email.toLowerCase());if(!old || old.emailStatus!=='verified' && c.emailStatus==='verified')byEmail.set(c.email.toLowerCase(),c);
   }
-  const results=[...byEmail.values()].sort((a,b)=>Number(b.emailStatus==='verified')-Number(a.emailStatus==='verified')).slice(0,limit);
+  const warm=await prioritizeWarmContacts([...byEmail.values()],job,store,config,fetcher,allowWarmSearch);
+  warnings.push(...warm.warnings);
+  const prospects=[];
+  for(const person of warm.people)if(!warm.contacts.some(c=>c.name.toLowerCase()===person.name.toLowerCase())) {
+    let found=null;
+    if(allowCredits && config.HUNTER_API_KEY)try{found=await call(`finder:${company.domain}:${hash(person.name.toLowerCase())}`,()=>findHunterEmail(person,company.domain,config.HUNTER_API_KEY,fetcher));}catch(error){retryAt=Math.max(retryAt || 0,retryFor(error) || 0) || null;warnings.push(error.status ? error.message : 'Warm contact email lookup is unavailable.');}
+    prospects.push({id:id(),company:job.company,title:'Shared-background professional',companyDomain:company.domain,email:'',emailStatus:'unverified',source:'Public alumni / past-company search',isDemo:false,suppressed:false,createdAt:now(),...person,...found});
+    if(prospects.length>=limit)break;
+  }
+  const results=[...warm.contacts,...prospects].sort((a,b)=>Number(b.emailStatus==='verified')-Number(a.emailStatus==='verified') || Number((b.warmSignals || []).some(s=>s.status==='source-supported'))-Number((a.warmSignals || []).some(s=>s.status==='source-supported'))).slice(0,limit);
   for(const candidate of results) {
+    if(!candidate.email)continue;
     const domainCheck=await checkEmailDomain(candidate.email,lookupMx);
     if(domainCheck)Object.assign(candidate,domainCheck);
     else if(candidate.emailStatus==='unverified' && allowCredits && config.HUNTER_API_KEY) {
@@ -60,13 +71,15 @@ export async function startContactDiscovery(data,store,queue,config={}) {
     for(const {job} of jobs) {const key=job.company.trim().toLowerCase();if(!seen.has(key)){seen.add(key);targets.push({company:job.company,jobId:job.id});}}
   }
   targets.splice(companyLimit);if(!targets.length)fail('Add company domains or save target roles and wait for matching jobs first.');
-  const signature=hash({targets,limit,allowCredits});
+  const allowWarmSearch=data.allowWarmSearch===true;
+  if(allowWarmSearch && !config.SERPAPI_API_KEY)fail('Configure SerpApi for public warm-connection search.',503);
+  const signature=hash({targets,limit,allowCredits,allowWarmSearch});
   const previous=(await contactDiscoveryStatus(store,config)).runs;
   const inProgress=r=>r.targets.some(t=>['queued','running'].includes(t.status));
   const active=previous.find(r=>r.signature===signature && inProgress(r));
   if(active)return {run:active,existing:true};
   if(previous.filter(inProgress).length>=3)fail('Three contact searches are already active. Let one finish or cancel its queued tasks in Automation.',409);
-  const run={id:id(),signature,createdAt:now(),contactsPerCompany:limit,allowCredits,dailyLimit:Math.min(100,Math.max(1,Number(config.CONTACT_API_DAILY_LIMIT) || policy.maxContactLookupsPerDay)),targets:targets.map(t=>({...t,id:id(),status:'queued',added:0,verified:0,warnings:[]}))};
+  const run={id:id(),signature,createdAt:now(),contactsPerCompany:limit,allowCredits,allowWarmSearch,dailyLimit:Math.min(100,Math.max(1,Number(config.CONTACT_API_DAILY_LIMIT) || policy.maxContactLookupsPerDay)),targets:targets.map(t=>({...t,id:id(),status:'queued',added:0,verified:0,warnings:[]}))};
   await store.db.exec('BEGIN IMMEDIATE');
   try {
     const activeRuns=previous.filter(inProgress);
@@ -91,15 +104,16 @@ export async function discoverCompanyTask(task,store,queue,config={},fetcher=fet
     if(lookupRetryAt){Object.assign(target,{status:'queued',retryAt:lookupRetryAt,warnings:[lookupWarning]});await store.save();return {status:'deferred',runAt:lookupRetryAt};}
     target.status='needs-domain';target.warnings=[lookupWarning,'The company domain could not be resolved confidently. Search its corporate domain directly.'].filter(Boolean);await store.save();return {status:'Needs domain'};
   }
-  const found=await findCompanyContacts(job,company,{store,config,fetcher,pages:contactPages,lookupMx,allowCredits:run.allowCredits,limit:run.contactsPerCompany,dailyLimit:run.dailyLimit,seedContacts:hunterResult?.contacts || [],hunterSearched:!!hunterResult});
+  const found=await findCompanyContacts(job,company,{store,config,fetcher,pages:contactPages,lookupMx,allowCredits:run.allowCredits,allowWarmSearch:run.allowWarmSearch,limit:run.contactsPerCompany,dailyLimit:run.dailyLimit,seedContacts:hunterResult?.contacts || [],hunterSearched:!!hunterResult});
   await store.refresh();({run,target}=get());if(!run || !target || !['queued','running'].includes(target.status))return {status:'cancelled'};
   await store.db.prepare('INSERT INTO companies(domain,name,body) VALUES(?,?,?) ON CONFLICT(domain) DO UPDATE SET body=excluded.body').run(company.domain,job.company,JSON.stringify(company));
   const saved=[];let added=0;
   for(const incoming of found.contacts) {
-    let contact=store.state.contacts.find(c=>c.email?.toLowerCase()===incoming.email.toLowerCase());
+    let contact=store.state.contacts.find(c=>incoming.email ? c.email?.toLowerCase()===incoming.email.toLowerCase() : incoming.linkedinUrl && c.linkedinUrl===incoming.linkedinUrl);
     if(contact?.suppressed || contact?.isDemo)continue;
     if(!contact){contact={...incoming,id:id(),company:job.company,companyDomain:company.domain,jobId:original?.id || null};store.state.contacts.push(contact);added++;}
     else if(incoming.emailStatus==='verified' || contact.emailStatus!=='verified')Object.assign(contact,{emailStatus:incoming.emailStatus,verification:incoming.verification,sources:incoming.sources || contact.sources,companyDomain:company.domain,jobId:contact.jobId || original?.id || null});
+    if(incoming.warmSignals)contact.warmSignals=incoming.warmSignals;
     contact.discoveryRunId=run.id;saved.push(contact);
     if(original && contact.jobId===original.id)Object.assign(contact,{jobTitle:original.title,jobUrl:original.url});
   }
@@ -111,5 +125,5 @@ export async function contactDiscoveryStatus(store,config={}) {
   const policy=await getPolicy(store),today=new Date().toISOString().slice(0,10);
   const tasks=new Map((await store.db.prepare("SELECT id,status FROM tasks WHERE kind='contacts.discover' ORDER BY created_at DESC LIMIT 1500").all()).map(t=>[t.id,t.status]));
   const runs=structuredClone(store.state.contactDiscoveryRuns || []).map(r=>({...r,targets:r.targets.map(t=>['queued','running'].includes(t.status) && ['failed','cancelled'].includes(tasks.get(t.taskId)) ? {...t,status:tasks.get(t.taskId),warnings:[...t.warnings,'The background lookup did not finish. See Automation for task details.']} : t)}));
-  return {hunterConfigured:!!config.HUNTER_API_KEY,apolloConfigured:!!config.APOLLO_API_KEY,providerChecks:store.state.contactProviderChecks || null,dailyLimit:Math.min(100,Math.max(1,Number(config.CONTACT_API_DAILY_LIMIT) || policy.maxContactLookupsPerDay)),usedToday:Number((await store.db.prepare("SELECT count(*) AS count FROM provider_requests WHERE day=? AND provider NOT IN ('JSearch','SerpApi')").get(today)).count),runs};
+  return {hunterConfigured:!!config.HUNTER_API_KEY,apolloConfigured:!!config.APOLLO_API_KEY,warmSearchConfigured:!!config.SERPAPI_API_KEY,providerChecks:store.state.contactProviderChecks || null,dailyLimit:Math.min(100,Math.max(1,Number(config.CONTACT_API_DAILY_LIMIT) || policy.maxContactLookupsPerDay)),usedToday:Number((await store.db.prepare("SELECT count(*) AS count FROM provider_requests WHERE day=? AND provider NOT IN ('JSearch','SerpApi')").get(today)).count),runs};
 }

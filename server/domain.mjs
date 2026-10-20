@@ -190,6 +190,7 @@ export function renderTemplate(value, contact, profile) {
     portfolio: profile.portfolio || "",
     resume_url: profile.resumeUrl || "",
     icebreaker: contact.icebreaker || "",
+    warm_hook:contact.warmOpener || "",
     job_title:contact.jobTitle || '',
     job_url:contact.jobUrl || '',
   };
@@ -230,10 +231,13 @@ export function previewCampaign(campaign, state) {
       continue;
     }
     seen.add(c.email.toLowerCase());
-    const subject = renderTemplate(campaign.subject, c, state.profile);
+    const senderProfile={...state.profile,resumeUrl:campaign.resumeLinks?.[c.id]?.url || state.profile.resumeUrl};
+    const subject = renderTemplate(campaign.subject, c, senderProfile);
     if (/[\r\n]/.test(subject))
       fail("A contact contains a newline that cannot be used in a subject.");
-    const body = `${renderTemplate(campaign.body, c, state.profile)}\n\n${state.profile.name}\n${state.profile.email}\nTo stop receiving messages from me, reply with “unsubscribe”.`;
+    const rendered=renderTemplate(campaign.body,c,senderProfile);
+    const link=campaign.resumeLinks?.[c.id]?.url;
+    const body = `${rendered}${link && !rendered.includes(link) ? `\n\nMy résumé: ${link}` : ""}\n\n${state.profile.name}\n${state.profile.email}\nTo stop receiving messages from me, reply with “unsubscribe”.`;
     messages.push({
       contactId: c.id,
       to: c.email,
@@ -253,7 +257,7 @@ export function previewCampaign(campaign, state) {
     messages,
     excluded,
     attachment: campaign.attachResume
-      ? { name: state.resume.name, size: state.resume.size }
+      ? (()=>{const r=state.jobDocuments?.find(d=>d.id===campaign.documentSetId)?.resume || state.resume;return {name:r.name,size:r.size};})()
       : null,
   };
 }
@@ -270,7 +274,8 @@ export function campaignFingerprint(campaign, state) {
     resume: state.resume
       ? state.resume.contentHash || hash(state.resume.base64)
       : null,
-    contacts: campaign.contactIds.map(cid => state.contacts.find(c => c.id === cid)),
+    contacts: campaign.contactIds.map(cid => {const c=state.contacts.find(c=>c.id===cid);return c && Object.fromEntries(['id','name','email','company','title','emailStatus','suppressed','isDemo','icebreaker','jobTitle','jobUrl','warmSignals','warmOpener'].map(k=>[k,c[k]]));}),
+    documentSetId:campaign.documentSetId || null,trackResume:campaign.trackResume || false,attachCoverLetter:campaign.attachCoverLetter || false,resumeLinks:campaign.resumeLinks || null,
     jobId: campaign.jobId || null,
     autopilot: campaign.autopilot || null,
     resumeShare: campaign.resumeShare || null,

@@ -10,8 +10,9 @@
   function scan(root=document) {
     if(!roots.has(root)) {
       roots.add(root);
-      root.addEventListener('submit',()=>message({type:'submission-attempt'}),true);
+      root.addEventListener('submit',event=>{if(event.isTrusted)message({type:'submission-attempt'});},true);
       root.addEventListener('click',event=>{
+        if(!event.isTrusted)return;
         const button=event.composedPath().find(el=>el?.matches?.('button,input[type="submit"]'));
         if(button && /^(submit(?: application)?|send application|apply)$/i.test((button.textContent || button.value || '').trim()))message({type:'submission-attempt'});
       },true);

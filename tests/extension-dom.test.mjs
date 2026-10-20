@@ -33,6 +33,19 @@ test('resume attachment transfers original bytes and refuses an incompatible fil
   const result=await fill(w,MasterProfileSchema.parse({}),{name:'resume.pdf',base64:Buffer.from('%PDF-test-original').toString('base64')});
   assert.equal(w.document.querySelector('input').files[0].name,'resume.pdf');assert.equal(w.document.querySelector('input').files[0].type,'application/pdf');assert.equal(w.document.getElementById('wrong').files.length,0);assert.equal(result.filled,1);assert.ok(result.missing.some(s=>s.includes('accepted format')));
 });
+test('tailored resume and cover letter go to separate labeled inputs; unrelated uploads stay untouched',async t=>{
+  const w=browser(t,'<label>Resume<input id="resume" type="file" accept=".pdf"></label><label>Cover Letter<input id="cover" type="file" accept="application/pdf"></label><label>Photo<input id="photo" type="file"></label>');
+  w.DataTransfer=class{constructor(){this.files=[];this.items={add:file=>this.files.push(file)};}};
+  for(const input of w.document.querySelectorAll('input')){let files=[];Object.defineProperty(input,'files',{get:()=>files,set:value=>{files=value;}});}
+  const resume={name:'Company-resume.pdf',base64:Buffer.from('%PDF-resume').toString('base64')},coverLetter={name:'Company-cover-letter.pdf',base64:Buffer.from('%PDF-letter').toString('base64')};
+  const result=await fill(w,MasterProfileSchema.parse({}),resume,{coverLetter});assert.equal(result.filled,2);
+  assert.equal(w.document.getElementById('resume').files[0].name,resume.name);assert.equal(w.document.getElementById('cover').files[0].name,coverLetter.name);assert.equal(w.document.getElementById('photo').files.length,0);
+});
+test('autofill never clicks an Add history control that would submit its form',async t=>{
+  const w=browser(t,'<form><section><fieldset class="experience-entry"><legend>Work Experience</legend><label>Company<input></label><label>Job title<input></label></fieldset><button>Add Work Experience</button></section></form>');
+  let clicks=0;w.document.querySelector('button').addEventListener('click',()=>clicks++);
+  await fill(w,MasterProfileSchema.parse({workExperience:[{company:'One',title:'Analyst'},{company:'Two',title:'Associate'}]}),null,{addRepeating:true});assert.equal(clicks,0);
+});
 test('LinkedIn sync reads only the active profile sections and preserves their text for structured extraction',t=>{
   const w=browser(t,'<section><h1>Casey Quinn</h1><div class="text-body-medium">Financial Analyst</div></section><section><div id="experience"></div><h2>Experience</h2><p>Acme</p><p>Analyst</p><p>2023 – Present</p></section><aside>Unrelated profile recommendations</aside>','https://www.linkedin.com/in/casey/');
   const result=w.eval(`(${extractLinkedInProfile.toString()})()`);assert.equal(result.profile.personal.fullName,'Casey Quinn');assert.match(result.text,/Acme/);assert.ok(!result.text.includes('Unrelated profile recommendations'));

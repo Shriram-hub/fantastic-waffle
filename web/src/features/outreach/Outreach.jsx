@@ -1,3 +1,5 @@
+import {SequenceBuilder,followupDefaults} from './SequenceBuilder.jsx';
+import {JobDocuments} from '../resume/JobDocuments.jsx';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp, api, stages, split, fmt } from '../../shared/workspace.jsx';
 import { Button, Badge, Heading, Empty, Panel, Field, Company, Modal, ConfirmAction, Sample } from '../../shared/ui.jsx';
@@ -6,12 +8,13 @@ export function Outreach() {
     [draft, setDraft] = useState({
       name: "",
       subject: "Exploring {{my_role}} opportunities at {{company}}",
-      body: "Hi {{first_name}},\n\nI’m {{my_name}}, a {{my_role}}. I’m interested in the work your team is doing at {{company}}. My background includes {{skills}}.\n\nYou can find my résumé here: {{resume_url}}\n\nWould you be open to a brief conversation?",
-      accountId: "",
+      body: "Hi {{first_name}},\n\n{{warm_hook}}\n\nI’m {{my_name}}, a {{my_role}}. I’m interested in the work your team is doing at {{company}}. My background includes {{skills}}.\n\nYou can find my résumé here: {{resume_url}}\n\nWould you be open to a brief conversation?",
+      accountId: accounts.length===1 ? accounts[0].id : "",
+      jobId:"",documentSetId:"",trackResume:false,attachCoverLetter:false,
       attachResume: false,
       contactIds: [],
       sequence: {
-        enabled: false,
+        enabled: false,steps:followupDefaults,
         afterBusinessDays: 4,
         body: "Hi {{first_name}}, I wanted to follow up on my earlier note about opportunities at {{company}}. Would it be useful if I shared more context on my background?",
       },
@@ -96,37 +99,13 @@ export function Outreach() {
                   checked={draft.attachResume}
                   onChange={(e) => update("attachResume", e.target.checked)}
                 />
-                Attach my uploaded résumé
+                Attach résumé (tailored PDF when selected above)
               </label>
-              <label className="checkbox-group">
-                <input
-                  type="checkbox"
-                  checked={draft.sequence.enabled}
-                  onChange={(e) =>
-                    update("sequence", {
-                      ...draft.sequence,
-                      enabled: e.target.checked,
-                    })
-                  }
-                />
-                Add one approved follow-up after four business days
-              </label>
-              {draft.sequence.enabled && (
-                <Field
-                  label="Follow-up message"
-                  hint="A connected mailbox and a fresh inbox sync are required. The provider’s thread is reused."
-                >
-                  <textarea
-                    value={draft.sequence.body}
-                    onChange={(e) =>
-                      update("sequence", {
-                        ...draft.sequence,
-                        body: e.target.value,
-                      })
-                    }
-                  />
-                </Field>
-              )}
+              <Field label="Related job (for tailored documents)"><select value={draft.jobId || ''} onChange={e=>{update('jobId',e.target.value);update('documentSetId','');}}><option value="">General introduction</option>{data.jobs.filter(j=>!j.archived).slice(0,300).map(j=><option key={j.id} value={j.id}>{j.company} · {j.title}</option>)}</select></Field>
+              {draft.jobId && <JobDocuments jobId={draft.jobId} onReady={document=>update('documentSetId',document?.id || '')}/>}
+              {draft.documentSetId && <label className="checkbox-group"><input type="checkbox" checked={draft.attachCoverLetter || false} onChange={e=>update('attachCoverLetter',e.target.checked)}/>Also attach the tailored cover letter</label>}
+              <label className="checkbox-group"><input type="checkbox" checked={draft.trackResume || false} onChange={e=>update('trackResume',e.target.checked)}/>Use a recipient-specific résumé link (expires after 30 days)</label>
+              <SequenceBuilder value={draft.sequence} onChange={value=>update('sequence',value)}/>
             </div>
           </section>
           <section className="form-section">
@@ -223,7 +202,7 @@ export function Outreach() {
                 >
                   Review
                 </Button>
-                {c.deliveries.some((d) => d.status === "queued") && (
+                {c.deliveries.some((d) => d.status === "queued" || d.followups?.some(s=>s.status==='queued')) && (
                   <Button
                     small
                     onClick={() =>

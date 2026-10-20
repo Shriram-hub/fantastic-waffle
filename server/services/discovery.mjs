@@ -11,7 +11,7 @@ export const DISCOVERY_INTERVAL=2*3600000;
 // Keep retained provider payloads small enough for Render's shared free instance.
 const BATCH_SIZE=4,MAX_INDEX=1500;
 const sourceKey=d=>hash([d.source,d.board,d.page || 1,d.location || '',d.country || '']);
-export const SOURCE_DEFAULTS=Object.freeze({'Remotive':true,'Arbeitnow':true,'Remote OK':true,'Jobicy':true,'Himalayas':true,'Greenhouse':true,'Lever':true,'Ashby':true,'Google Jobs':false,'LinkedIn Guest':true});
+export const SOURCE_DEFAULTS=Object.freeze({'Remotive':true,'Arbeitnow':true,'Remote OK':true,'Jobicy':true,'Himalayas':true,'Greenhouse':true,'Lever':true,'Ashby':true,'Google Jobs':false,'LinkedIn Guest':true,'India & finance boards':true});
 export async function getSearchConfig(store) {
   const row=await store.db.prepare("SELECT body FROM job_search_config WHERE id='local'").get();
   const p=store.state.profile;
@@ -71,9 +71,12 @@ export function sourcePlan(plan,settings,prefs,registry=[]) {
   // Bengaluru or Delhi" as one city prevents aggregators from geocoding it.
   const queryFor=role=>`${role}${plan.experience==='Internship' && !/intern|trainee|apprentice/i.test(role) ? ' Internship' : plan.experience==='Entry level' && !/junior|entry|graduate/i.test(role) ? ' entry level' : ''}${plan.workMode==='Remote' && !/remote/i.test(role) ? ' remote' : ''}`;
   const pairs=plan.roles.flatMap(role=>locations.map(location=>({board:queryFor(role),location,country:plan.country})));
-  const paid=prefs.sources['Google Jobs'] ? pairs.slice(0,24).map(pair=>({source:'Google Jobs',...pair,ttl:6*3600000})) : [];
+  const offset=pairs.length ? Math.floor(Date.now()/86400000)*locations.length%pairs.length : 0;
+  const rotating=[...pairs.slice(offset),...pairs.slice(0,offset)];
+  const paid=prefs.sources['Google Jobs'] ? rotating.slice(0,24).map(pair=>({source:'Google Jobs',...pair,ttl:6*3600000})) : [];
   const guest=pairs.slice(0,32).map(pair=>({source:'LinkedIn Guest',...pair,ttl:DISCOVERY_INTERVAL}));
-  return [...paid,...guest,...publicSources,...[...new Map([...custom,...boards,...registry].map(b=>[`${b.source}:${b.slug}`,b])).values()].map(b=>({source:b.source,board:b.slug,ttl:DISCOVERY_INTERVAL,company:b.company,companyDomain:b.companyDomain}))].filter(d=>prefs.sources[d.source]);
+  const regional=plan.country==='IN' && prefs.sources['India & finance boards'] ? locations.slice(0,3).map(location=>({source:'India & finance boards',board:`(${plan.roles.slice(0,4).map(role=>`"${role.replaceAll('"','')}"`).join(' OR ')})${plan.experience==='Internship' ? ' (intern OR internship OR trainee)' : ''}`,location,country:'IN',ttl:24*3600000})) : [];
+  return [...paid.slice(0,2),...regional,...paid.slice(2),...guest,...publicSources,...[...new Map([...custom,...boards,...registry].map(b=>[`${b.source}:${b.slug}`,b])).values()].map(b=>({source:b.source,board:b.slug,ttl:DISCOVERY_INTERVAL,company:b.company,companyDomain:b.companyDomain}))].filter(d=>prefs.sources[d.source]);
 }
 async function fetchSource(descriptor,store,config,fetcher,plan) {
   const {source,board,ttl,page}=descriptor,key=sourceKey(descriptor);
@@ -90,7 +93,10 @@ async function fetchSource(descriptor,store,config,fetcher,plan) {
   }
   if(!jobs) {
     const fetchSourceJobs=(extra={})=>fetchJobs(source,board,fetcher,{...config,...extra,HIMALAYAS_PAGE:page || 1,SEARCH_LOCATION:descriptor.location,SEARCH_COUNTRY:descriptor.country},board);
-    if(source==='Google Jobs') {
+    if(source==='India & finance boards') {
+      if(!config.SERPAPI_API_KEY)fail('Configure SERPAPI_API_KEY for indexed regional-board discovery. Free feeds continue.',503);
+      jobs=await providerCall(store,`regional:${key}:${Math.floor(Date.now()/86400000)}`,'SerpApi',Math.max(1,Math.min(30,Number(config.JOB_SEARCH_API_DAILY_LIMIT)||6)),()=>fetchSourceJobs());
+    } else if(source==='Google Jobs') {
       if(!config.JSEARCH_API_KEY && !config.SERPAPI_API_KEY) fail('Optional Google Jobs key missing; free feeds and ATS boards continue.',503);
       let lastError;
       for(const provider of [config.JSEARCH_API_KEY && 'JSearch',config.SERPAPI_API_KEY && 'SerpApi'].filter(Boolean)) {

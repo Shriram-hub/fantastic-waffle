@@ -6,6 +6,7 @@ export async function sendResend(
   key,
   fetcher = fetch,
 ) {
+  const files=Array.isArray(attachment) ? attachment : attachment ? [attachment] : [];
   let response;
   try {
     response = await fetcher("https://api.resend.com/emails", {
@@ -27,11 +28,9 @@ export async function sendResend(
           ...(message.unsubscribeUrl ? {"List-Unsubscribe":`<${message.unsubscribeUrl}>`,"List-Unsubscribe-Post":"List-Unsubscribe=One-Click"} : {}),
           ...(message.inReplyTo ? {"In-Reply-To":message.inReplyTo,"References":message.references || message.inReplyTo} : {}),
         },
-        ...(attachment
+        ...(files.length
           ? {
-              attachments: [
-                { filename: attachment.name, content: attachment.base64 },
-              ],
+              attachments: files.map(file=>({filename:file.name,content:file.base64})),
             }
           : {}),
       }),

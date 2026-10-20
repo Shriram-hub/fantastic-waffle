@@ -531,3 +531,16 @@ select {
 .next-actions{display:flex;gap:22px;align-items:center;flex-wrap:wrap;background:#f5f8f6;border:1px solid #dce6df;border-radius:12px;padding:22px;margin:24px 0}.next-actions h2{font-size:17px;margin:6px 0}.next-actions p{font-size:12px;color:#6d7b8d}.next-action-items{display:flex;gap:10px;flex-wrap:wrap;flex:1}.next-action-items button{display:flex;flex-direction:column;gap:5px;text-align:left;background:white;border:1px solid #d9e3dc;border-radius:8px;padding:12px;font-size:12px;color:#253650;cursor:pointer}.next-action-items span{color:#7a8797;font-size:11px}
 @media(max-width:1000px){.career-columns{grid-template-columns:1fr}.career-stats{grid-template-columns:repeat(2,1fr)}.discovery-results{grid-template-columns:1fr}.contact-metrics>div{padding:16px;flex-direction:column;gap:4px}}
 @media(max-width:600px){.discovery-studio{padding:18px}.discovery-studio .form-grid{grid-template-columns:1fr}.contact-metrics{gap:8px}.contact-metrics strong{font-size:24px}.career-tabs button{padding:9px 11px}.career-task{flex-wrap:wrap}.career-stage{grid-template-columns:100px 1fr 25px;padding-left:16px;padding-right:16px}.practice-list{padding:0 18px}}
+.job-documents,.sequence-builder {margin:20px 0;padding:22px;background:var(--surface,#f8fafc);border:1px solid var(--border,#dce4eb);border-radius:14px;}
+.job-documents h3 {font-size:19px;margin:5px 0 9px;}
+.job-documents p,.sequence-builder p {line-height:1.65;color:var(--muted,#536579);}
+.sequence-step {margin:14px 0;padding:16px;border-left:3px solid #9ab3c7;background:#fff;border-radius:0 10px 10px 0;}
+.sequence-step .field {margin-top:12px;}
+.sequence-step input[type=number] {max-width:110px;}
+.document-downloads {display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:16px 0;}
+.document-downloads>p,.document-downloads>details {flex-basis:100%;}
+.document-downloads blockquote,.warm-evidence blockquote,.story-suggestions blockquote {border-left:3px solid #b4c8d8;margin:12px 0;padding:8px 14px;background:#fff;}
+.alert-settings {max-width:780px;margin:24px 0;}
+.alert-settings .stack {margin-top:20px;}
+.hot-lead {background:#e7f5ef;color:#246950;display:inline-block;margin:8px 0;}
+.warm-evidence {font-size:12px;max-width:320px;margin:8px 0;}
