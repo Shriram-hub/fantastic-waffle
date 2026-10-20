@@ -69,7 +69,8 @@ export function sourcePlan(plan,settings,prefs,registry=[]) {
   const locations=plan.locations?.length ? plan.locations : [plan.location || ''];
   // Separate location alternatives before provider calls. Sending "Mumbai or
   // Bengaluru or Delhi" as one city prevents aggregators from geocoding it.
-  const pairs=plan.roles.flatMap(role=>locations.map(location=>({board:role,location,country:plan.country})));
+  const queryFor=role=>`${role}${plan.experience==='Internship' && !/intern|trainee|apprentice/i.test(role) ? ' Internship' : plan.experience==='Entry level' && !/junior|entry|graduate/i.test(role) ? ' entry level' : ''}${plan.workMode==='Remote' && !/remote/i.test(role) ? ' remote' : ''}`;
+  const pairs=plan.roles.flatMap(role=>locations.map(location=>({board:queryFor(role),location,country:plan.country})));
   const paid=prefs.sources['Google Jobs'] ? pairs.slice(0,24).map(pair=>({source:'Google Jobs',...pair,ttl:6*3600000})) : [];
   const guest=pairs.slice(0,32).map(pair=>({source:'LinkedIn Guest',...pair,ttl:DISCOVERY_INTERVAL}));
   return [...paid,...guest,...publicSources,...[...new Map([...custom,...boards,...registry].map(b=>[`${b.source}:${b.slug}`,b])).values()].map(b=>({source:b.source,board:b.slug,ttl:DISCOVERY_INTERVAL,company:b.company,companyDomain:b.companyDomain}))].filter(d=>prefs.sources[d.source]);

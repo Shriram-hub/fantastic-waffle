@@ -40,7 +40,7 @@ export function buildSearchPlan(state,settings={}) {
   const location=settings.location || p.location || '',locations=searchLocations(location);
   const inferred=[...new Set(locations.map(l=>metroFor(l)?.country).filter(Boolean))];
   const plan={roles:explicit.length ? explicit : derived,skills,location,locations,country:settings.country || (inferred.length===1 ? inferred[0] : ''),workMode:settings.workMode || p.workMode || 'Any',experience:settings.experience || 'Any',derived:!explicit.length && !!derived.length};
-  return {...plan,personalized:!!plan.roles.length,scope:hash({...plan,matcherVersion:2,sources:settings.sources})};
+  return {...plan,personalized:!!plan.roles.length,scope:hash({...plan,matcherVersion:3,sources:settings.sources})};
 }
 const senior=/\b(senior|sr|staff|principal|lead|manager|director|head|vp)\b/i;
 const regionNames=new Intl.DisplayNames(['en'],{type:'region'});

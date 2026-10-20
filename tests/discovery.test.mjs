@@ -27,6 +27,7 @@ test('finance searches expand metro alternatives and separate adjacent roles wit
   assert.equal(rankOpportunity(job('Financial Analyst',{location:'Remote, United States',locationRestrictions:['United States only']}),plan).recommendable,false);
   assert.equal(rankOpportunity(job('Financial Analyst',{location:'India (Remote)',locationRestrictions:['India only']}),plan).tier,'strong');
   const requests=sourcePlan(plan,{},prefs).filter(d=>d.source==='Google Jobs');assert.equal(requests.length,9);assert.ok(requests.every(d=>!d.location.includes(' or ')));assert.equal(requests[8].location,'Delhi');
+  const internships=sourcePlan(buildSearchPlan(state,{...prefs,experience:'Internship'}),{},prefs).filter(d=>['Google Jobs','LinkedIn Guest'].includes(d.source));assert.ok(internships.every(d=>d.board.includes('Internship')),'Experience preferences reach the providers before local filtering');
 });
 test('public LinkedIn cards preserve source URLs and dates; blocks fail visibly without evasion',async()=>{
   const html='<li><a class="base-card__full-link" href="https://www.linkedin.com/jobs/view/finance-123?trackingId=x"></a><h3 class="base-search-card__title">Financial Analyst</h3><h4 class="base-search-card__subtitle"><a>Acme &amp; Co</a></h4><span class="job-search-card__location">Mumbai, India</span><time datetime="2026-10-19">1 day ago</time></li>';

@@ -30,7 +30,8 @@ Enter roles and city alternatives in Discover jobs, for example:
 `Financial Analyst, Accountant, Investment Banking` and
 `Mumbai or Bengaluru or Delhi`.
 
-Each city reaches the targeted providers separately. Indian metro aliases and
+Each city and internship/entry-level preference reaches the targeted providers
+before local filtering. Indian metro aliases and
 finance/accounting role families improve matching. Strong role/location fits and
 adjacent opportunities are labeled separately. Wrong-country restrictions and
 experience constraints are retained; unrelated local jobs are not counted as fits.
