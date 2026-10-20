@@ -1,146 +1,27 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useApp, api, stages, split, fmt } from '../../shared/workspace.jsx';
-import { Button, Badge, Heading, Empty, Panel, Field, Company, Modal, ConfirmAction, Sample } from '../../shared/ui.jsx';
+import React,{useState} from 'react';
+import {useApp,api} from '../../shared/workspace.jsx';
+import {Button,Badge,Heading,Empty,Panel,Sample} from '../../shared/ui.jsx';
+import {ContactDiscovery} from './ContactDiscovery.jsx';
+
 export function Contacts() {
-  const { data, perform, notify, setModal } = useApp(),
-    [q, setQ] = useState(""),
-    list = data.contacts.filter((c) =>
-      `${c.name} ${c.company} ${c.title} ${c.email}`
-        .toLowerCase()
-        .includes(q.toLowerCase()),
-    );
-  return (
-    <>
-      <Heading
-        title="Meet the people behind the roles."
-        subtitle="Find relevant contacts, verify their work email, and build a focused list."
-      >
-        <Button onClick={() => setModal({ type: "import-contacts" })}>
-          Import CSV
-        </Button>
-        <Button onClick={() => setModal({ type: "add-contact" })}>
-          + Add contact
-        </Button>
-        <Button primary onClick={() => setModal({ type: "apollo" })}>
-          Find with Apollo
-        </Button>
-      </Heading>
-      <div className="toolbar">
-        <label className="search-input">
-          <input
-            placeholder="Search people, companies, or roles…"
-            aria-label="Search contacts"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
-        </label>
-      </div>
-      <Panel title={`${list.length} contacts`}>
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>PERSON</th>
-                <th>COMPANY & ROLE</th>
-                <th>WORK EMAIL</th>
-                <th>ACTIONS</th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.map((c) => (
-                <tr key={c.id}>
-                  <td>
-                    <strong>{c.name}</strong>
-                    {c.icebreaker && (
-                      <p className="hint">
-                        {c.icebreaker}
-                        <br />
-                        Source: {c.icebreakerEvidence}
-                      </p>
-                    )}
-                    <span className="muted">
-                      {c.source} <Sample value={c.isDemo} />
-                    </span>
-                  </td>
-                  <td>
-                    <strong>{c.company}</strong>
-                    <span className="muted">{c.title}</span>
-                  </td>
-                  <td>
-                    <strong>{c.email || "Enrichment needed"}</strong>
-                    <Badge
-                      value={c.suppressed ? "suppressed" : c.emailStatus}
-                    />
-                    {c.verification && (
-                      <span className="data-badge">
-                        {" "}
-                        · {c.verification.provider}
-                      </span>
-                    )}
-                  </td>
-                  <td>
-                    <div className="btn-row">
-                      {!c.email && c.apolloId && (
-                        <Button
-                          small
-                          onClick={() => setModal({ type: "enrich", id: c.id })}
-                        >
-                          Enrich
-                        </Button>
-                      )}
-                      {c.email && !c.isDemo && (
-                        <Button
-                          small
-                          onClick={() => setModal({ type: "verify", id: c.id })}
-                        >
-                          Verify
-                        </Button>
-                      )}
-                      <Button
-                        small
-                        onClick={() =>
-                          setModal({ type: "personalize", id: c.id })
-                        }
-                      >
-                        Draft opener
-                      </Button>
-                      <Button
-                        small
-                        onClick={() =>
-                          perform(
-                            () =>
-                              api(
-                                `/contacts/${c.id}`,
-                                { suppressed: !c.suppressed },
-                                "PATCH",
-                              ),
-                            c.suppressed
-                              ? "Contact restored."
-                              : "Contact suppressed from outreach.",
-                          )
-                        }
-                      >
-                        {c.suppressed ? "Restore" : "Suppress"}
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {!list.length && (
-          <Empty title="Your first connection starts here.">
-            Search Apollo, import a CSV, or add a contact manually.
-          </Empty>
-        )}
-      </Panel>
-      <div className="notice">
-        Apollo search and enrichment are separate. Verification is a separate
-        paid lookup when Hunter is configured. Catch-all, invalid, sample, and
-        unverified emails cannot be sent. CSV verification labels are supplied
-        by your source and are not independently checked by Orbit.
-      </div>
-    </>
-  );
+  const {data,perform,notify,setModal,go}=useApp(),[q,setQ]=useState(''),[filter,setFilter]=useState('all'),[selected,setSelected]=useState(new Set()),[page,setPage]=useState(0);
+  const matches=c=>`${c.name} ${c.company} ${c.title} ${c.email}`.toLowerCase().includes(q.toLowerCase()) && (filter==='all' || (filter==='suppressed' ? c.suppressed : !c.suppressed && c.emailStatus===filter));
+  const list=data.contacts.filter(matches),maxPage=Math.max(0,Math.ceil(list.length/50)-1),currentPage=Math.min(page,maxPage),visible=list.slice(currentPage*50,currentPage*50+50);
+  const chosen=data.contacts.filter(c=>selected.has(c.id) && !c.suppressed && !c.isDemo && c.email),ready=chosen.filter(c=>c.emailStatus==='verified'),verified=data.contacts.filter(c=>!c.suppressed && !c.isDemo && c.emailStatus==='verified');
+  function select(contact,checked){setSelected(old=>{const next=new Set(old);if(checked){if(next.size>=100){notify('Select up to 100 recipients per campaign.',true);return old;}next.add(contact.id);}else next.delete(contact.id);return next;});}
+  async function draftCampaign(){
+    if(!ready.length)throw Error('Select verified work-email contacts first.');
+    const jobSpecific=ready.every(c=>c.jobTitle);
+    const r=await api('/campaigns',{name:`Career outreach · ${new Date().toLocaleDateString()}`,subject:jobSpecific ? 'Regarding {{job_title}} at {{company}}' : 'Exploring {{my_role}} opportunities at {{company}}',body:`Hi {{first_name}},\n\nI’m {{my_name}}, a {{my_role}}. ${jobSpecific ? 'I saw the {{job_title}} opening at {{company}} and wanted to introduce myself.' : 'I’m interested in opportunities at {{company}}.'} My background includes {{skills}}.\n\n${data.resume ? 'I have attached my résumé for context. ' : ''}Would you be open to pointing me toward the relevant hiring team?\n\nThank you,\n{{my_name}}`,attachResume:!!data.resume,accountId:'',contactIds:ready.map(c=>c.id),sequence:{enabled:false}});
+    go('outreach');setModal({type:'campaign-preview',id:r.campaign.id});
+  }
+  return <>
+    <Heading title="Meet the people behind the roles." subtitle="Discover hiring contacts, keep their sources, and build a verified outreach list."><a className="btn" href="/api/export/contacts">Export CSV</a><Button onClick={()=>setModal({type:'import-contacts'})}>Import CSV</Button><Button onClick={()=>setModal({type:'add-contact'})}>+ Add contact</Button></Heading>
+    <div className="contact-metrics">{[[data.contacts.filter(c=>!c.isDemo).length,'Saved contacts'],[verified.length,'Verified work emails'],[data.contacts.filter(c=>!c.isDemo && !c.suppressed && c.emailStatus!=='verified').length,'Need verification']].map(([count,label])=><div key={label}><strong>{count}</strong><span>{label}</span></div>)}</div>
+    <ContactDiscovery/>
+    <div className="toolbar"><label className="search-input"><input placeholder="Search people, companies, or roles…" aria-label="Search contacts" value={q} onChange={e=>{setQ(e.target.value);setPage(0);}}/></label><select aria-label="Contact verification" value={filter} onChange={e=>{setFilter(e.target.value);setPage(0);}}>{[['all','All contacts'],['verified','Verified'],['unverified','Needs verification'],['catch-all','Catch-all'],['invalid','Invalid'],['suppressed','Suppressed']].map(([value,label])=><option key={value} value={value}>{label}</option>)}</select><Button small onClick={()=>setModal({type:'apollo'})}>Advanced: Apollo</Button></div>
+    <div className="contact-selection"><span>{chosen.length} selected · {ready.length} verified</span><Button small disabled={!visible.some(c=>!c.isDemo && !c.suppressed && c.email)} onClick={()=>setSelected(old=>new Set([...old,...visible.filter(c=>!c.isDemo && !c.suppressed && c.email).map(c=>c.id)].slice(0,100)))}>Select this page</Button><Button small onClick={()=>setSelected(new Set())}>Clear</Button><Button small disabled={!chosen.some(c=>c.emailStatus!=='verified')} onClick={()=>setModal({type:'verify-contacts',ids:chosen.filter(c=>c.emailStatus!=='verified').map(c=>c.id)})}>Verify selected</Button><Button primary small disabled={!ready.length} onClick={()=>perform(draftCampaign)}>Draft to {ready.length} verified contacts</Button></div>
+    <Panel title={`${list.length} contacts`}><div className="table-scroll"><table><thead><tr><th>SELECT</th><th>PERSON</th><th>COMPANY & ROLE</th><th>WORK EMAIL</th><th>ACTIONS</th></tr></thead><tbody>{visible.map(c=><tr key={c.id}><td><input type="checkbox" aria-label={`Select ${c.name}`} disabled={c.isDemo || c.suppressed || !c.email} checked={selected.has(c.id)} onChange={e=>select(c,e.target.checked)}/></td><td><strong>{c.name}</strong><span className="muted">{c.source} <Sample value={c.isDemo}/></span>{(c.verification?.reference || c.sources?.[0]?.url) && <a className="tiny" href={c.verification?.reference || c.sources[0].url} target="_blank" rel="noreferrer">View source ↗</a>}{c.icebreaker && <p className="hint">{c.icebreaker}<br/>Source: {c.icebreakerEvidence}</p>}</td><td><strong>{c.company}</strong><span className="muted">{c.title}</span>{c.jobId && <Button small onClick={()=>setModal({type:'job',id:c.jobId})}>Related job</Button>}</td><td><strong>{c.email || 'Enrichment needed'}</strong><Badge value={c.suppressed ? 'suppressed' : c.emailStatus}/>{c.verification && <span className="data-badge"> · {c.verification.provider}</span>}</td><td><div className="btn-row">{!c.email && c.apolloId && <Button small onClick={()=>setModal({type:'enrich',id:c.id})}>Enrich</Button>}{c.email && !c.isDemo && !c.suppressed && c.emailStatus!=='verified' && <Button small onClick={()=>setModal({type:'verify',id:c.id})}>Verify</Button>}<Button small onClick={()=>setModal({type:'personalize',id:c.id})}>Draft opener</Button><Button small onClick={()=>perform(()=>api(`/contacts/${c.id}`,{suppressed:!c.suppressed},'PATCH'),c.suppressed ? 'Contact restored.' : 'Contact suppressed.')}>{c.suppressed ? 'Restore' : 'Suppress'}</Button></div></td></tr>)}</tbody></table></div>{!list.length && <Empty title="Find your first hiring contact.">Use matching jobs or corporate domains above, or import a contact list.</Empty>}{list.length>50 && <div className="form-actions"><Button small disabled={!currentPage} onClick={()=>setPage(currentPage-1)}>Previous</Button><span>Page {currentPage+1} of {maxPage+1}</span><Button small disabled={currentPage===maxPage} onClick={()=>setPage(currentPage+1)}>Next</Button></div>}</Panel>
+    <div className="notice">Review recipients and drafts before sending. Public listing and DNS checks do not prove a mailbox exists. Catch-all, invalid, suppressed and unverified emails stay excluded. Campaigns retain daily pacing, opt-out and reply-stop controls.</div>
+  </>;
 }

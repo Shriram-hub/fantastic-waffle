@@ -7,7 +7,7 @@ import { ImportEmailModal } from '../tracker/ImportEmailModal.jsx';
 import { ApolloModal } from '../outreach/ApolloModal.jsx';
 import { CampaignPreview } from '../outreach/CampaignPreview.jsx';
 export function ModalContent({ modal, close }) {
-  const { data, perform, notify, go } = useApp(),
+  const { data, perform, notify, go,setCareerJobId } = useApp(),
     [textValue, setText] = useState(""),
     [result, setResult] = useState(null);
   useEffect(() => {
@@ -47,6 +47,7 @@ export function ModalContent({ modal, close }) {
         </div>
         {j.descriptionTruncated && !result?.job ? <p className="detail-description">Loading the full job description…</p> : <p className="detail-description">{j.description}</p>}
         <div className="app-detail-links">
+          <Button onClick={()=>{setCareerJobId(j.id);close();go('career');}}>Prepare for interview</Button>
           {j.url && (
             <a className="btn" href={j.url} target="_blank" rel="noreferrer">
               Open original listing ↗
@@ -246,6 +247,7 @@ export function ModalContent({ modal, close }) {
       "Apollo may charge credits for this work-email enrichment lookup. Exact costs depend on your plan. Personal emails and phone numbers are not requested.",
     verify:
       "Hunter may charge credits to verify this contact’s work email. Catch-all, invalid, and unknown results remain blocked from sending.",
+    'verify-contacts': `Verify ${modal.ids?.length || 0} selected work emails using Hunter. This may consume provider credits and is limited by your daily contact API budget. Unknown, catch-all and invalid results remain excluded.`,
     "browser-batch": `${modal.ids?.length} selected opportunities will be queued for your paired Chrome extension. It fills recognized fields and your approved answers, then stops for review. It does not solve verification challenges or submit an application.`,
   };
   const action = async () => {
@@ -266,6 +268,7 @@ export function ModalContent({ modal, close }) {
       await api(`/contacts/${modal.id}/enrich`, { confirmCredits: true });
     if (modal.type === "verify")
       await api(`/contacts/${modal.id}/verify`, { confirmed: true });
+    if(modal.type==='verify-contacts'){const r=await api('/contacts/verify-batch',{ids:modal.ids,confirmed:true});notify(`${r.queued} verification tasks queued.`);}
     if (modal.type === "browser-batch")
       await api("/apply/queue", { approved: true, jobIds: modal.ids });
     close();

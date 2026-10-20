@@ -147,6 +147,7 @@ export function parseCSV(raw) {
       .toLowerCase()
       .replace(/\s+/g, "_"),
   );
+  if(!headers.includes('email')){const alias=headers.findIndex(h=>['email_address','work_email','emailaddress','workemail'].includes(h));if(alias>=0)headers[alias]='email';}
   if (!headers.includes("email"))
     fail(
       "The CSV needs an email column. Use name, email, company, title, email_status.",
@@ -163,13 +164,13 @@ export function normalizeContact(row, source = "CSV") {
     id: id(),
     name:
       text(row.name, 150) ||
-      [text(row.first_name, 80), text(row.last_name, 80)]
+      [text(row.first_name || row.firstname, 80), text(row.last_name || row.lastname, 80)]
         .filter(Boolean)
         .join(" ") ||
       "Unnamed contact",
     email,
-    company: text(row.company, 150),
-    title: text(row.title, 150),
+    company: text(row.company || row.company_name || row.organization, 150),
+    title: text(row.title || row.job_title || row.role, 150),
     source,
     emailStatus: row.email_status === "verified" ? "verified" : "unverified",
     suppressed: false,
@@ -189,6 +190,8 @@ export function renderTemplate(value, contact, profile) {
     portfolio: profile.portfolio || "",
     resume_url: profile.resumeUrl || "",
     icebreaker: contact.icebreaker || "",
+    job_title:contact.jobTitle || '',
+    job_url:contact.jobUrl || '',
   };
   const unknown = [...value.matchAll(/\{\{\s*([^{}]+?)\s*\}\}/g)]
     .map((m) => m[1])

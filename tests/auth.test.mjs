@@ -94,5 +94,6 @@ test('password rotation invalidates persisted sessions and signed workspace chec
   assert.equal((await b.request('/api/bootstrap',{cookie:token})).status,401);
   assert.equal((await a.request('/api/internal/workspace-check',{body:{}})).status,401);
   const check=await a.request('/api/internal/workspace-check',{body:{},headers:{'X-Orbit-Scheduler':'test-cron'}});
-  assert.equal(check.status,200);assert.equal(check.body.ok,true);assert.deepEqual(Object.keys(check.body).sort(),['googleConfigured','indexed','matches','ok','storage']);
+  assert.equal(check.status,200);assert.equal(check.body.ok,true);assert.deepEqual(Object.keys(check.body).sort(),['career','contactDiscovery','googleConfigured','indexed','mail','matches','ok','storage']);
+  assert.equal(check.body.career.available,true);assert.equal(check.body.contactDiscovery.hunterConfigured,false);assert.deepEqual(check.body.mail,{connectedAccounts:0,liveSending:false});
 });

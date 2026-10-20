@@ -178,7 +178,7 @@ export async function enrichCompany(task,store,queue,config = {},fetcher = fetch
     await store.db.prepare("INSERT INTO companies(domain,name,body) VALUES(?,?,?) ON CONFLICT(domain) DO UPDATE SET body=excluded.body").run(company.domain,j.company,JSON.stringify(company));
     const period=Math.floor(Date.now()/(7*86400000)), call=(key,provider,fn)=>providerCall(store,`${period}:${key}`,provider,p.maxContactLookupsPerDay,fn);
     let candidates=store.state.contacts.filter(c=>!c.isDemo && !c.suppressed && c.emailStatus==='verified' && (c.companyDomain===company.domain || c.email?.split('@')[1]===company.domain)).slice(0,p.contactsPerCompany), warnings=[];
-    if(candidates.length<p.contactsPerCompany && p.allowContactCredits && config.APOLLO_API_KEY) {
+    if(candidates.length<p.contactsPerCompany && p.allowContactCredits && config.APOLLO_API_KEY && !config.HUNTER_API_KEY) {
       try {
         const titles=[...targetTitles(j.employeeCount),"CTO","Founder","Head of People"].slice(0,6).join(",");
         const people=await call(`search:${company.domain}`,"Apollo",()=>searchApollo({domain:company.domain,titles,limit:p.contactsPerCompany},config.APOLLO_API_KEY,fetcher));

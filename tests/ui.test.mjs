@@ -59,6 +59,7 @@ test("React views render populated/empty states and escape untrusted profile and
       "Inbox",
       "Automation",
       "Connections",
+      'CareerWorkspace',
     ]) {
       const html = renderToStaticMarkup(
         React.createElement(
@@ -70,9 +71,16 @@ test("React views render populated/empty states and escape untrusted profile and
       assert.ok(html.length > 100);
       if(name==='Jobs') {assert.match(html,/Discover your next role/);assert.match(html,/Save &amp; find jobs/);assert.match(html,/Choose discovery sources/);}
       if(name==='Connections') assert.match(html,/Free job discovery/);
+      if(name==='Contacts'){assert.match(html,/Find company contacts/);assert.match(html,/Use Hunter search/);assert.match(html,/Public-only discovery/);}
+      if(name==='CareerWorkspace'){assert.match(html,/Interview prep/);assert.match(html,/STAR stories/);assert.match(html,/Search analytics/);}
       if(name === "Automation") {assert.match(html,/Autopilot Mode/);assert.match(html,/Enable Autopilot/);assert.match(html,/Approve|review queue/);}
       assert.ok(!html.includes("<script>alert(1)</script>"));
       assert.ok(!html.includes("<img src=x"));
+    }
+    const career={tasks:[{id:'task',title:'Interview planning',kind:'Interview',dueAt:'2026-11-01T05:00:00Z',done:false,notes:'<script>alert(1)</script>'}],stories:[],prep:[],aiConfigured:true};
+    for(const name of ['CareerPlanner','CareerPrep','StoryBank']){
+      const html=renderToStaticMarkup(React.createElement(views.WorkspaceContext.Provider,{value:app},React.createElement(views[name],{workspace:career,jobs:data.jobs,stories:career.stories})));
+      assert.ok(html.length>200);assert.ok(!html.includes('<script>alert(1)</script>'));
     }
   }
 });

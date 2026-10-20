@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp, api, stages, split, fmt } from '../../shared/workspace.jsx';
 import { Button, Badge, Heading, Empty, Panel, Field, Company, Modal, ConfirmAction, Sample } from '../../shared/ui.jsx';
 export function ApplicationModal({ id, close }) {
-  const { data, perform } = useApp(),
+  const { data, perform,go,setCareerJobId } = useApp(),
     a = data.applications.find((a) => a.id === id),
     j = data.jobs.find((j) => j.id === a?.jobId),
     [stage, setStage] = useState(a.stage),
@@ -46,6 +46,7 @@ export function ApplicationModal({ id, close }) {
         </Button>
       </form>
       <div className="app-detail-links">
+        <Button onClick={()=>{setCareerJobId(j.id);close();go('career');}}>Prepare for interview</Button>
         <a className="btn small" href={`/api/applications/${id}/packet`}>
           Download packet
         </a>

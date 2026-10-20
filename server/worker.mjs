@@ -7,6 +7,10 @@ import { fetchJobs, mergeJobListings } from "./providers/jobs/index.mjs";
 import { parseResumeAsync } from "./resume.mjs";
 import { enrichApollo } from "./providers/contacts/apollo.mjs";
 import { verifyWorkEmail } from "./providers/contacts/verification.mjs";
+import {discoverCompanyTask} from './services/contact-discovery.mjs';
+import {providerCall} from './services/provider-budget.mjs';
+import {getPolicy} from './services/autopilot-policy.mjs';
+import {buildInterviewPrep} from './services/career.mjs';
 import { extractStructuredResume, extractCandidateProfile, generateIcebreaker, classifyInboxAI, embedTexts, cosineSimilarity, factPreservingTailor } from "./services/ai.mjs";
 import {candidateFromText,saveCandidate} from './services/candidate-profile.mjs';
 import { syncMailbox, watchMailbox } from "./providers/mail/inbox.mjs";
@@ -41,6 +45,8 @@ export function handlers(store, queue, config = {}, fetcher = fetch, dependencie
     };
   }
   return {
+    async 'career.prep'(task){return buildInterviewPrep(task,store,queue,config,fetcher);},
+    async 'contacts.discover'(task){return discoverCompanyTask(task,store,queue,config,fetcher,dependencies);},
     async 'profile.import'(task) {
       const parsed=await parseResumeAsync(await hydrateResume(task.payload.file,store,config));
       await store.refresh();
@@ -195,8 +201,10 @@ export function handlers(store, queue, config = {}, fetcher = fetch, dependencie
     },
     async "contact.verify"(task) {
       const c = find(store.state.contacts, task.payload.contactId),
-        email = c.email,
-        result = await verifyWorkEmail(email, config, fetcher);
+        email = c.email;
+      if(c.suppressed || c.isDemo)return {status:'cancelled'};
+      const policy=await getPolicy(store),limit=Math.min(100,Math.max(1,Number(config.CONTACT_API_DAILY_LIMIT) || policy.maxContactLookupsPerDay));
+      const result=await providerCall(store,`contacts-v2:${Math.floor(Date.now()/(7*86400000))}:verify:${email}`,'Hunter',limit,()=>verifyWorkEmail(email,config,fetcher,dependencies.lookupMx));
       await store.refresh();
       const latest = find(store.state.contacts, c.id);
       if (latest.email !== email) return {

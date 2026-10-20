@@ -2,6 +2,8 @@ import { unsubscribeRoute } from "./services/unsubscribe.mjs";
 import { autopilotRoutes } from "./autopilot-routes.mjs";
 import { discoveryRoutes } from './discovery-routes.mjs';
 import {candidateRoutes,importLinkedIn} from './candidate-routes.mjs';
+import {contactRoutes} from './contact-routes.mjs';
+import {careerRoutes} from './career-routes.mjs';
 import {candidateProfile} from './services/candidate-profile.mjs';
 import {suggestProfileAnswers} from './services/ai.mjs';
 import { resumeHash, hydrateResume } from "./services/resume-storage.mjs";
@@ -47,6 +49,8 @@ export function upgradeRoutes(store, config, fetcher) {
   const autopilot = autopilotRoutes(store,queue,config,fetcher);
   const discovery = discoveryRoutes(store,config);
   const candidate=candidateRoutes(store,queue,config,fetcher);
+  const contacts=contactRoutes(store,queue,config,fetcher);
+  const career=careerRoutes(store,queue,config);
   async function publicRoute(req, res, u, {
     json,
     bodyJSON
@@ -248,6 +252,8 @@ export function upgradeRoutes(store, config, fetcher) {
     bodyJSON
   }) {
     if (await candidate(req,res,u,{json,bodyJSON})) return true;
+    if (await contacts(req,res,u,{json,bodyJSON})) return true;
+    if (await career(req,res,u,{json,bodyJSON})) return true;
     if (await discovery(req,res,u,{json,bodyJSON})) return true;
     if (await autopilot.handle(req,res,u,{json,bodyJSON})) return true;
     const path = u.pathname,

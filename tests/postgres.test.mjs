@@ -51,6 +51,18 @@ test('PostgreSQL rejects stale writes and atomically deduplicates queue tasks',a
   assert.equal((await queue.get(first.id)).status,'completed');
   assert.equal(postgresSQL("SELECT '?' FROM tasks WHERE id=?"),"SELECT '?' FROM orbit_runtime.tasks WHERE id=$1");
 });
+test('Postgres preserves contact discovery, provenance, planner tasks, stories and interview guides across worker reconnects',async t=>{
+  const {initialState}=await import('../server/fixtures.mjs'),{saveCareerTask,saveCareerStory,prepFingerprint}=await import('../server/services/career.mjs'),{startContactDiscovery}=await import('../server/services/contact-discovery.mjs');
+  const db=new PGlite();t.after(()=>db.close());const pool=poolFor(db),store=await openPostgresStore({},pool),queue=taskQueue(store),state=initialState(false);
+  state.jobs=[{id:'pg-role',company:'Company',title:'Financial Analyst',description:'Build financial models and analyze financial reports.',source:'Company',url:'https://company.com/careers/1',tags:['Excel'],location:'Mumbai',workMode:'On-site',isDemo:false}];await store.replace(state);
+  await store.run(()=>saveCareerTask({title:'Prepare for interview',jobId:'pg-role',dueAt:'2026-11-01T05:00:00Z'},store));
+  await store.run(()=>saveCareerStory({title:'Forecasting project',action:'Built a model from the supplied accounts.'},store));
+  const batch=await store.run(()=>startContactDiscovery({source:'domains',domains:['company.com'],contactsPerCompany:1},store,queue,{}));
+  const workerStore=await openPostgresStore({},pool),workerQueue=taskQueue(workerStore),registry=handlers(workerStore,workerQueue,{},()=>assert.fail('No paid API expected'),{lookupMx:async()=>[{exchange:'mx.company.com'}],contactPages:async()=>[{url:'https://company.com/careers',text:'Recruiting: hr@company.com'}]});
+  assert.equal((await runOne(workerStore,workerQueue,registry,batch.run.targets[0].taskId)).status,'completed');
+  await workerStore.refresh();const prep=await workerQueue.enqueue('career.prep',{jobId:'pg-role',useAI:false,fingerprint:prepFingerprint(workerStore,workerStore.state.jobs[0],false)});assert.equal((await runOne(workerStore,workerQueue,registry,prep.id)).status,'completed');
+  const reopened=await openPostgresStore({},pool);assert.equal(reopened.state.career.tasks[0].title,'Prepare for interview');assert.equal(reopened.state.career.stories.length,1);assert.equal(reopened.state.career.prep.length,1);assert.equal(reopened.state.contacts[0].verification.reference,'https://company.com/careers');assert.equal(reopened.state.contactDiscoveryRuns[0].targets[0].status,'completed');assert.equal((await reopened.db.prepare('SELECT company_domain FROM contacts').get()).company_domain,'company.com');
+});
 test('Postgres login sessions survive reconnects, remain private and protect the complete bootstrap path',async t=>{
   const db=new PGlite();t.after(()=>db.close());const pool=poolFor(db),store=await openPostgresStore({},pool);
   const app=createApp({store,config:{WORKSPACE_PASSWORD:'pg-test-only',ENABLE_JOB_DISCOVERY:'false',AUTOPILOT_CRON_SECRET:'cron-test'}});

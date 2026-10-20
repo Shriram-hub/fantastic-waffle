@@ -10,6 +10,7 @@ export const symbols = {
   automation: "≋",
 };
 export const names = {
+  career:'Planner & interview prep',
   overview: "Overview",
   profile: "Profile & résumé",
   jobs: "Discover jobs",

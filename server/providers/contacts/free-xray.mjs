@@ -4,8 +4,9 @@ import {publicCompanyPages} from './public-pages.mjs';
 import {permuteEmails} from './permutator.mjs';
 
 export function publishedContacts(content,domain,reference,company) {
-  const emails=[...new Set((String(content).match(/[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9.-]+\.[a-z]{2,}/gi) || []).map(e=>e.toLowerCase()))];
-  return emails.filter(email=>emailValid(email) && email.split('@')[1]===domain && /career|recruit|talent|hiring|jobs|people/i.test(email.split('@')[0])).slice(0,5).map(email=>({id:id(),name:'Hiring team',title:'Public recruiting contact',email,company,emailStatus:'unverified',source:'Public company careers',verification:{provider:'Public page',status:'unverified',reference:safeUrl(reference),result:'Publicly listed; mailbox deliverability has not been verified',at:now()},suppressed:false,isDemo:false,createdAt:now()}));
+  const decoded=String(content).replace(/&#(?:0*64|x0*40);|&commat;/gi,'@').replace(/&#(?:0*46|x0*2e);|&period;/gi,'.');
+  const emails=[...new Set((decoded.match(/[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9.-]+\.[a-z]{2,}/gi) || []).map(e=>e.toLowerCase()))];
+  return emails.filter(email=>emailValid(email) && email.split('@')[1]===domain && /career|recruit|talent|hiring|jobs|people|human[._-]?resources|^hr(?:[._-]|$)|join[._-]?us/i.test(email.split('@')[0])).slice(0,5).map(email=>({id:id(),name:'Hiring team',title:'Public recruiting contact',email,company,emailStatus:'unverified',source:'Public company careers',sources:[{url:safeUrl(reference)}],verification:{provider:'Public page',status:'unverified',reference:safeUrl(reference),result:'Publicly listed; mailbox deliverability has not been verified',at:now()},suppressed:false,isDemo:false,createdAt:now()}));
 }
 export function xrayPeople(results,company,domain) {
   return results.filter(r=>{try{return /(^|\.)linkedin\.com$/.test(new URL(r.link).hostname) && new URL(r.link).pathname.startsWith('/in/');}catch{return false;}}).flatMap(r=>{

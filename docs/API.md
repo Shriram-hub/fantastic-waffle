@@ -1,5 +1,24 @@
 # Orbit workspace API
 
+Contact and career additions:
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| GET | `/api/contacts/discovery` | Private provider readiness, request budget and batch outcomes. |
+| POST | `/api/contacts/providers/check` | Free, cached endpoint-access checks; no returned account identity or secrets. |
+| POST | `/api/contacts/discover` | Queue company discovery from matched jobs or corporate domains; explicit Hunter credit opt-in. |
+| POST | `/api/contacts/verify-batch` | Queue up to 100 approved work-email verifications. |
+| GET | `/api/export/contacts` | CSV with source/reference and formula-safe cells. |
+| GET | `/api/career` | Planner, stories, saved guides and defined search metrics. |
+| POST / PATCH | `/api/career/tasks[/:id]` | Create or update a private task with due time, job and notes. |
+| POST / PATCH | `/api/career/stories[/:id]` | Create or update a factual STAR story. |
+| PATCH | `/api/career/preferences` | Set a weekly application target from 1–100. |
+| POST | `/api/career/prep` | Queue a cached template or explicitly approved AI practice guide. |
+| PATCH | `/api/career/prep/:id/notes` | Save the user's answer notes. |
+| GET | `/api/career/calendar.ics` | Private calendar export of open dated tasks. |
+
+See [contact discovery and career tools](CONTACT_DISCOVERY.md).
+
 Writes accept same-origin JSON and owner authentication. API responses never return OAuth secrets/provider keys. Public webhook and extension routes have their own authentication; résumé share links are explicit unlisted grants. Queued operations return **202 with a task**, not a fabricated immediate result.
 
 Browser login uses revocable HttpOnly cookie sessions. `GET /api/auth/session`

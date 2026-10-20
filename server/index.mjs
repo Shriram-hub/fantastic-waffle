@@ -8,6 +8,9 @@ import {listAccounts} from './providers/mail/oauth.mjs';
 import {buildSearchPlan,rankOpportunity} from './services/search-plan.mjs';
 import {updateCandidateFromLegacy} from './services/candidate-profile.mjs';
 import {workspaceAuth,sameOrigin} from './workspace-auth.mjs';
+import {careerOverview} from './services/career.mjs';
+import {contactDiscoveryStatus} from './services/contact-discovery.mjs';
+import {checkContactProviders} from './services/contact-provider-checks.mjs';
 import {gzipSync} from 'node:zlib';
 import { openConfiguredStore } from "./store-config.mjs";
 import { spawn } from "node:child_process";
@@ -33,10 +36,12 @@ function publicState(s,preferences) {
   const {
     previews,
     apolloResults,
+    career,contactDiscoveryRuns,
     ...rest
   } = s;
   return {
     ...rest,
+    careerSummary:careerOverview(s),
     jobs: s.jobs.map(j => ({
       ...j,
       description: j.description?.slice(0,280) || '',
@@ -128,7 +133,9 @@ export function createApp({
       if(req.method==='POST' && publicUrl.pathname==='/api/internal/workspace-check') {
         const supplied=Buffer.from(String(req.headers['x-orbit-scheduler'] || '')),expected=Buffer.from(config.AUTOPILOT_CRON_SECRET || '');
         if(!expected.length || supplied.length!==expected.length || !timingSafeEqual(supplied,expected))fail('Invalid scheduler credential.',401);
-        const result=await bootstrap();return json(res,200,{ok:true,indexed:result.search.indexed,matches:result.search.matches,storage:store.kind || 'sqlite',googleConfigured:result.setup.googleConfigured});
+        const result=await bootstrap(),contacts=await contactDiscoveryStatus(store,config);
+        return json(res,200,{ok:true,indexed:result.search.indexed,matches:result.search.matches,storage:store.kind || 'sqlite',googleConfigured:result.setup.googleConfigured,
+          contactDiscovery:{hunterConfigured:contacts.hunterConfigured,dailyLimit:contacts.dailyLimit,usedToday:contacts.usedToday},career:{available:true,openTasks:result.data.careerSummary.stats.openTasks},mail:{connectedAccounts:result.accounts.length,liveSending:result.setup.liveSendEnabled},providerChecks:publicUrl.searchParams.get('checkContacts')==='true' ? await checkContactProviders(store,config,fetcher) : undefined});
       }
       if(await auth.handle(req,res,publicUrl,{json,bodyJSON}))return;
       if (await upgrade.publicRoute(req, res, publicUrl, {

@@ -14,11 +14,7 @@ export async function remoteJSON(url, options = {}, fetcher = fetch, timeoutMs =
       502,
     );
   }
-  if (!response.ok)
-    fail(
-      `The provider returned HTTP ${response.status}. Check its API access, rate limits, and configuration.`,
-      502,
-    );
+  if (!response.ok){await response.body?.cancel();throw Object.assign(new Error(`The provider returned HTTP ${response.status}. Check its API access, rate limits, and configuration.`),{status:502,providerStatus:response.status});}
   const reader = response.body?.getReader();
   if (!reader) return response.json();
   const parts = [];

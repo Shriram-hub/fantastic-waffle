@@ -1,5 +1,6 @@
 import React from 'react';
 const paths={
+  career:'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2M7 14h3M7 17h7',
   jobs:'M21 21l-4.5-4.5M10.5 18a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15',
   overview:'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z',
   applications:'M9 5H5v16h14V5h-4M9 3h6v4H9zM8 12h8M8 16h5',

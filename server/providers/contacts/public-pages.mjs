@@ -17,7 +17,7 @@ async function page(url,domain,redirects=0) {
   const result=await new Promise((resolve,reject)=>{
     const req=get(u,{lookup:(_host,options,callback)=>callback(null,options.all ? [{address:addresses[0],family:4}] : addresses[0],4),headers:{'User-Agent':'OrbitBot/0.5 (+job-search contact discovery)','Accept':'text/html,text/plain'},timeout:7000},res=>{
       if(res.statusCode>=300 && res.statusCode<400) {res.resume();resolve({redirect:res.headers.location});return;}
-      if(res.statusCode!==200) {res.resume();reject(Error('Company page unavailable'));return;}
+      if(res.statusCode!==200) {res.resume();reject(Object.assign(Error('Company page unavailable'),{httpStatus:res.statusCode}));return;}
       if(!/text\/(html|plain)/i.test(res.headers['content-type'] || '')) {res.resume();reject(Error('Unsupported company content'));return;}
       const chunks=[];let size=0;
       res.on('data',chunk=>{size+=chunk.length;if(size>350000){req.destroy(Error('Company page too large'));return;}chunks.push(chunk);});
@@ -38,12 +38,12 @@ export function robotsAllows(body,path) {
   }
   return rules.sort((a,b)=>b.length-a.length || Number(b.allow)-Number(a.allow))[0]?.allow ?? true;
 }
-export async function publicCompanyPages(domain) {
+export async function publicCompanyPages(domain,{load=page}={}) {
   let robots;
-  try {robots=await page(`https://${domain}/robots.txt`,domain);} catch {return [];}
+  try {robots=await load(`https://${domain}/robots.txt`,domain);} catch(error) {if(error.httpStatus===404)robots={text:''};else return [];}
   const pages=[];
-  for(const path of ['/careers','/jobs']) if(robotsAllows(robots.text,path)) {
-    try {pages.push(await page(`https://${domain}${path}`,domain));} catch {}
+  for(const path of ['/careers','/jobs','/contact','/contact-us']) if(robotsAllows(robots.text,path)) {
+    try {pages.push(await load(`https://${domain}${path}`,domain));} catch {}
   }
   return pages;
 }

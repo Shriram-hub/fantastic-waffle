@@ -2,6 +2,12 @@
 
 A working personal workspace for job discovery, résumé preparation, application tracking, browser-assisted filling, inbox updates, company contacts, and reviewed outreach.
 
+The main contact finder supports Hunter and published company careers pages,
+batch discovery from matched jobs, source references, verification and reviewed
+campaign drafts. Planner & interview prep adds task deadlines, calendar export,
+STAR stories, job-specific practice guides and search analytics. See
+[contact discovery and career tools](docs/CONTACT_DISCOVERY.md).
+
 SQLite remains the local default. Set `DATABASE_URL` to use the real PostgreSQL runtime, including durable jobs, send logs, encrypted mailbox credentials, and private resume objects. `RUN_EMBEDDED_WORKER=true` supervises a worker alongside the API on a single hosting service. Google sign-in protects this private personal workspace; Gmail/Outlook mailbox consent remains separate. See [Google sign-in setup](docs/GOOGLE_SIGN_IN.md).
 
 ## Automatic job discovery

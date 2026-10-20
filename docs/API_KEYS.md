@@ -1,7 +1,11 @@
 # Keys and setup for the live Render + Supabase app
 
 Open **https://orbit-a1jt.onrender.com**. Hosting stays on Render + Supabase.
-Sign in as `orbit` with the existing `WORKSPACE_PASSWORD` from Render.
+Unlock using the existing `WORKSPACE_PASSWORD` from Render, or use your linked
+Google sign-in. The main contact finder uses `HUNTER_API_KEY` and public company
+pages; Apollo is optional. Planner, calendar export, STAR stories, analytics and
+template interview guides need no new key. Gemini practice guides reuse the
+existing `LLM_*` settings. See [the feature guide](CONTACT_DISCOVERY.md).
 
 ## Where to put credentials
 

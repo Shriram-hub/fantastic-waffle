@@ -10,12 +10,14 @@ import { Outreach } from './features/outreach/Outreach.jsx';
 import { Inbox } from './features/tracker/Inbox.jsx';
 import { Automation } from './features/automation/Automation.jsx';
 import { Connections } from './features/connections/Connections.jsx';
+import {CareerWorkspace} from './features/career/CareerWorkspace.jsx';
 import { ModalContent } from './features/modals/ModalContent.jsx';
 import { symbols, names } from './shared/navigation.mjs';
 import {Icon} from './shared/Icon.jsx';
 import {SignIn,WorkspaceError,authMessages} from './features/auth/SignIn.jsx';
 import {workspaceLoader} from './shared/workspace-loader.mjs';
 export default function App() {
+  const [careerJobId,setCareerJobId]=useState('');
   const [session,setSession]=useState(null),[retrying,setRetrying]=useState(false),[authError,setAuthError]=useState('');
   const [data, setData] = useState(null),
     [integrations, setIntegrations] = useState({}),
@@ -123,6 +125,7 @@ export default function App() {
       </div>
     );
   const app = {
+    careerJobId,setCareerJobId,
     data,
     integrations,
     accounts,
@@ -149,6 +152,7 @@ export default function App() {
       inbox: Inbox,
       automation: Automation,
       connections: Connections,
+      career:CareerWorkspace,
     }[route] || Overview;
   return (
     <Context.Provider value={app}>
@@ -185,6 +189,7 @@ export default function App() {
                 "jobs",
                 "overview",
                 "applications",
+                "career",
                 "profile",
                 "contacts",
                 "outreach",
@@ -322,4 +327,7 @@ export default function App() {
 }
 export { WorkspaceContext, stages, api } from './shared/workspace.jsx';
 export { Button, Badge, Heading } from './shared/ui.jsx';
-export { Overview, Jobs, Applications, Profile, Contacts, Outreach, Inbox, Automation, Connections, SignIn, WorkspaceError };
+export { Overview, Jobs, Applications, Profile, Contacts, Outreach, Inbox, Automation, Connections, SignIn, WorkspaceError, CareerWorkspace };
+export {CareerPlanner} from './features/career/CareerPlanner.jsx';
+export {CareerPrep} from './features/career/CareerPrep.jsx';
+export {StoryBank} from './features/career/StoryBank.jsx';
