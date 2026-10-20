@@ -12,6 +12,9 @@ import {
 export const users = pgTable("users", {
   id: text("id").primaryKey(),
   email: text("email").notNull(),
+  // Includes the normalized `master` candidate vault (personal, links, history,
+  // education and explicit screening defaults). Runtime user_profiles persists
+  // the same JSON privately, so this evolution needs no destructive migration.
   profile: jsonb("profile").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });

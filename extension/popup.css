@@ -53,3 +53,8 @@ button:disabled {
 #status {
   font-weight: 600;
 }
+
+.check {display:flex;align-items:center;gap:8px}
+.check input {width:16px;margin:0}
+details {border-top:1px solid #d5dfcf;padding-top:12px}
+summary {cursor:pointer;font-weight:600}

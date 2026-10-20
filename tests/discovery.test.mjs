@@ -6,7 +6,9 @@ import {taskQueue} from '../server/queue.mjs';
 import {handlers,runOne} from '../server/worker.mjs';
 import {createApp} from '../server/index.mjs';
 import {saveSearchConfig,scheduleDiscovery,searchStatus,SOURCE_DEFAULTS,DISCOVERY_INTERVAL} from '../server/services/discovery.mjs';
-import {buildSearchPlan,rankOpportunity} from '../server/services/search-plan.mjs';
+import {buildSearchPlan,rankOpportunity,searchLocations} from '../server/services/search-plan.mjs';
+import {sourcePlan} from '../server/services/discovery.mjs';
+import {fetchLinkedInGuest,parseLinkedInCards} from '../server/providers/jobs/linkedin-guest.mjs';
 import {fetchGoogleJobs} from '../server/providers/jobs/google-jobs.mjs';
 import {knownBoards,rememberBoards} from '../server/providers/jobs/registry.mjs';
 import {providerCall} from '../server/services/provider-budget.mjs';
@@ -15,6 +17,24 @@ import {parseResumeAsync} from '../server/resume.mjs';
 const json=x=>new Response(JSON.stringify(x));
 const sources=(...names)=>Object.fromEntries(Object.keys(SOURCE_DEFAULTS).map(k=>[k,names.includes(k)]));
 const job=(title='Frontend Engineer',extra={})=>({id:'job-1',company:'Stripe',title,location:'Remote',workMode:'Remote',description:'React TypeScript interfaces',tags:['React'],url:'https://boards.greenhouse.io/stripe/jobs/1',source:'Greenhouse',board:'stripe',fetchedAt:new Date().toISOString(),...extra});
+test('finance searches expand metro alternatives and separate adjacent roles without recommending unrelated tech',()=>{
+  const state=initialState(false),prefs={roles:['Financial Analyst','Accountant','Investment Banking'],location:'Mumbai or Bengaluru or Delhi',country:'IN',sources:{'Google Jobs':true,'LinkedIn Guest':true}};
+  const plan=buildSearchPlan(state,prefs);
+  assert.deepEqual(searchLocations(prefs.location),['Mumbai','Bengaluru','Delhi']);
+  for(const location of ['Navi Mumbai, India','Bangalore, India','Gurgaon, India','Noida, India'])assert.equal(rankOpportunity(job('Financial Analyst',{location,workMode:'On-site'}),plan).tier,'strong',location);
+  for(const title of ['FP&A Associate','Treasury Analyst','Equity Research Associate','Bookkeeper','Tax Associate']){const match=rankOpportunity(job(title,{location:'Mumbai, India',workMode:'On-site'}),plan);assert.equal(match.tier,'adjacent',title);assert.equal(match.eligible,false);assert.ok(match.score<=74);}
+  assert.equal(rankOpportunity(job('Frontend Engineer',{location:'Mumbai, India'}),plan).recommendable,false);
+  assert.equal(rankOpportunity(job('Financial Analyst',{location:'Remote, United States',locationRestrictions:['United States only']}),plan).recommendable,false);
+  assert.equal(rankOpportunity(job('Financial Analyst',{location:'India (Remote)',locationRestrictions:['India only']}),plan).tier,'strong');
+  const requests=sourcePlan(plan,{},prefs).filter(d=>d.source==='Google Jobs');assert.equal(requests.length,9);assert.ok(requests.every(d=>!d.location.includes(' or ')));assert.equal(requests[8].location,'Delhi');
+});
+test('public LinkedIn cards preserve source URLs and dates; blocks fail visibly without evasion',async()=>{
+  const html='<li><a class="base-card__full-link" href="https://www.linkedin.com/jobs/view/finance-123?trackingId=x"></a><h3 class="base-search-card__title">Financial Analyst</h3><h4 class="base-search-card__subtitle"><a>Acme &amp; Co</a></h4><span class="job-search-card__location">Mumbai, India</span><time datetime="2026-10-19">1 day ago</time></li>';
+  const [parsed]=parseLinkedInCards(html,'Financial Analyst');assert.equal(parsed.title,'Financial Analyst');assert.equal(parsed.company,'Acme & Co');assert.equal(parsed.url,'https://www.linkedin.com/jobs/view/finance-123');assert.equal(parsed.publishedAt,'2026-10-19T00:00:00.000Z');assert.equal(parsed.descriptionUnavailable,true);
+  const jobs=await fetchLinkedInGuest('Financial Analyst',{SEARCH_LOCATION:'Mumbai'},async url=>{const u=new URL(url);assert.equal(u.searchParams.get('location'),'Mumbai');assert.equal(u.searchParams.get('f_TPR'),'r604800');return new Response(html);});assert.equal(jobs.length,1);
+  await assert.rejects(fetchLinkedInGuest('Analyst',{},async()=>new Response('Blocked',{status:429})),/HTTP 429/);
+  assert.equal(parseLinkedInCards(html.replace('https://www.linkedin.com/jobs/view/finance-123','https://malicious.example/jobs/view/123')).length,0);
+});
 function clean(t) {const store=openStore(':memory:');t.after(()=>store.close());store.replace(initialState(false));return store;}
 async function drain(store,queue,fetcher,config={}) {
   const registry=handlers(store,queue,config,fetcher);

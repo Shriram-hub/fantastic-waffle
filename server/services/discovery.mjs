@@ -11,7 +11,7 @@ export const DISCOVERY_INTERVAL=2*3600000;
 // Keep retained provider payloads small enough for Render's shared free instance.
 const BATCH_SIZE=4,MAX_INDEX=1500;
 const sourceKey=d=>hash([d.source,d.board,d.page || 1,d.location || '',d.country || '']);
-export const SOURCE_DEFAULTS=Object.freeze({'Remotive':true,'Arbeitnow':true,'Remote OK':true,'Jobicy':true,'Himalayas':true,'Greenhouse':true,'Lever':true,'Ashby':true,'Google Jobs':false});
+export const SOURCE_DEFAULTS=Object.freeze({'Remotive':true,'Arbeitnow':true,'Remote OK':true,'Jobicy':true,'Himalayas':true,'Greenhouse':true,'Lever':true,'Ashby':true,'Google Jobs':false,'LinkedIn Guest':true});
 export async function getSearchConfig(store) {
   const row=await store.db.prepare("SELECT body FROM job_search_config WHERE id='local'").get();
   const p=store.state.profile;
@@ -62,12 +62,17 @@ export async function scheduleDiscovery(store,queue,config={},force=false,clock=
     await store.db.exec('COMMIT');return task;
   } catch(e) {await store.db.exec('ROLLBACK');throw e;}
 }
-function sourcePlan(plan,settings,prefs,registry=[]) {
+export function sourcePlan(plan,settings,prefs,registry=[]) {
   const publicSources=[{source:'Remotive',board:'',ttl:6*3600000},{source:'Arbeitnow',board:'',ttl:DISCOVERY_INTERVAL},{source:'Remote OK',board:'',ttl:DISCOVERY_INTERVAL},{source:'Jobicy',board:'',ttl:DISCOVERY_INTERVAL}];
   for(const role of (plan.roles.length ? plan.roles : ['']).slice(0,6)) for(let page=1;page<=(role ? 3 : 2);page++) publicSources.push({source:'Himalayas',board:role,page,ttl:86400000});
   const custom=['Greenhouse','Lever','Ashby'].flatMap(source=>(settings[`${source.toLowerCase()}Boards`] || []).map(slug=>({source,slug})));
-  const paid=prefs.sources['Google Jobs'] ? plan.roles.slice(0,3).map(role=>({source:'Google Jobs',board:role,location:plan.location,country:plan.country,ttl:6*3600000})) : [];
-  return [...publicSources,...[...new Map([...custom,...boards,...registry].map(b=>[`${b.source}:${b.slug}`,b])).values()].map(b=>({source:b.source,board:b.slug,ttl:DISCOVERY_INTERVAL,company:b.company,companyDomain:b.companyDomain})),...paid].filter(d=>prefs.sources[d.source]);
+  const locations=plan.locations?.length ? plan.locations : [plan.location || ''];
+  // Separate location alternatives before provider calls. Sending "Mumbai or
+  // Bengaluru or Delhi" as one city prevents aggregators from geocoding it.
+  const pairs=plan.roles.flatMap(role=>locations.map(location=>({board:role,location,country:plan.country})));
+  const paid=prefs.sources['Google Jobs'] ? pairs.slice(0,24).map(pair=>({source:'Google Jobs',...pair,ttl:6*3600000})) : [];
+  const guest=pairs.slice(0,32).map(pair=>({source:'LinkedIn Guest',...pair,ttl:DISCOVERY_INTERVAL}));
+  return [...paid,...guest,...publicSources,...[...new Map([...custom,...boards,...registry].map(b=>[`${b.source}:${b.slug}`,b])).values()].map(b=>({source:b.source,board:b.slug,ttl:DISCOVERY_INTERVAL,company:b.company,companyDomain:b.companyDomain}))].filter(d=>prefs.sources[d.source]);
 }
 async function fetchSource(descriptor,store,config,fetcher,plan) {
   const {source,board,ttl,page}=descriptor,key=sourceKey(descriptor);
@@ -97,7 +102,7 @@ async function fetchSource(descriptor,store,config,fetcher,plan) {
     await store.db.prepare('INSERT INTO job_source_cache(id,expires_at,body) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET expires_at=excluded.expires_at,body=excluded.body')
       .run(key,Date.now()+ttl,gzipSync(JSON.stringify(jobs)).toString('base64'));
   }
-  const matched=jobs.filter(j=>rankOpportunity(j,plan).eligible).length;
+  const matched=jobs.filter(j=>rankOpportunity(j,plan).recommendable).length;
   await store.db.prepare("INSERT INTO job_source_health(id,source,board,checked_at,status,scanned,matched,message) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET checked_at=excluded.checked_at,status=excluded.status,scanned=excluded.scanned,matched=excluded.matched,message=excluded.message")
     .run(key,source,board,Date.now(),cached ? 'cached' : 'healthy',jobs.length,matched,null);
   return {descriptor,jobs,cached,key};
@@ -130,7 +135,7 @@ export function mergeDiscoveryResults(state,results,plan) {
     }
     j.discoveryMatch=rankOpportunity(j,plan);return j;
   });
-  all.sort((a,b)=>(Number(pinned.has(b.id))-Number(pinned.has(a.id))) || Number(b.discoveryMatch.eligible)-Number(a.discoveryMatch.eligible) || (b.discoveryMatch.score || 0)-(a.discoveryMatch.score || 0) || (Date.parse(b.publishedAt)||0)-(Date.parse(a.publishedAt)||0));
+  all.sort((a,b)=>(Number(pinned.has(b.id))-Number(pinned.has(a.id))) || Number(b.discoveryMatch.recommendable)-Number(a.discoveryMatch.recommendable) || Number(b.discoveryMatch.eligible)-Number(a.discoveryMatch.eligible) || (b.discoveryMatch.score || 0)-(a.discoveryMatch.score || 0) || (Date.parse(b.publishedAt)||0)-(Date.parse(a.publishedAt)||0));
   const kept=all.filter((j,i)=>pinned.has(j.id) || i<MAX_INDEX);
   return {jobs:kept,added:kept.filter(j=>!before.has(canonicalJobKey(j))).length};
 }
@@ -174,7 +179,7 @@ export async function discoverBatch(task,store,queue,config={},fetcher=fetch) {
   // Persist counters and the next task together, so a crash cannot lose a batch.
   const priorOffset=progress.offset || 0;
   if(priorOffset<=offset) progress={...progress,offset:offset+batch.length,sourcesTotal:descriptors.length,sourcesChecked:progress.sourcesChecked+batch.length,scanned:progress.scanned+results.reduce((n,r)=>n+r.jobs.length,0),failed:progress.failed+failed,cached:progress.cached+results.filter(r=>r.cached).length,added:progress.added+merged.added};
-  progress.matched=merged.jobs.filter(j=>j.discoveryMatch.eligible && !j.archived).length;progress.indexed=merged.jobs.filter(j=>!j.archived).length;
+  progress.matched=merged.jobs.filter(j=>j.discoveryMatch.recommendable && !j.archived).length;progress.indexed=merged.jobs.filter(j=>!j.archived).length;
   const more=offset+batch.length<descriptors.length;
   await store.db.exec('BEGIN IMMEDIATE');
   try {
@@ -195,5 +200,7 @@ export async function searchStatus(store) {
   const health=await store.db.prepare('SELECT * FROM job_source_health ORDER BY checked_at DESC').all();
   const details=run ? JSON.parse(run.body) : null;if(details) delete details.descriptors;
   return {preferences,plan,run:run ? {...run,details,body:undefined} : null,sources:health,schedule:await store.db.prepare("SELECT next_run FROM autopilot_schedule WHERE id='jobs'").get() || null,
-    indexed:store.state.jobs.filter(j=>!j.archived && !j.isDemo).length,matches:plan.personalized ? store.state.jobs.filter(j=>!j.archived && rankOpportunity(j,plan).eligible).length : null};
+    indexed:store.state.jobs.filter(j=>!j.archived && !j.isDemo).length,matches:plan.personalized ? store.state.jobs.filter(j=>!j.archived && rankOpportunity(j,plan).recommendable).length : null,
+    strongMatches:store.state.jobs.filter(j=>!j.archived && rankOpportunity(j,plan).tier==='strong').length,
+    adjacentMatches:store.state.jobs.filter(j=>!j.archived && rankOpportunity(j,plan).tier==='adjacent').length};
 }

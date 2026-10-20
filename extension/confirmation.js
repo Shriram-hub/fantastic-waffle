@@ -1,6 +1,8 @@
 // Runs only on supported ATS origins, in every permitted frame. Submission is
 // reported as pending; only an explicit ATS success panel can confirm it.
 (() => {
+  if(globalThis.__orbitConfirmationInstalled)return;
+  globalThis.__orbitConfirmationInstalled=true;
   const roots=new WeakSet();let scheduled=false,lastEvidence='';
   const selectors=['#application_confirmation','#application-confirmation','.application-confirmation','[data-testid="application-success"]','[data-automation-id="congratulationsMessage"]','.artdeco-modal h2'];
   const success=/thank you for applying|application (?:has been )?(?:submitted|received|sent)|we have received your application|successfully submitted/i;

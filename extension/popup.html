@@ -17,7 +17,7 @@
         >Orbit address<input
           name="base"
           type="url"
-          value="http://127.0.0.1:3000"
+          value="https://orbit-a1jt.onrender.com"
           required /></label
       ><label
         >Pairing token<input
@@ -29,7 +29,11 @@
     </form>
     <button id="next">Open & fill next application</button
     ><button id="refill">Fill the current application again</button
-    ><button id="forget">Forget connection</button>
+    ><button id="current">Fill this page</button>
+    <button id="history">Auto-add &amp; fill all history entries</button>
+    <button id="suggest">Suggest supported answers with Gemini</button>
+    <details><summary>Import my LinkedIn profile</summary><label class="check"><input id="own-profile" type="checkbox"/>This is my own LinkedIn profile</label><button id="linkedin">Sync My LinkedIn Profile</button><small>Open your profile and expand the sections you want imported.</small></details>
+    <button id="forget">Forget connection</button>
     <p id="status" role="status"></p>
     <p id="result"></p>
     <small

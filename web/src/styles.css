@@ -486,3 +486,13 @@ select {
     right: 16px;
   }
 }
+.vault-tabs {display:flex;flex-wrap:wrap;gap:6px;margin:18px 0;padding-bottom:16px;border-bottom:1px solid var(--border,#dce6e2)}
+.vault-tabs button {border:1px solid #dce6e2;background:transparent;color:inherit;border-radius:7px;padding:8px 11px;cursor:pointer;font:inherit;font-size:12px}
+.vault-tabs button[aria-selected="true"] {background:#175744;color:white;border-color:#175744}
+.master-vault {margin-bottom:20px}
+.master-vault .eyebrow {font-size:10px;letter-spacing:.13em;color:#59766a}
+.vault-entry {border:1px solid #dce6e2;border-radius:10px;padding:16px;margin:16px 0;min-width:0}
+.vault-entry legend {font-weight:600;padding:0 7px;font-size:13px}
+.vault-import {border-top:1px solid #dce6e2;margin-top:20px;padding-top:16px}
+.vault-import summary,.legacy-profile-form+summary,details.form-section>summary {font-weight:600;cursor:pointer}
+.legacy-profile-form {margin-top:20px}

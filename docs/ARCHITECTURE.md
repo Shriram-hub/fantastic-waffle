@@ -54,11 +54,14 @@ Resume HTML remains semantic and single-column with no flex/grid reading-order t
 
 ## Browser assistant
 
-The API only queues allowlisted ATS destinations. An expiring paired token receives
-one task, its approved profile, resume, and answer bank. Native prototype setters
+The API queues approved public HTTPS application destinations. The browser grants
+custom portals per-origin access. An expiring paired token receives one task, its
+normalized candidate vault, original resume, and answer bank. Native prototype setters
 trigger input/change events. Filling traverses open shadow roots and permitted
 frames; closed roots, inaccessible frames and custom multi-step controls may need
-manual input. It never clicks Submit or answers unknown screening questions.
+manual input. Recognized repeating blocks, native/ARIA choices, and résumé file inputs
+are filled from saved facts. Optional Gemini suggestions select verbatim professional
+excerpts, leaving unsupported and sensitive questions for the user. It never clicks Submit.
 
 A user Submit attempt records pending status. A subsequent explicit ATS success
 panel in the same queued tab/origin can confirm Applied. The backend checks the

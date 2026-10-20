@@ -1,4 +1,4 @@
-# Orbit v0.2 API
+# Orbit workspace API
 
 Writes accept same-origin JSON and owner authentication. API responses never return OAuth secrets/provider keys. Public webhook and extension routes have their own authentication; résumé share links are explicit unlisted grants. Queued operations return **202 with a task**, not a fabricated immediate result.
 
@@ -7,6 +7,15 @@ Writes accept same-origin JSON and owner authentication. API responses never ret
 | GET           | `/api/state`                             | Owner workspace, explained matches, validated semantic scores, résumé metadata/text; no original bytes.                            |
 | GET           | `/api/integrations`                      | Adapter/configuration booleans.                                                                                                    |
 | PUT           | `/api/profile`                           | Contact info, roles/skills, links, notice period, salary, authorization notes.                                                     |
+| GET / PUT | `/api/profile/master` | Normalized candidate vault; PUT accepts `{master, expectedUpdatedAt?}` and rejects a stale editor with 409. |
+| POST | `/api/profile/parse-resume` | PDF/DOCX/TXT upload; queue parsing and optional Gemini master-profile extraction. |
+| POST | `/api/profile/import-linkedin` | Export file, pasted text, structured extension data or URL; preserve saved values and the application résumé. |
+| GET | `/api/profile/resume-file` | Owner-only original résumé bytes. |
+| GET | `/api/extension/download` | Owner-only ZIP of the current Chrome assistant. |
+| GET | `/api/extension/profile` | Extension bearer required; latest candidate profile and approved answer bank. |
+| POST | `/api/extension/context` | Verify current task, token and application origin; renew its lease before filling. |
+| POST | `/api/extension/import-linkedin` | Extension bearer and explicit own-profile confirmation required. |
+| POST | `/api/extension/questions` | Paired queued application; bounded professional excerpt suggestions for user review. |
 | POST          | `/api/resume`                            | Validated base64 file up to 5 MB; queue background extraction.                                                                     |
 | PUT / DELETE  | `/api/resume/text` / `/api/resume`       | Edit extracted text / remove active résumé record.                                                                                 |
 | GET           | `/api/resume/download`                   | Authenticated original bytes, hydrated from private local/S3 storage.                                                              |

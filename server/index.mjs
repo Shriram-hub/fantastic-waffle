@@ -6,6 +6,7 @@ import {autopilotStatus} from './services/autopilot.mjs';
 import {setupReadiness} from './discovery-routes.mjs';
 import {listAccounts} from './providers/mail/oauth.mjs';
 import {buildSearchPlan,rankOpportunity} from './services/search-plan.mjs';
+import {updateCandidateFromLegacy} from './services/candidate-profile.mjs';
 import {gzipSync} from 'node:zlib';
 import { openConfiguredStore } from "./store-config.mjs";
 import { spawn } from "node:child_process";
@@ -246,15 +247,18 @@ export function createApp({
           if (p.email && !emailValid(p.email)) fail("Enter a valid email address.");
           if (p.portfolio && !safeUrl(p.portfolio)) fail("Use a full http:// or https:// portfolio URL.");
           for (const key of ["skills", "interests"]) {
-            if (!Array.isArray(data[key]) || data[key].length > 40) fail(`Enter up to 40 ${key}.`);
+            const max=key==='skills' ? 100 : 40;
+            if (!Array.isArray(data[key]) || data[key].length > max) fail(`Enter up to ${max} ${key}.`);
             p[key] = [...new Set(data[key].map(x => text(x, 100)).filter(Boolean))];
           }
           if (!["Any", "Remote", "Hybrid", "On-site"].includes(data.workMode)) fail("Choose a supported work preference.");
           p.workMode = data.workMode;
           s.profile = {
+            ...s.profile,
             ...p,
             resumeUrl: s.profile.resumeUrl || ""
           };
+          updateCandidateFromLegacy(s.profile,p);
           await store.save();
           await ensureSearchMatrix(store,config,fetcher);
           const preferences=await getSearchConfig(store);

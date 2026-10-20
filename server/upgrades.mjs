@@ -1,6 +1,9 @@
 import { unsubscribeRoute } from "./services/unsubscribe.mjs";
 import { autopilotRoutes } from "./autopilot-routes.mjs";
 import { discoveryRoutes } from './discovery-routes.mjs';
+import {candidateRoutes,importLinkedIn} from './candidate-routes.mjs';
+import {candidateProfile} from './services/candidate-profile.mjs';
+import {suggestProfileAnswers} from './services/ai.mjs';
 import { resumeHash, hydrateResume } from "./services/resume-storage.mjs";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { createRemoteJWKSet, jwtVerify } from "jose";
@@ -26,7 +29,7 @@ const escape = s => String(s || "").replace(/[&<>"']/g, c => ({
 const extensionAllowed = url => {
   try {
     const u = new URL(url);
-    return u.protocol === "https:" && (/(^|\.)(greenhouse\.io|lever\.co|myworkdayjobs\.com|ashbyhq\.com)$/.test(u.hostname) || u.hostname === "www.linkedin.com" && u.pathname.startsWith("/jobs/"));
+    return u.protocol === 'https:' && !u.username && !u.password && u.hostname.includes('.') && !/^(?:localhost|127\.|0\.|10\.|192\.168\.|169\.254\.)/.test(u.hostname);
   } catch {
     return false;
   }
@@ -43,6 +46,7 @@ export function upgradeRoutes(store, config, fetcher) {
   });
   const autopilot = autopilotRoutes(store,queue,config,fetcher);
   const discovery = discoveryRoutes(store,config);
+  const candidate=candidateRoutes(store,queue,config,fetcher);
   async function publicRoute(req, res, u, {
     json,
     bodyJSON
@@ -126,10 +130,31 @@ export function upgradeRoutes(store, config, fetcher) {
       res.end(Buffer.from((await hydrateResume(r, store, config)).base64, "base64"));
       return true;
     }
-    if (["/api/extension/next", "/api/extension/report", "/api/extension/submission", "/api/extension/resume"].includes(path)) {
+    if (["/api/extension/next", "/api/extension/report", "/api/extension/submission", "/api/extension/resume",'/api/extension/profile','/api/extension/context','/api/extension/import-linkedin','/api/extension/questions'].includes(path)) {
       const token = req.headers.authorization?.replace(/^Bearer /, "") || "",
         valid = await store.db.prepare("SELECT id FROM extension_tokens WHERE id=? AND expires>?").get(hash(token), Date.now());
       if (!valid) fail("The extension token expired or was revoked.", 401);
+      if(path==='/api/extension/profile' && req.method==='GET') {json(res,200,{profile:{...store.state.profile,master:candidateProfile(store.state.profile)},qa:store.state.settings.qaBank || [],resume:!!store.state.resume});return true;}
+      if(path==='/api/extension/context' && req.method==='POST') {
+        const data=await bodyJSON(req),row=await store.db.prepare("SELECT * FROM apply_tasks WHERE id=? AND token_hash=? AND status IN ('leased','needs-review','blocked')").get(data.taskId,valid.id);
+        if(!row)fail('This application is no longer assigned to the paired browser.',409);
+        const application=store.state.applications.find(a=>a.id===row.application_id),job=store.state.jobs.find(j=>j.id===application?.jobId),source=safeUrl(data.url);
+        if(!job || !source || new URL(source).origin!==new URL(job.url).origin || !['Saved','Ready'].includes(application.stage))fail('Return to the queued application before filling.',409);
+        await store.db.prepare('UPDATE apply_tasks SET lease_until=? WHERE id=? AND token_hash=?').run(Date.now()+600000,row.id,valid.id);
+        json(res,200,{profile:{...store.state.profile,master:candidateProfile(store.state.profile)},qa:store.state.settings.qaBank || [],resume:!!store.state.resume});return true;
+      }
+      if(path==='/api/extension/import-linkedin' && req.method==='POST') {
+        const data=await bodyJSON(req);if(data.confirmOwnProfile!==true) fail('Confirm this is your own LinkedIn profile.');
+        json(res,202,await importLinkedIn(data,store,queue,config));return true;
+      }
+      if(path==='/api/extension/questions' && req.method==='POST') {
+        const data=await bodyJSON(req),row=await store.db.prepare("SELECT * FROM apply_tasks WHERE id=? AND token_hash=? AND lease_until>? AND status IN ('leased','needs-review','blocked')").get(data.taskId,valid.id,Date.now());
+        if(!row) fail('Open a paired application before requesting suggestions.',409);
+        const application=store.state.applications.find(a=>a.id===row.application_id),job=store.state.jobs.find(j=>j.id===application?.jobId);
+        if(!job || !Array.isArray(data.questions) || data.questions.length>20) fail('Request up to 20 questions for the current application.');
+        const questions=data.questions.map((q,i)=>({id:String(i),label:text(q.label,350)})).filter(q=>q.label);
+        json(res,200,await suggestProfileAnswers(questions,candidateProfile(store.state.profile),job,config,fetcher,store));return true;
+      }
       if (path === "/api/extension/resume" && req.method === "GET") {
         const r = store.state.resume;
         if (!r) fail("No résumé uploaded.", 404);
@@ -161,7 +186,7 @@ export function upgradeRoutes(store, config, fetcher) {
               url: j.url,
               company: j.company,
               role: j.title,
-              profile: store.state.profile,
+              profile: {...store.state.profile,master:candidateProfile(store.state.profile)},
               qa: store.state.settings.qaBank || [],
               resume: Boolean(store.state.resume)
             }
@@ -222,6 +247,7 @@ export function upgradeRoutes(store, config, fetcher) {
     json,
     bodyJSON
   }) {
+    if (await candidate(req,res,u,{json,bodyJSON})) return true;
     if (await discovery(req,res,u,{json,bodyJSON})) return true;
     if (await autopilot.handle(req,res,u,{json,bodyJSON})) return true;
     const path = u.pathname,
@@ -291,7 +317,7 @@ export function upgradeRoutes(store, config, fetcher) {
       return true;
     }
     if (["GET", "HEAD"].includes(method)) return false;
-    const matched = /^\/api\/(share\/[^/]+\/revoke|tasks\/[^/]+\/(?:cancel|retry)|mail\/[^/]+\/(?:sync|watch|disconnect)|apply\/[^/]+\/(?:confirm|requeue)|contacts\/[^/]+\/(?:verify|personalize|enrich))$/.test(path) || ["/api/jobs/sync", "/api/resume", "/api/settings", "/api/ai/extract", "/api/matching", "/api/tailor", "/api/apply/queue", "/api/extension/token", "/api/share/resume", "/api/campaigns"].includes(path) || /^\/api\/campaigns\/[^/]+(?:\/(?:send|preview|pause))?$/.test(path);
+    const matched = /^\/api\/(share\/[^/]+\/revoke|tasks\/[^/]+\/(?:cancel|retry)|mail\/[^/]+\/(?:sync|watch|disconnect)|apply\/[^/]+\/(?:confirm|requeue)|contacts\/[^/]+\/(?:verify|personalize|enrich))$/.test(path) || ["/api/jobs/sync", "/api/resume",'/api/profile/parse-resume', "/api/settings", "/api/ai/extract", "/api/matching", "/api/tailor", "/api/apply/queue", "/api/extension/token", "/api/share/resume", "/api/campaigns"].includes(path) || /^\/api\/campaigns\/[^/]+(?:\/(?:send|preview|pause))?$/.test(path);
     if (!matched || path === "/api/resume" && method !== "POST") return false;
     const data = await bodyJSON(req);
     if (path === "/api/jobs/sync") {
@@ -310,7 +336,7 @@ export function upgradeRoutes(store, config, fetcher) {
       });
       return true;
     }
-    if (path === "/api/resume") {
+    if (path === "/api/resume" || path==='/api/profile/parse-resume') {
       const name = text(data.name, 180).replace(/["\r\n/\\]/g, "_");
       if (!/\.(pdf|docx|txt)$/i.test(name) || typeof data.base64 !== "string" || !/^[A-Za-z0-9+/]*={0,2}$/.test(data.base64)) fail("Upload a PDF, DOCX, or TXT résumé.");
       const raw = Buffer.from(data.base64, "base64");
@@ -328,7 +354,7 @@ export function upgradeRoutes(store, config, fetcher) {
       await store.save();
       await enqueue(res, json, "resume.parse", {
         resumeHash: hash(data.base64),
-        structured: false
+        structured: false,master:path==='/api/profile/parse-resume'
       }, {
         dedupeKey: `resume-${hash(data.base64)}-${Date.now()}`
       });
@@ -497,7 +523,7 @@ export function upgradeRoutes(store, config, fetcher) {
       if (!Array.isArray(data.jobIds) || !data.jobIds.length || data.jobIds.length > 20) fail("Choose 1–20 jobs.");
       const jobs = [...new Set(data.jobIds)].map(jid => find(s.jobs, jid, "Job"));
       if (jobs.some(j => s.applications.some(a => a.jobId === j.id && !["Saved", "Ready"].includes(a.stage)))) fail("Only Saved or Ready opportunities can be queued for form filling.");
-      if (jobs.some(j => !extensionAllowed(j.url))) fail("The extension currently supports Greenhouse, Lever, Ashby, Workday, and LinkedIn job pages only.");
+      if (jobs.some(j => !extensionAllowed(j.url))) fail('Choose public HTTPS application URLs. Grant each custom portal permission in the extension.');
       for (const j of jobs) if (!s.applications.some(a => a.jobId === j.id)) s.applications.push({
         id: id(),
         jobId: j.id,

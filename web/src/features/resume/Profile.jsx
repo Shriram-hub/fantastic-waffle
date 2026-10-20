@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp, api, stages, split, fmt } from '../../shared/workspace.jsx';
 import { Button, Badge, Heading, Empty, Panel, Field, Company, Modal, ConfirmAction, Sample } from '../../shared/ui.jsx';
+import {MasterProfileVault} from './MasterProfileVault.jsx';
 export function Profile() {
   const { data, vault, perform, notify, setModal } = useApp(),
     [draft, setDraft] = useState({
@@ -10,14 +11,17 @@ export function Profile() {
     }),
     [qa, setQa] = useState(data.settings.qaBank || []),
     r = data.resume;
-  const change = (key, value) => setDraft((v) => ({ ...v, [key]: value }));
+  const changed=useRef(new Set());
+  const change = (key, value) => {changed.current.add(key);setDraft((v) => ({ ...v, [key]: value }));};
+  const profileKey=JSON.stringify(data.profile);
+  useEffect(()=>{setDraft(old=>{const next={...old};for(const [key,value] of Object.entries(data.profile))if(!changed.current.has(key))next[key]=['skills','interests'].includes(key) ? value.join(', ') : value;return next;});},[profileKey]);
   async function upload(file) {
     if (!file) return;
     if (file.size > 5000000) throw Error("Choose a file under 5 MB.");
     const bytes = new Uint8Array(await file.arrayBuffer());
     let raw = "";
     for (const b of bytes) raw += String.fromCharCode(b);
-    await api("/resume", { name: file.name, base64: btoa(raw) });
+    await api("/profile/parse-resume", { name: file.name, base64: btoa(raw) });
     notify("Résumé uploaded. We’re reading it and updating your job matches.");
   }
   return (
@@ -28,20 +32,24 @@ export function Profile() {
       />
       <div className="profile-grid">
         <div>
+          <MasterProfileVault/>
+          <details className="form-section"><summary>Search and outreach details</summary>
           <form
-            className="form-section"
+            className="legacy-profile-form"
             onSubmit={(e) => {
               e.preventDefault();
               perform(async () => {
                 await api(
                   "/profile",
                   {
-                    ...draft,
-                    skills: split(draft.skills),
-                    interests: split(draft.interests),
+                    ...data.profile,
+                    ...Object.fromEntries([...changed.current].map(key=>[key,draft[key]])),
+                    skills: changed.current.has('skills') ? split(draft.skills) : data.profile.skills,
+                    interests: changed.current.has('interests') ? split(draft.interests) : data.profile.interests,
                   },
                   "PUT",
                 );
+                changed.current.clear();
                 notify("Profile saved. Your job search is updating automatically.");
               });
             }}
@@ -104,6 +112,7 @@ export function Profile() {
               </Button>
             </div>
           </form>
+          </details>
           <section className="form-section">
             <h2>Your approved answer bank</h2>
             <p>

@@ -33,6 +33,8 @@ test('PostgreSQL runtime persists API records, private files, and worker state a
   assert.equal((await hydrateResume(workerStore.state.resume,workerStore,{})).base64,Buffer.from('Postgres owner\nSQL and React engineer').toString('base64'));
   const reopened=await openPostgresStore({},pool);
   assert.equal(reopened.state.profile.name,'Postgres owner');
+  assert.equal(reopened.state.profile.master.personal.fullName,'Postgres owner');
+  assert.ok(reopened.state.profile.master.skills.technical.includes('SQL'));
   assert.equal((await taskQueue(reopened).get(result.task.id)).status,'completed');
   assert.equal((await reopened.db.prepare('SELECT count(*) AS count FROM resume_objects').get()).count,1);
 });

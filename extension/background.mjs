@@ -1,130 +1,94 @@
+import {buildAnswers,fillApplication,fieldKey} from './autofill.mjs';
+import {extractLinkedInProfile} from './linkedin.mjs';
 export function combineResults(results) {
-  const reports=results.map(r => r.result).filter(Boolean);
+  const reports=results.map(r=>r.result).filter(Boolean);
   if(!reports.length)return null;
-  return {status:reports.some(r=>r.status === 'blocked') ? 'blocked' : 'needs-review',filled:reports.reduce((sum,r)=>sum+(r.filled||0),0),missing:[...new Set(reports.flatMap(r=>r.missing || []))].slice(0,50)};
+  return {status:reports.some(r=>r.status==='blocked') ? 'blocked' : 'needs-review',filled:reports.reduce((sum,r)=>sum+(r.filled || 0),0),added:reports.reduce((sum,r)=>sum+(r.added || 0),0),missing:[...new Set(reports.flatMap(r=>r.missing || []))].slice(0,60),questions:[...new Map(reports.flatMap(r=>r.questions || []).map(q=>[q.label,q])).values()].slice(0,20)};
 }
-import { buildAnswers, fillApplication } from "./autofill.mjs";
-async function request(path, body) {
-  const { base, token } = await chrome.storage.session.get(["base", "token"]);
-  if (!base || !token) throw Error("Pair the extension first.");
-  const response = await fetch(`${base}/api/extension/${path}`, {
-    method: body ? "POST" : "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      ...(body ? { "Content-Type": "application/json" } : {}),
-    },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  });
-  const data = await response.json();
-  if (!response.ok) throw Error(data.error || "Orbit request failed.");
-  return data;
+async function request(path,body) {
+  const {base,token}=await chrome.storage.session.get(['base','token']);
+  if(!base || !token)throw Error('Pair the extension first.');
+  const response=await fetch(`${base}/api/extension/${path}`,{method:body ? 'POST' : 'GET',headers:{Authorization:`Bearer ${token}`,...(body ? {'Content-Type':'application/json'} : {})},...(body ? {body:JSON.stringify(body)} : {})});
+  const data=await response.json();if(!response.ok)throw Error(data.error || 'Orbit request failed.');return data;
+}
+async function permittedFrames(tabId) {
+  const frames=await chrome.webNavigation.getAllFrames({tabId}),allowed=[];
+  for(const frame of frames || [])try {const url=new URL(frame.url);if(url.protocol==='https:' && await chrome.permissions.contains({origins:[`${url.origin}/*`]}))allowed.push(frame.frameId);}catch {}
+  if(!allowed.length)throw Error('Grant access to this application portal using Fill this page.');
+  return allowed;
+}
+async function inject(tabId,answers,resume,options={}) {
+  const frameIds=await permittedFrames(tabId);
+  const results=await chrome.scripting.executeScript({target:{tabId,frameIds},func:fillApplication,args:[answers,resume,options]});
+  const report=combineResults(results) || {status:'needs-review',filled:0,missing:['Could not inspect this form.'],questions:[]};
+  return report;
+}
+async function runFill(task,tabId,options={}) {
+  const tab=await chrome.tabs.get(tabId);
+  if(new URL(tab.url).origin!==new URL(task.url).origin)throw Error('This application changed website. Grant the new portal access and use Fill this page.');
+  const fresh=task.id ? await request('context',{taskId:task.id,url:tab.url}) : await request('profile'),resume=fresh.resume ? await request('resume') : null;
+  const report=await inject(tabId,buildAnswers(fresh.profile,fresh.qa),resume,options);
+  if(task.id) {
+    await request('report',{taskId:task.id,...report});
+    try {await chrome.scripting.executeScript({target:{tabId,frameIds:await permittedFrames(tabId)},files:['confirmation.js']});}catch {}
+  }
+  await chrome.storage.session.set({lastResult:{...report,company:task.company || 'Current page',role:task.role || ''}});
+  return {message:`Filled ${report.filled} fields${report.added ? ` and added ${report.added} sections` : ''}. Review the open application. ${report.missing.length ? `${report.missing.length} items still need attention.` : ''}`};
 }
 async function next() {
-  const { task } = await request("next");
-  if (!task)
-    return {
-      message:
-        "No queued applications. Add jobs to the browser queue in Orbit.",
-    };
-  const tab = await chrome.tabs.create({ url: task.url, active: true });
-  await chrome.storage.session.set({ currentTask: { task, tabId: tab.id } });
-  await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      chrome.tabs.onUpdated.removeListener(listener);
-      reject(
-        Error("The page is still loading. Fill it manually or queue it again."),
-      );
-    }, 25000);
-    const listener = (id, change) => {
-      if (id === tab.id && change.status === "complete") {
-        clearTimeout(timer);
-        chrome.tabs.onUpdated.removeListener(listener);
-        resolve();
-      }
-    };
-    chrome.tabs.onUpdated.addListener(listener);
-    chrome.tabs.get(tab.id).then((t) => {
-      if (t.status === "complete") {
-        clearTimeout(timer);
-        chrome.tabs.onUpdated.removeListener(listener);
-        resolve();
-      }
-    });
+  const {task}=await request('next');if(!task)return {message:'No queued applications. Select jobs in Orbit first.'};
+  const tab=await chrome.tabs.create({url:task.url,active:true});await chrome.storage.session.set({currentTask:{task,tabId:tab.id}});
+  await new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>{chrome.tabs.onUpdated.removeListener(listener);reject(Error('Page is still loading. Use Fill this page once it is ready.'));},25000);
+    const finish=()=>{clearTimeout(timer);chrome.tabs.onUpdated.removeListener(listener);resolve();};
+    const listener=(id,change)=>{if(id===tab.id && change.status==='complete')finish();};
+    chrome.tabs.onUpdated.addListener(listener);chrome.tabs.get(tab.id).then(t=>{if(t.status==='complete')finish();});
   });
-  const resume = task.resume ? await request("resume") : null;
-  const results = await chrome.scripting.executeScript({
-    target: { tabId: tab.id, allFrames: true },
-    func: fillApplication,
-    args: [buildAnswers(task.profile, task.qa), resume],
-  });
-  const report = combineResults(results) || {
-    status: "needs-review",
-    missing: ["Could not inspect this form."],
-  };
-  await request("report", { taskId: task.id, ...report });
-  await chrome.storage.session.set({
-    lastResult: { ...report, company: task.company, role: task.role },
-  });
-  return {
-    message:
-      report.status === "blocked"
-        ? "Verification needs your interaction."
-        : "Fields filled where supported. Review and submit in the open tab.",
-  };
+  return runFill(task,tab.id);
 }
-async function refill() {
-  const { currentTask } = await chrome.storage.session.get("currentTask");
-  if (!currentTask) throw Error("Open a queued application first.");
-  const { task, tabId } = currentTask,
-    tab = await chrome.tabs.get(tabId);
-  if (!tab.url?.startsWith(task.url.split("?")[0]))
-    throw Error(
-      "Return to the original application page before filling again.",
-    );
-  const resume = task.resume ? await request("resume") : null,
-    results = await chrome.scripting.executeScript({
-      target: { tabId, allFrames: true },
-      func: fillApplication,
-      args: [buildAnswers(task.profile, task.qa), resume],
-    });
-  const report = combineResults(results) || {
-    status: "needs-review",
-    missing: ["Form is not available."],
-  };
-  await request("report", { taskId: task.id, ...report });
-  await chrome.storage.session.set({
-    lastResult: { ...report, company: task.company, role: task.role },
-  });
-  return {
-    message: "Fields updated where supported. Review and submit yourself.",
-  };
+async function refill(options={}) {
+  const {currentTask}=await chrome.storage.session.get('currentTask');if(!currentTask)throw Error('Open a queued application or choose Fill this page.');
+  return runFill(currentTask.task,currentTask.tabId,options);
 }
-chrome.runtime.onMessage.addListener((message, sender, respond) => {
-  if (!["next", "refill"].includes(message.type)) return;
-  (message.type === "refill" ? refill() : next())
-    .then(respond)
-    .catch((error) => respond({ error: error.message }));
-  return true;
+async function fillCurrent(tabId,options={}) {
+  const tab=await chrome.tabs.get(tabId),url=new URL(tab.url);
+  if(url.protocol!=='https:')throw Error('Open an HTTPS job application form first.');
+  const {currentTask}=await chrome.storage.session.get('currentTask');
+  const task=currentTask?.tabId===tabId && new URL(currentTask.task.url).origin===url.origin ? currentTask.task : {url:tab.url,company:'Current page',role:''};
+  await chrome.storage.session.set({currentTask:{task,tabId}});return runFill(task,tabId,options);
+}
+async function syncLinkedIn(tabId,confirmOwnProfile) {
+  if(!confirmOwnProfile)throw Error('Confirm this is your own profile.');
+  const [result]=await chrome.scripting.executeScript({target:{tabId},func:extractLinkedInProfile});
+  if(!result?.result)throw Error('Open your own LinkedIn profile first.');
+  const imported=await request('import-linkedin',{...result.result,confirmOwnProfile:true});return {message:imported.message};
+}
+async function suggestAnswers() {
+  const {currentTask,lastResult}=await chrome.storage.session.get(['currentTask','lastResult']);
+  if(!currentTask?.task.id)throw Error('Queue this application in Orbit before requesting Gemini suggestions.');
+  const active=await chrome.tabs.get(currentTask.tabId);if(new URL(active.url).origin!==new URL(currentTask.task.url).origin)throw Error('Return to the queued application before suggesting answers.');
+  const questions=lastResult?.questions || [];if(!questions.length)return {message:'No unanswered supported text questions were found. Fill the form first.'};
+  const result=await request('questions',{taskId:currentTask.task.id,questions}),fresh=await request('profile'),answers=buildAnswers(fresh.profile,fresh.qa);
+  for(const answer of result.answers)answers[fieldKey(answer.label)]=answer.answer;
+  const report=await inject(currentTask.tabId,answers,null);
+  await request('report',{taskId:currentTask.task.id,...report});
+  await chrome.storage.session.set({lastResult:{...report,company:currentTask.task.company,role:currentTask.task.role}});
+  return {message:`${result.answers.length} source-checked suggestions filled for review. ${result.unanswered.length} unsupported questions left for you.`};
+}
+chrome.runtime.onMessage.addListener((message,sender,respond)=>{
+  if(!['next','refill','fill-current','sync-linkedin','suggest-answers'].includes(message.type))return;
+  if(sender.url && !sender.url.startsWith(chrome.runtime.getURL('')))return;
+  const action=message.type==='next' ? next() : message.type==='refill' ? refill(message.options) : message.type==='fill-current' ? fillCurrent(message.tabId,message.options) : message.type==='sync-linkedin' ? syncLinkedIn(message.tabId,message.confirmOwnProfile) : suggestAnswers();
+  action.then(respond).catch(error=>respond({error:error.message}));return true;
 });
-
-chrome.runtime.onMessage.addListener((message,sender,respond) => {
-  if (!['submission-attempt','application-confirmation'].includes(message.type)) return;
-  (async () => {
+chrome.runtime.onMessage.addListener((message,sender,respond)=>{
+  if(!['submission-attempt','application-confirmation'].includes(message.type))return;
+  (async()=>{
     const {currentTask}=await chrome.storage.session.get('currentTask');
-    if(!currentTask || sender.tab?.id !== currentTask.tabId) throw Error('This tab has no active Orbit task.');
-    const source=new URL(sender.url),target=new URL(currentTask.task.url);
-    if(source.hostname !== target.hostname) throw Error('Confirmation origin does not match this task.');
-    if(message.type === 'submission-attempt') {
-      await request('submission',{taskId:currentTask.task.id,status:'submission-pending',url:source.href});
-      await chrome.storage.session.set({submissionAttempt:{taskId:currentTask.task.id,at:Date.now()}});
-    } else {
-      const {submissionAttempt}=await chrome.storage.session.get('submissionAttempt');
-      if(submissionAttempt?.taskId !== currentTask.task.id || Date.now()-submissionAttempt.at > 15*60000) return;
-      await request('submission',{taskId:currentTask.task.id,status:'confirmed',url:source.href,evidence:message.evidence});
-      await chrome.storage.session.set({lastResult:{status:'confirmed',company:currentTask.task.company,role:currentTask.task.role}});
-      await chrome.storage.session.remove(['submissionAttempt','currentTask']);
-    }
+    if(!currentTask?.task.id || sender.tab?.id!==currentTask.tabId)throw Error('This tab has no active Orbit task.');
+    const source=new URL(sender.url),target=new URL(currentTask.task.url);if(source.hostname!==target.hostname)throw Error('Confirmation origin does not match this task.');
+    if(message.type==='submission-attempt') {await request('submission',{taskId:currentTask.task.id,status:'submission-pending',url:source.href});await chrome.storage.session.set({submissionAttempt:{taskId:currentTask.task.id,at:Date.now()}});}
+    else {const {submissionAttempt}=await chrome.storage.session.get('submissionAttempt');if(submissionAttempt?.taskId!==currentTask.task.id || Date.now()-submissionAttempt.at>15*60000)return;await request('submission',{taskId:currentTask.task.id,status:'confirmed',url:source.href,evidence:message.evidence});await chrome.storage.session.set({lastResult:{status:'confirmed',company:currentTask.task.company,role:currentTask.task.role,missing:[]}});await chrome.storage.session.remove(['submissionAttempt','currentTask']);}
     return {ok:true};
-  })().then(respond).catch(error=>respond({error:error.message}));
-  return true;
+  })().then(respond).catch(error=>respond({error:error.message}));return true;
 });

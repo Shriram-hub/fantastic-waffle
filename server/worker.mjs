@@ -7,7 +7,8 @@ import { fetchJobs, mergeJobListings } from "./providers/jobs/index.mjs";
 import { parseResumeAsync } from "./resume.mjs";
 import { enrichApollo } from "./providers/contacts/apollo.mjs";
 import { verifyWorkEmail } from "./providers/contacts/verification.mjs";
-import { extractStructuredResume, generateIcebreaker, classifyInboxAI, embedTexts, cosineSimilarity, factPreservingTailor } from "./services/ai.mjs";
+import { extractStructuredResume, extractCandidateProfile, generateIcebreaker, classifyInboxAI, embedTexts, cosineSimilarity, factPreservingTailor } from "./services/ai.mjs";
+import {candidateFromText,saveCandidate} from './services/candidate-profile.mjs';
 import { syncMailbox, watchMailbox } from "./providers/mail/inbox.mjs";
 import { ingestMessage, shouldClassify, scheduleMailboxSync } from "./services/inbox.mjs";
 import { deliverTask } from "./services/outreach.mjs";
@@ -40,6 +41,26 @@ export function handlers(store, queue, config = {}, fetcher = fetch, dependencie
     };
   }
   return {
+    async 'profile.import'(task) {
+      const parsed=await parseResumeAsync(await hydrateResume(task.payload.file,store,config));
+      await store.refresh();
+      saveCandidate(store.state.profile,candidateFromText(parsed.resume.text),{source:task.payload.source});
+      await store.save();await scheduleDiscovery(store,queue,config,true);
+      if(task.payload.useAI && parsed.resume.text && config.LLM_API_KEY && config.LLM_MODEL) await queue.enqueue('profile.extract',{text:parsed.resume.text,source:task.payload.source},{dedupeKey:`profile-${hash(parsed.resume.text)}-${task.id}`});
+      return {status:'Needs review',warning:parsed.warning};
+    },
+    async 'profile.extract'(task) {
+      if(task.payload.resumeHash && resumeHash(store.state.resume)!==task.payload.resumeHash) return {status:'cancelled'};
+      const source=task.payload.text || store.state.resume?.text || '';
+      if(!source) fail('No readable profile text was found.');
+      const output=await extractCandidateProfile(source,config,fetcher,store);
+      await store.refresh();
+      if(task.payload.resumeHash && resumeHash(store.state.resume)!==task.payload.resumeHash) return {status:'cancelled'};
+      saveCandidate(store.state.profile,output,{source:task.payload.source || 'Résumé AI extraction'});
+      if(task.payload.resumeHash) store.state.resume.structuredStatus='Needs review';
+      await store.save();await ensureSearchMatrix(store,config,fetcher);await scheduleDiscovery(store,queue,config,true);
+      return {status:'Needs review',experience:output.workExperience.length,education:output.education.length};
+    },
     async 'boards.verify'(task) {return verifyBoard(task,store,fetcher);},
     async 'jobs.discover'(task) {return discoverBatch(task,store,queue,config,fetcher);},
     async "JOB_DISCOVERY_SWEEP"(task) { return discoverJobs(task,store,queue,config,fetcher); },
@@ -91,6 +112,7 @@ export function handlers(store, queue, config = {}, fetcher = fetch, dependencie
         parseStatus: "completed"
       });
       if (!persisted.base64) delete store.state.resume.base64;
+      saveCandidate(store.state.profile,candidateFromText(persisted.text),{source:'Résumé text extraction'});
       await store.save();
       await ensureSearchMatrix(store,config,fetcher);
       await scheduleDiscovery(store,queue,config,true);
@@ -99,6 +121,7 @@ export function handlers(store, queue, config = {}, fetcher = fetch, dependencie
       }, {
         dedupeKey: `extract-${task.payload.resumeHash}`
       });
+      if(config.LLM_API_KEY && config.LLM_MODEL && task.payload.master && persisted.text) await queue.enqueue('profile.extract',{resumeHash:task.payload.resumeHash},{dedupeKey:`master-${task.payload.resumeHash}`});
       return {
         skills: result.suggestions.skills.length,
         warning: result.warning

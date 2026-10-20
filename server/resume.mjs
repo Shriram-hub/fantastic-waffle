@@ -83,7 +83,7 @@ export async function parseResumeAsync(file) {
   }
   return result;
 }
-export function parseResume({ name, base64 }) {
+export function validateResumeUpload({name,base64}) {
   name = text(name, 180).replace(/[\r\n"/\\]/g, "_");
   if (!/\.(pdf|docx|txt)$/i.test(name))
     fail("Upload a PDF, DOCX, or TXT résumé.");
@@ -96,6 +96,12 @@ export function parseResume({ name, base64 }) {
   const buffer = Buffer.from(base64, "base64");
   if (!buffer.length || buffer.length > 5_000_000)
     fail("Upload a non-empty résumé under 5 MB.");
+  if(/\.pdf$/i.test(name) && buffer.subarray(0,5).toString()!=='%PDF-') fail('The PDF file signature is invalid.');
+  if(/\.docx$/i.test(name) && buffer.subarray(0,2).toString()!=='PK') fail('The DOCX file signature is invalid.');
+  return {name,base64,size:buffer.length};
+}
+export function parseResume(upload) {
+  const {name,base64}=validateResumeUpload(upload),buffer=Buffer.from(base64,'base64');
   let extracted = "",
     warning = "";
   if (/\.txt$/i.test(name)) extracted = buffer.toString("utf8");

@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Orbit Application Assistant",
-  "version": "0.3.0",
+  "version": "0.6.0",
   "description": "Fill an application from your approved Orbit profile, then hand control back for review and submission.",
   "permissions": [
     "storage",
     "scripting",
-    "tabs"
+    "tabs",
+    "webNavigation"
   ],
   "host_permissions": [
     "http://127.0.0.1/*",
@@ -15,7 +16,12 @@
     "https://*.lever.co/*",
     "https://*.myworkdayjobs.com/*",
     "https://*.ashbyhq.com/*",
-    "https://www.linkedin.com/jobs/*"
+    "https://www.linkedin.com/jobs/*",
+    "https://www.linkedin.com/in/*",
+    "https://*.smartrecruiters.com/*",
+    "https://*.taleo.net/*",
+    "https://*.icims.com/*",
+    "https://*.myworkdaysite.com/*"
   ],
   "optional_host_permissions": [
     "https://*/*"
@@ -34,13 +40,18 @@
         "https://*.lever.co/*",
         "https://*.myworkdayjobs.com/*",
         "https://*.ashbyhq.com/*",
-        "https://www.linkedin.com/jobs/*"
+        "https://www.linkedin.com/jobs/*",
+        "https://*.smartrecruiters.com/*",
+        "https://*.taleo.net/*",
+        "https://*.icims.com/*",
+        "https://*.myworkdaysite.com/*"
       ],
       "js": [
         "confirmation.js"
       ],
       "all_frames": true,
-      "run_at": "document_idle"
+      "run_at": "document_idle",
+      "match_about_blank": true
     }
   ]
 }

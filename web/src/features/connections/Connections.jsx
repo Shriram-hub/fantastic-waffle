@@ -20,7 +20,7 @@ export function Connections() {
         subtitle="Explicit connections. Server-side secrets. A clear view of what is configured."
       />
       <SetupChecklist/>
-      <section className="notice mb"><strong>Free job discovery is included</strong><p>Greenhouse, Lever, Ashby and public feeds work without API keys. Optional JSEARCH_API_KEY or SERPAPI_API_KEY broadens coverage through Google Jobs. Save these in Render → Environment, then enable Google Jobs in search sources.</p><p>JSearch: {setup.jsearchConfigured ? 'key saved' : 'not configured'} · SerpApi: {setup.serpapiConfigured ? 'key saved' : 'not configured'}. Saved keys are confirmed by real provider requests.</p></section>
+      <section className="notice mb"><strong>Free job discovery is included</strong><p>Greenhouse, Lever, Ashby and public feeds work without API keys. Optional JSEARCH_API_KEY or SERPAPI_API_KEY broadens coverage through Google Jobs. Save these in Render → Environment, then enable Google Jobs in search sources.</p><p>JSearch: {setup.jsearchConfigured ? 'key saved' : 'not configured'} · SerpApi: {setup.serpapiConfigured ? 'key saved' : 'not configured'}. Source health shows whether live provider requests succeed.</p></section>
       <div className="provider-grid">
         <section className="connection-card">
           <div className="spread">
@@ -240,11 +240,13 @@ export function Connections() {
           <section className="form-section">
             <h2>Browser application assistant</h2>
             <p>
-              Load the repository’s extension folder as an unpacked Chrome
-              extension. Generate a token, then pair it with this Orbit address.
+              Download and extract the assistant. Open chrome://extensions,
+              enable Developer mode, and load the orbit-extension folder.
+              Generate a token, then pair it with this Orbit address.
               Tokens expire in 24 hours.
             </p>
             <div className="btn-row">
+              <a className="btn primary" href="/api/extension/download">Download Chrome extension</a>
               <Button
                 onClick={() =>
                   perform(async () => {

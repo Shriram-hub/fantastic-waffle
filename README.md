@@ -21,6 +21,13 @@ you enable that source. Application links retain the original publisher.
 There is no keyless unlimited Google/LinkedIn/Indeed API claim. Discovered ATS
 application links add validated boards to a persistent registry.
 
+Finance/accounting role families and metro aliases support searches such as
+Mumbai or Bengaluru or Delhi. Targeted queries visit each city separately, with
+strong and adjacent matches explained. The reusable candidate vault and adaptive
+Chrome assistant support résumé/LinkedIn ingestion, repeating history sections,
+screening defaults and original-file attachment. See the
+[candidate vault and assistant guide](docs/CANDIDATE_VAULT.md).
+
 ## Optional autonomous outreach
 
 
