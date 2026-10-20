@@ -7,6 +7,7 @@ import {setupReadiness} from './discovery-routes.mjs';
 import {listAccounts} from './providers/mail/oauth.mjs';
 import {buildSearchPlan,rankOpportunity} from './services/search-plan.mjs';
 import {updateCandidateFromLegacy} from './services/candidate-profile.mjs';
+import {workspaceAuth,sameOrigin} from './workspace-auth.mjs';
 import {gzipSync} from 'node:zlib';
 import { openConfiguredStore } from "./store-config.mjs";
 import { spawn } from "node:child_process";
@@ -17,7 +18,7 @@ import { upgradeRoutes } from "./upgrades.mjs";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
-import { timingSafeEqual } from "node:crypto";
+import { timingSafeEqual,randomUUID } from "node:crypto";
 import { openStore } from "./store.mjs";
 import { initialState } from "./fixtures.mjs";
 import { boardList, searchApollo, enrichApollo } from "./providers.mjs";
@@ -64,20 +65,6 @@ async function bodyJSON(req) {
     fail("Invalid JSON.");
   }
 }
-function authenticate(req, password) {
-  if (!password) return true;
-  try {
-    const auth = req.headers.authorization || "";
-    if (!auth.startsWith("Basic ")) return false;
-    const decoded = Buffer.from(auth.slice(6), "base64").toString("utf8");
-    const value = decoded.slice(decoded.indexOf(":") + 1);
-    const a = Buffer.from(value),
-      b = Buffer.from(password);
-    return a.length === b.length && timingSafeEqual(a, b);
-  } catch {
-    return false;
-  }
-}
 export function createApp({
   config = process.env,
   dataDir = config.DATA_DIR || "./data",
@@ -86,6 +73,7 @@ export function createApp({
 } = {}) {
   const store = providedStore || openStore(dataDir);
   const upgrade = upgradeRoutes(store, config, fetcher);
+  const auth=workspaceAuth(store,config,fetcher);
   const syncLocks = new Set();
   let sendLock = false;
   if (config.GREENHOUSE_BOARDS && !store.state.settings.greenhouseBoards.length) store.state.settings.greenhouseBoards = boardList(config.GREENHOUSE_BOARDS);
@@ -113,7 +101,21 @@ export function createApp({
     if (!item) fail(`${label} not found.`, 404);
     return item;
   };
-  const events = taskEvents(upgrade.queue,store);
+  const events = taskEvents(upgrade.queue,store,req=>auth.authenticated(req));
+  async function bootstrap() {
+    const named=async(label,fn)=>{try{return await fn();}catch(e){e.operation=label;throw e;}};
+    const [preferences,search,autopilot,accounts,versions,links,tasks,applications]=await Promise.all([
+      named('search-config',()=>getSearchConfig(store)),named('search-status',()=>searchStatus(store)),named('autopilot-status',()=>autopilotStatus(store,config)),named('mail-accounts',()=>listAccounts(store)),
+      named('resume-versions',()=>store.db.prepare('SELECT id,kind,body,created_at FROM resume_versions ORDER BY created_at DESC').all()),
+      named('resume-links',()=>store.db.prepare('SELECT id,expires,revoked,views FROM public_resumes').all()),named('queue-list',()=>upgrade.queue.list()),
+      named('application-tasks',()=>store.db.prepare('SELECT id,application_id,status,body FROM apply_tasks ORDER BY rowid DESC LIMIT 100').all()),
+    ]);
+    const setup=setupReadiness(store,config);
+    return {data:publicState(store.state,preferences),search,autopilot,accounts,setup,
+      integrations:{remotive:true,greenhouse:true,lever:true,ashby:true,arbeitnow:true,himalayas:true,apollo:setup.apolloConfigured,hunter:setup.hunterConfigured,googleOAuth:setup.googleConfigured,microsoftOAuth:setup.microsoftConfigured,gmail:accounts.some(a=>a.provider==='google'),outlook:accounts.some(a=>a.provider==='microsoft'),resend:setup.resendConfigured,liveSendEnabled:setup.liveSendEnabled,ai:setup.aiConfigured,embeddings:!!(config.LLM_API_KEY && config.EMBEDDING_MODEL),adzuna:!!(config.ADZUNA_APP_ID && config.ADZUNA_APP_KEY),queueDriver:config.REDIS_URL ? 'BullMQ + Redis' : store.kind==='postgres' ? 'PostgreSQL' : 'SQLite',autoApply:'assisted'},
+      vault:{versions:versions.map(v=>({id:v.id,kind:v.kind,title:JSON.parse(v.body).title,createdAt:v.created_at})),links},
+      tasks:{tasks,applications:applications.map(a=>({...a,details:JSON.parse(a.body)}))}};
+  }
   const server = createServer((req, res) => ready.then(() => store.run(async () => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "no-referrer");
@@ -123,14 +125,20 @@ export function createApp({
     try {
       const publicUrl = new URL(req.url || "/", "http://localhost");
       if (req.method === "GET" && publicUrl.pathname === "/api/health") return json(res,200,{ok:true,version:"0.5.0"});
+      if(req.method==='POST' && publicUrl.pathname==='/api/internal/workspace-check') {
+        const supplied=Buffer.from(String(req.headers['x-orbit-scheduler'] || '')),expected=Buffer.from(config.AUTOPILOT_CRON_SECRET || '');
+        if(!expected.length || supplied.length!==expected.length || !timingSafeEqual(supplied,expected))fail('Invalid scheduler credential.',401);
+        const result=await bootstrap();return json(res,200,{ok:true,indexed:result.search.indexed,matches:result.search.matches,storage:store.kind || 'sqlite',googleConfigured:result.setup.googleConfigured});
+      }
+      if(await auth.handle(req,res,publicUrl,{json,bodyJSON}))return;
       if (await upgrade.publicRoute(req, res, publicUrl, {
         json,
         bodyJSON
       })) return;
-      if (!authenticate(req, config.WORKSPACE_PASSWORD)) {
-        res.setHeader("WWW-Authenticate", 'Basic realm="Orbit workspace", charset="UTF-8"');
+      const publicAsset=['GET','HEAD'].includes(req.method) && (['/','/index.html','/favicon.svg'].includes(publicUrl.pathname) || /^\/assets\/[a-zA-Z0-9_.-]+$/.test(publicUrl.pathname));
+      if (!publicAsset && !await auth.authenticated(req)) {
         return json(res, 401, {
-          error: "Enter your workspace password. The username can be orbit."
+          error: "Sign in to open your workspace.",code:'AUTH_REQUIRED'
         });
       }
       const host = req.headers.host || "";
@@ -142,8 +150,7 @@ export function createApp({
         path = u.pathname,
         method = req.method;
       if (!["GET", "HEAD"].includes(method)) {
-        if (req.headers["sec-fetch-site"] === "cross-site") fail("Cross-site writes are blocked.", 403);
-        if (req.headers.origin && new URL(req.headers.origin).host !== host) fail("Cross-origin writes are blocked.", 403);
+        sameOrigin(req);
         if (sendLock) fail("A campaign is sending. Wait for it to finish before changing the workspace.", 409);
       }
       if (await upgrade.handle(req, res, u, {
@@ -156,17 +163,7 @@ export function createApp({
       });
       if (method === "GET" && path === "/api/events") return events.connect(req,res);
       if (method === 'GET' && path === '/api/bootstrap') {
-        const [preferences,search,autopilot,accounts,versions,links,tasks,applications]=await Promise.all([
-          getSearchConfig(store),searchStatus(store),autopilotStatus(store,config),listAccounts(store),
-          store.db.prepare('SELECT id,kind,body,created_at FROM resume_versions ORDER BY created_at DESC').all(),
-          store.db.prepare('SELECT id,expires,revoked,views FROM public_resumes').all(),upgrade.queue.list(),
-          store.db.prepare('SELECT id,application_id,status,body FROM apply_tasks ORDER BY rowid DESC LIMIT 100').all(),
-        ]);
-        const setup=setupReadiness(store,config);
-        return json(res,200,{data:publicState(store.state,preferences),search,autopilot,accounts,setup,
-          integrations:{remotive:true,greenhouse:true,lever:true,ashby:true,arbeitnow:true,himalayas:true,apollo:setup.apolloConfigured,hunter:setup.hunterConfigured,googleOAuth:setup.googleConfigured,microsoftOAuth:setup.microsoftConfigured,gmail:accounts.some(a=>a.provider==='google'),outlook:accounts.some(a=>a.provider==='microsoft'),resend:setup.resendConfigured,liveSendEnabled:setup.liveSendEnabled,ai:setup.aiConfigured,embeddings:!!(config.LLM_API_KEY && config.EMBEDDING_MODEL),adzuna:!!(config.ADZUNA_APP_ID && config.ADZUNA_APP_KEY),queueDriver:config.REDIS_URL ? 'BullMQ + Redis' : store.kind==='postgres' ? 'PostgreSQL' : 'SQLite',autoApply:'assisted'},
-          vault:{versions:versions.map(v=>({id:v.id,kind:v.kind,title:JSON.parse(v.body).title,createdAt:v.created_at})),links},
-          tasks:{tasks,applications:applications.map(a=>({...a,details:JSON.parse(a.body)}))}});
+        return json(res,200,await bootstrap());
       }
       if (method === "GET" && path === "/api/state") return json(res, 200, publicState(store.state,await getSearchConfig(store)));
       if (method === "GET" && path === "/api/integrations") return json(res, 200, {
@@ -553,10 +550,11 @@ export function createApp({
       });
       res.end(method === "HEAD" ? undefined : content);
     } catch (e) {
+      const reference=e.status ? undefined : randomUUID().slice(0,8);
       if (!res.headersSent) json(res, e.status || 500, {
-        error: e.status ? e.message : "Something went wrong. Your saved workspace is still available."
+        error: e.status ? e.message : "We couldn’t load your workspace. Please retry.",reference
       });else res.end();
-      if (!e.status) console.error(e.name, "Request failed; inspect the code or reproduce with the test suite.");
+      if (!e.status) console.error(JSON.stringify({event:'request-failed',reference,type:e.name,code:/^[A-Z0-9_]{1,40}$/.test(e.code || '') ? e.code : undefined,operation:e.operation,frames:String(e.stack || '').split('\n').filter(line=>/^\s+at /.test(line) && /\/server\//.test(line)).slice(0,5).map(line=>line.trim().replace(/file:\/\/[^ ]*\/server\//g,'server/'))}));
     }
   })).catch(() => { if (!res.headersSent) json(res,503,{error:"Workspace storage is unavailable. Please retry."}); else res.end(); }));
   server.requestTimeout = 120000;

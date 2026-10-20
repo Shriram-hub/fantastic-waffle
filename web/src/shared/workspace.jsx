@@ -40,7 +40,11 @@ export async function api(
           body: JSON.stringify(data),
         }),
   });
-  const response = await r.json();
-  if (!r.ok) throw Error(response.error || "Request failed.");
+  let response;
+  try{response=await r.json();}catch{throw Object.assign(Error('The server is starting or temporarily unavailable. Please retry.'),{status:r.status});}
+  if (!r.ok) {
+    if(r.status===401 && response.code==='AUTH_REQUIRED')window.dispatchEvent(new Event('orbit:auth-required'));
+    throw Object.assign(Error(response.error || "Request failed."),{status:r.status,reference:response.reference});
+  }
   return response;
 }

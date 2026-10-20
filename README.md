@@ -2,7 +2,7 @@
 
 A working personal workspace for job discovery, résumé preparation, application tracking, browser-assisted filling, inbox updates, company contacts, and reviewed outreach.
 
-SQLite remains the local default. Set `DATABASE_URL` to use the real PostgreSQL runtime, including durable jobs, send logs, encrypted mailbox credentials, and private resume objects. `RUN_EMBEDDED_WORKER=true` supervises a worker alongside the API on a single hosting service. OAuth connects mailboxes; this is one private personal workspace.
+SQLite remains the local default. Set `DATABASE_URL` to use the real PostgreSQL runtime, including durable jobs, send logs, encrypted mailbox credentials, and private resume objects. `RUN_EMBEDDED_WORKER=true` supervises a worker alongside the API on a single hosting service. Google sign-in protects this private personal workspace; Gmail/Outlook mailbox consent remains separate. See [Google sign-in setup](docs/GOOGLE_SIGN_IN.md).
 
 ## Automatic job discovery
 

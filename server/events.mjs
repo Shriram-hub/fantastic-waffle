@@ -1,6 +1,6 @@
 // One database watcher serves all authenticated SSE subscribers, including tasks
 // completed by a separate worker process. No provider payloads/tokens are emitted.
-export function taskEvents(queue, store) {
+export function taskEvents(queue, store, authorize) {
   const clients = new Set();
   let timer, running = false, previous = new Map(), seenActivity = new Set(),searchSignature='';
   const send = (res, event, value) => {
@@ -10,6 +10,8 @@ export function taskEvents(queue, store) {
     if (running || !clients.size) return;
     running = true;
     try {
+      if(authorize)for(const res of clients)if(!await authorize(res.req)) {send(res,'auth-required',{message:'Please sign in again.'});clients.delete(res);res.end();}
+      if(!clients.size)return;
       const rows = await queue.list(), next = new Map();
       for (const task of rows) {
         const signature = `${task.status}:${task.updated_at}`;

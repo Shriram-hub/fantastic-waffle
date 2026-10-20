@@ -24,6 +24,9 @@ test("React views render populated/empty states and escape untrusted profile and
   await writeFile(path, output.output[0].code);
   t.after(() => rm(".test-build", { recursive: true, force: true }));
   const views = await import(`${path.href}?t=${Date.now()}`);
+  const signin=renderToStaticMarkup(React.createElement(views.SignIn,{session:{googleConfigured:true,googleLinked:false,passwordEnabled:true},onSignedIn(){}}));
+  assert.match(signin,/Continue with Google/);assert.match(signin,/Workspace password/);assert.match(signin,/first visit|First visit/);
+  const recovery=renderToStaticMarkup(React.createElement(views.WorkspaceError,{message:'Please retry',reference:'safe-id',onRetry(){}}));assert.match(recovery,/Try again/);assert.match(recovery,/safe-id/);
   for (const demo of [true, false]) {
     const data = initialState(demo);
     data.profile.name = "<img src=x onerror=alert(1)>";

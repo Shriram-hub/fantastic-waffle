@@ -2,6 +2,14 @@
 
 Writes accept same-origin JSON and owner authentication. API responses never return OAuth secrets/provider keys. Public webhook and extension routes have their own authentication; résumé share links are explicit unlisted grants. Queued operations return **202 with a task**, not a fabricated immediate result.
 
+Browser login uses revocable HttpOnly cookie sessions. `GET /api/auth/session`
+returns public setup flags and the current session; `POST /api/auth/password`
+unlocks with the workspace password; `GET /api/auth/google/start` begins Google
+login; `POST /api/auth/logout` revokes the session. Google login reuses the
+registered `/api/oauth/google/callback` with a browser-bound login-specific
+state. The initial owner link requires a password session. See
+[Google sign-in](GOOGLE_SIGN_IN.md).
+
 | Method        | Path                                     | Behavior                                                                                                                           |
 | ------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | GET           | `/api/state`                             | Owner workspace, explained matches, validated semantic scores, résumé metadata/text; no original bytes.                            |

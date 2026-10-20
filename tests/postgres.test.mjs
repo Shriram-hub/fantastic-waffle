@@ -51,6 +51,19 @@ test('PostgreSQL rejects stale writes and atomically deduplicates queue tasks',a
   assert.equal((await queue.get(first.id)).status,'completed');
   assert.equal(postgresSQL("SELECT '?' FROM tasks WHERE id=?"),"SELECT '?' FROM orbit_runtime.tasks WHERE id=$1");
 });
+test('Postgres login sessions survive reconnects, remain private and protect the complete bootstrap path',async t=>{
+  const db=new PGlite();t.after(()=>db.close());const pool=poolFor(db),store=await openPostgresStore({},pool);
+  const app=createApp({store,config:{WORKSPACE_PASSWORD:'pg-test-only',ENABLE_JOB_DISCOVERY:'false',AUTOPILOT_CRON_SECRET:'cron-test'}});
+  await new Promise(r=>app.server.listen(0,'127.0.0.1',r));t.after(async()=>{app.events.close();app.server.closeAllConnections();await new Promise(r=>app.server.close(r));});
+  const base=`http://127.0.0.1:${app.server.address().port}`;
+  const result=await fetch(base+'/api/auth/password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:'pg-test-only'})});
+  assert.equal(result.status,200);const cookie=result.headers.getSetCookie()[0].split(';')[0];
+  assert.equal((await fetch(base+'/api/bootstrap',{headers:{Cookie:cookie}})).status,200);
+  const reopened=await openPostgresStore({},pool);assert.equal((await reopened.db.prepare('SELECT count(*) AS n FROM auth_sessions').get()).n,1);
+  await store.replace(store.state);assert.equal((await reopened.db.prepare('SELECT count(*) AS n FROM auth_sessions').get()).n,1);
+  const check=await fetch(base+'/api/internal/workspace-check',{method:'POST',headers:{'X-Orbit-Scheduler':'cron-test'}});assert.equal(check.status,200);assert.equal((await check.json()).ok,true);
+  assert.equal(postgresSQL('SELECT body FROM auth_sessions WHERE id=?'),'SELECT body FROM orbit_runtime.auth_sessions WHERE id=$1');
+});
 
 test('PostgreSQL outreach commits approvals, reserves recipients, enforces budgets and records provider acceptance',async t=>{
   t.mock.timers.enable({apis:['Date'],now:new Date('2026-10-19T09:00:00Z')});

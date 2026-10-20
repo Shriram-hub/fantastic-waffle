@@ -13,7 +13,9 @@ import { Connections } from './features/connections/Connections.jsx';
 import { ModalContent } from './features/modals/ModalContent.jsx';
 import { symbols, names } from './shared/navigation.mjs';
 import {Icon} from './shared/Icon.jsx';
+import {SignIn,WorkspaceError,authMessages} from './features/auth/SignIn.jsx';
 export default function App() {
+  const [session,setSession]=useState(null),[retrying,setRetrying]=useState(false),[authError,setAuthError]=useState('');
   const [data, setData] = useState(null),
     [integrations, setIntegrations] = useState({}),
     [accounts, setAccounts] = useState([]),
@@ -28,12 +30,20 @@ export default function App() {
     [notice, setNotice] = useState(null),
     [busy, setBusy] = useState(false),
     [mobile, setMobile] = useState(false),
-    [error, setError] = useState("");
+    [error, setError] = useState(null);
   const notify = (message, error = false) => setNotice({ message, error });
   async function reload() {
     const s=await api('/bootstrap');
     setData(s.data);setIntegrations(s.integrations);setAccounts(s.accounts);
     setTasks(s.tasks);setVault(s.vault);setAutopilot(s.autopilot);setSearch(s.search);setSetup(s.setup);
+    setError(null);
+  }
+  async function checkSession() {
+    setRetrying(true);setError(null);
+    try{const value=await api('/auth/session');setSession(value);}catch(e){setError(e);}finally{setRetrying(false);}
+  }
+  async function signOut() {
+    try{await api('/auth/logout',{});setData(null);await checkSession();}catch(e){notify(e.message,true);}
   }
   async function perform(fn, message) {
     if (busy) return;
@@ -55,10 +65,20 @@ export default function App() {
   const reloadRef = useRef(reload);
   reloadRef.current = reload;
   useEffect(() => {
-    reload().catch((e) => setError(e.message));
+    const query=new URLSearchParams(location.search),code=query.get('auth_error');
+    if(code){setAuthError(authMessages[code] || authMessages.google_failed);query.delete('auth_error');history.replaceState(null,'',`${location.pathname}${query.size ? `?${query}` : ''}${location.hash}`);}
+    checkSession();
+    const expired=()=>{setData(null);setSession(previous=>({...previous,authenticated:false}));};
+    window.addEventListener('orbit:auth-required',expired);
+    return()=>window.removeEventListener('orbit:auth-required',expired);
+  },[]);
+  useEffect(() => {
+    if(!session?.authenticated)return;
+    reload().catch(setError);
     const listen = () => setRoute(location.hash.slice(1) || "jobs");
     window.addEventListener("hashchange", listen);
     const events = new EventSource('/api/events');
+    events.addEventListener('auth-required',()=>window.dispatchEvent(new Event('orbit:auth-required')));
     let refreshTimer;
     events.addEventListener('ready', () => {setConnected(true);reloadRef.current().catch(() => {});});
     events.onerror=()=>setConnected(false);
@@ -84,20 +104,14 @@ export default function App() {
       events.close();
       clearTimeout(refreshTimer);
     };
-  }, []);
+  }, [session?.authenticated]);
   useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(null), 9000);
     return () => clearTimeout(timer);
   }, [notice]);
-  if (error && !data)
-    return (
-      <div className="app-shell-error">
-        <h1>Orbit needs a moment.</h1>
-        <p>{error}</p>
-        <p>Check the API process, then refresh.</p>
-      </div>
-    );
+  if(session && !session.authenticated)return <SignIn session={session} initialError={authError} onSignedIn={checkSession}/>;
+  if (error && !data)return <WorkspaceError message={error.message} reference={error.reference} busy={retrying} onRetry={()=>session ? (setRetrying(true),reload().catch(setError).finally(()=>setRetrying(false))) : checkSession()}/>;
   if (!data)
     return (
       <div className="loading">
@@ -249,6 +263,8 @@ export default function App() {
               </span>
             </div>
             <div className="topbar-actions">
+              {session?.googleConfigured && session.method==='password' && <a className="btn small" href="/api/auth/google/start">{session.googleLinked ? 'Use Google account' : 'Link Google sign-in'}</a>}
+              {session?.required && <Button small onClick={signOut}>Sign out</Button>}
               <span className={`connection-indicator ${connected ? 'online' : ''}`}><span className="status-dot"/>{connected ? 'Live updates' : 'Connecting…'}</span>
               <span className="muted">
                 {new Date().toLocaleDateString(undefined, {
@@ -262,6 +278,7 @@ export default function App() {
             </div>
           </header>
           <main id="main" tabIndex={-1}>
+            {authError && <div className="banner" role="alert">{authError}<button onClick={()=>setAuthError('')}>Dismiss</button></div>}
             {data.isDemo && (
               <div className="banner">
                 <span>
@@ -302,4 +319,4 @@ export default function App() {
 }
 export { WorkspaceContext, stages, api } from './shared/workspace.jsx';
 export { Button, Badge, Heading } from './shared/ui.jsx';
-export { Overview, Jobs, Applications, Profile, Contacts, Outreach, Inbox, Automation, Connections };
+export { Overview, Jobs, Applications, Profile, Contacts, Outreach, Inbox, Automation, Connections, SignIn, WorkspaceError };

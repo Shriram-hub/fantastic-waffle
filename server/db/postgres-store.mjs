@@ -13,7 +13,7 @@ export function postgresSQL(sql) {
   if (/INSERT OR IGNORE INTO/i.test(sql)) result += ' ON CONFLICT DO NOTHING';
   result = result.replace(/json_extract\(payload,'\$\.accountId'\)/g, "(payload::jsonb->>'accountId')").replace(/\browid\b/g, 'row_order').replace(/SET count=count\+1/g, 'SET count=orbit_runtime.send_budget.count+1');
   // Only table positions are qualified; column names and string literals stay intact.
-  result = result.replace(/\b(FROM|JOIN|INTO|UPDATE|REFERENCES)\s+([a-z_]+)\b/gi, (all, keyword, table) => runtimeTables.includes(table) ? `${keyword} orbit_runtime.${table}` : all);
+  result = result.replace(/\b(FROM|JOIN|INTO|UPDATE|REFERENCES)\s+([a-z_]+)\b/gi, (all, keyword, table) => [...runtimeTables,'workspace_identity','auth_sessions','auth_rate_limits'].includes(table) ? `${keyword} orbit_runtime.${table}` : all);
   let quoted = false, parameter = 0, output = '';
   for (let i = 0; i < result.length; i++) {
     const c = result[i];
