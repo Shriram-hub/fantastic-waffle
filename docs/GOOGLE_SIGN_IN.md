@@ -59,3 +59,8 @@ tokens, provider responses or candidate data. Operators can use
 `POST /api/internal/workspace-check` with the existing `X-Orbit-Scheduler` secret
 to exercise the same bootstrap path and return only health, counts and setup
 booleans. This check does not enqueue work or call paid providers.
+
+Startup and the live-connection ready event share one bootstrap request. Transient
+network and server failures retry twice with backoff. A committed edit or worker
+update queues one fresh read after an in-flight request; concurrent callers
+share that read as well. Writes and authentication failures are never retried.

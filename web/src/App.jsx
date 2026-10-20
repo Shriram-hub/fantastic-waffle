@@ -14,6 +14,7 @@ import { ModalContent } from './features/modals/ModalContent.jsx';
 import { symbols, names } from './shared/navigation.mjs';
 import {Icon} from './shared/Icon.jsx';
 import {SignIn,WorkspaceError,authMessages} from './features/auth/SignIn.jsx';
+import {workspaceLoader} from './shared/workspace-loader.mjs';
 export default function App() {
   const [session,setSession]=useState(null),[retrying,setRetrying]=useState(false),[authError,setAuthError]=useState('');
   const [data, setData] = useState(null),
@@ -32,12 +33,14 @@ export default function App() {
     [mobile, setMobile] = useState(false),
     [error, setError] = useState(null);
   const notify = (message, error = false) => setNotice({ message, error });
-  async function reload() {
+  const loader=useRef(null);
+  if(!loader.current)loader.current=workspaceLoader(async()=>{
     const s=await api('/bootstrap');
     setData(s.data);setIntegrations(s.integrations);setAccounts(s.accounts);
     setTasks(s.tasks);setVault(s.vault);setAutopilot(s.autopilot);setSearch(s.search);setSetup(s.setup);
     setError(null);
-  }
+  });
+  const reload=options=>loader.current(options);
   async function checkSession() {
     setRetrying(true);setError(null);
     try{const value=await api('/auth/session');setSession(value);}catch(e){setError(e);}finally{setRetrying(false);}
@@ -50,7 +53,7 @@ export default function App() {
     setBusy(true);
     try {
       await fn();
-      await reload();
+      await reload({fresh:true});
       if (message) notify(message);
     } catch (e) {
       notify(e.message, true);
@@ -87,17 +90,17 @@ export default function App() {
       if (task.kind==='resume.parse' && task.status==='completed') notify('Résumé ready. Matching jobs are being discovered.');
       if (['failed','unknown'].includes(task.status)) notify('A background task needs attention. Check Automation.',true);
       clearTimeout(refreshTimer);
-      refreshTimer = setTimeout(() => reloadRef.current().catch(() => {}), 150);
+      refreshTimer = setTimeout(() => reloadRef.current({fresh:true}).catch(() => {}), 150);
     });
     events.addEventListener('autopilot', (event) => {
       const item = JSON.parse(event.data);
       if(['review','queued','blocked'].includes(item.kind)) notify(item.message,item.kind==='blocked');
       clearTimeout(refreshTimer);
-      refreshTimer = setTimeout(() => reloadRef.current().catch(() => {}), 150);
+      refreshTimer = setTimeout(() => reloadRef.current({fresh:true}).catch(() => {}), 150);
     });
     events.addEventListener('search',()=>{
       clearTimeout(refreshTimer);
-      refreshTimer=setTimeout(()=>reloadRef.current().catch(()=>{}),350);
+      refreshTimer=setTimeout(()=>reloadRef.current({fresh:true}).catch(()=>{}),350);
     });
     return () => {
       window.removeEventListener("hashchange", listen);
