@@ -48,6 +48,9 @@ and displays a safe diagnosis without account identity or API keys.
   a server cap from 1–100. These caps do not grant provider credits.
 - Completed Hunter calls are cached in seven-day periods. Failed or ambiguous
   requests are held rather than automatically charged again.
+- When the local daily contact budget is exhausted, the batch preserves found
+  contacts and queues remaining verification/discovery for 00:05 UTC on the next
+  day. Cached domain-search results are reused. The UI shows the next attempt.
 - Apollo errors distinguish rejected keys, account/endpoint access, credits and
   rate limits without exposing keys or response bodies. Free Apollo account
   access can require work-email registration and other eligibility requirements.

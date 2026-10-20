@@ -96,3 +96,13 @@ test('free provider checks report endpoint errors and cache safe summaries witho
   await checkContactProviders(store,config,fetcher);assert.equal(calls,2);assert.equal(store.db.prepare('SELECT count(*) AS n FROM provider_requests').get().n,0);assert.equal(store.state.contacts.length,0);
   const body=JSON.stringify(result);for(const secret of ['private-apollo-key','private-hunter-key','private-owner@candidate.com'])assert.ok(!body.includes(secret));
 });
+test('a daily-budget pause preserves contacts and resumes cached discovery without charging a second domain search',async t=>{
+  const store=await personal(t),queue=taskQueue(store),config={HUNTER_API_KEY:'test',CONTACT_API_DAILY_LIMIT:'1'};let searches=0,verifications=0;
+  const fetcher=async url=>{if(String(url).includes('domain-search')){searches++;return response({data:{domain:'company.com',emails:[{value:'hr@company.com',department:'hr'}]}});}verifications++;return response({data:{status:'valid',accept_all:false}});};
+  const {run}=await store.run(()=>startContactDiscovery({source:'domains',domains:['company.com'],contactsPerCompany:1,allowCredits:true},store,queue,config));
+  const registry=handlers(store,queue,config,fetcher,{lookupMx:mx,contactPages:async()=>[]}),taskId=run.targets[0].taskId;
+  const paused=await runOne(store,queue,registry,taskId);assert.equal(paused.status,'queued');assert.ok(paused.run_at>Date.now());await store.refresh();assert.equal(store.state.contacts[0].emailStatus,'unverified');assert.equal(store.state.contactDiscoveryRuns[0].targets[0].added,1);
+  // Simulate the next local budget window, retaining the provider result cache.
+  store.db.prepare("UPDATE provider_requests SET day='1999-01-01'").run();store.db.prepare('UPDATE tasks SET run_at=0 WHERE id=?').run(taskId);
+  assert.equal((await runOne(store,queue,registry,taskId)).status,'completed');await store.refresh();assert.equal(searches,1);assert.equal(verifications,1);assert.equal(store.state.contacts[0].emailStatus,'verified');assert.equal(store.state.contactDiscoveryRuns[0].targets[0].added,1);
+});

@@ -9,13 +9,14 @@ import {buildSearchPlan,rankOpportunity} from './search-plan.mjs';
 import {getSearchConfig} from './discovery.mjs';
 
 const week=()=>Math.floor(Date.now()/(7*86400000));
+const retryFor=error=>error.status===429 ? Date.UTC(new Date().getUTCFullYear(),new Date().getUTCMonth(),new Date().getUTCDate()+1,0,5) : null;
 export async function findCompanyContacts(job,company,{store,config={},fetcher=fetch,pages,lookupMx,allowCredits=false,limit=3,dailyLimit=20,seedContacts=[],hunterSearched=false}={}) {
   const warnings=[],existing=store.state.contacts.filter(c=>!c.isDemo && !c.suppressed && c.emailStatus==='verified' && c.email?.split('@')[1]===company.domain);
-  let candidates=[...existing,...seedContacts];
+  let candidates=[...existing,...seedContacts],retryAt=null;
   const call=(key,fn)=>providerCall(store,`contacts-v2:${week()}:${key}`,'Hunter',dailyLimit,fn);
   if(!hunterSearched && allowCredits && config.HUNTER_API_KEY && candidates.length<limit) {
     try{candidates.push(...await call(`domain:${company.domain}`,()=>searchHunter(company.domain,config.HUNTER_API_KEY,5,fetcher)));}
-    catch(error){warnings.push(error.status ? error.message : 'Hunter could not complete. Public careers-page discovery continued.');}
+    catch(error){retryAt=retryFor(error);warnings.push(error.status ? error.message : 'Hunter could not complete. Public careers-page discovery continued.');}
   }
   if(candidates.filter(c=>c.emailStatus==='verified').length<limit) {
     try{candidates.push(...await findPublicContacts(job,company,{pages,fetcher,allowSearch:false}));}
@@ -31,10 +32,10 @@ export async function findCompanyContacts(job,company,{store,config={},fetcher=f
     if(domainCheck)Object.assign(candidate,domainCheck);
     else if(candidate.emailStatus==='unverified' && allowCredits && config.HUNTER_API_KEY) {
       try {Object.assign(candidate,await call(`verify:${candidate.email}`,()=>verifyWorkEmail(candidate.email,config,fetcher,lookupMx)));}
-      catch(error){warnings.push(error.status ? error.message : 'Verification was unavailable. The address stays unverified.');}
+      catch(error){retryAt=Math.max(retryAt || 0,retryFor(error) || 0) || null;warnings.push(error.status ? error.message : 'Verification was unavailable. The address stays unverified.');}
     }
   }
-  return {contacts:results,warnings:[...new Set(warnings)].slice(0,5)};
+  return {contacts:results,warnings:[...new Set(warnings)].slice(0,5),retryAt};
 }
 export async function startContactDiscovery(data,store,queue,config={}) {
   if(store.state.isDemo)fail('Start your personal workspace before finding real company contacts.');
@@ -81,12 +82,13 @@ export async function discoverCompanyTask(task,store,queue,config={},fetcher=fet
   const original=target.jobId ? store.state.jobs.find(j=>j.id===target.jobId) : null;
   const job=original || {company:target.company,title:'Career opportunities',url:`https://${target.domain}/careers`,description:''};
   target.status='running';await store.save();
-  let company=target.domain ? {domain:target.domain,name:target.company,source:'User-selected company domain'} : await resolveCompany(job,fetcher,store),hunterResult=null,lookupWarning='';
+  let company=target.domain ? {domain:target.domain,name:target.company,source:'User-selected company domain'} : await resolveCompany(job,fetcher,store),hunterResult=null,lookupWarning='',lookupRetryAt=null;
   if(!company && run.allowCredits && config.HUNTER_API_KEY) {
     try{hunterResult=await providerCall(store,`contacts-v2:${week()}:company:${hash(job.company.toLowerCase())}`,'Hunter',run.dailyLimit,()=>searchHunterCompany(job.company,config.HUNTER_API_KEY,5,fetcher));company=hunterResult.company;}
-    catch(error){lookupWarning=error.status ? error.message : 'Company lookup could not complete.';}
+    catch(error){lookupWarning=error.status ? error.message : 'Company lookup could not complete.';lookupRetryAt=retryFor(error);}
   }
   if(!company) {
+    if(lookupRetryAt){Object.assign(target,{status:'queued',retryAt:lookupRetryAt,warnings:[lookupWarning]});await store.save();return {status:'deferred',runAt:lookupRetryAt};}
     target.status='needs-domain';target.warnings=[lookupWarning,'The company domain could not be resolved confidently. Search its corporate domain directly.'].filter(Boolean);await store.save();return {status:'Needs domain'};
   }
   const found=await findCompanyContacts(job,company,{store,config,fetcher,pages:contactPages,lookupMx,allowCredits:run.allowCredits,limit:run.contactsPerCompany,dailyLimit:run.dailyLimit,seedContacts:hunterResult?.contacts || [],hunterSearched:!!hunterResult});
@@ -101,9 +103,9 @@ export async function discoverCompanyTask(task,store,queue,config={},fetcher=fet
     contact.discoveryRunId=run.id;saved.push(contact);
     if(original && contact.jobId===original.id)Object.assign(contact,{jobTitle:original.title,jobUrl:original.url});
   }
-  Object.assign(target,{domain:company.domain,status:found.warnings.length && !saved.length ? 'needs-attention' : 'completed',added,verified:saved.filter(c=>c.emailStatus==='verified').length,contactIds:saved.map(c=>c.id),warnings:found.warnings,completedAt:now()});
+  Object.assign(target,{domain:company.domain,status:found.retryAt ? 'queued' : found.warnings.length && !saved.length ? 'needs-attention' : 'completed',added:(target.added || 0)+added,verified:saved.filter(c=>c.emailStatus==='verified').length,contactIds:saved.map(c=>c.id),warnings:found.warnings,retryAt:found.retryAt,completedAt:found.retryAt ? null : now()});
   await store.save();await activity(store,'contacts',`${job.company}: ${added} new contacts, ${target.verified} verified.`,added);
-  return {added,verified:target.verified,warnings:found.warnings};
+  return {added,verified:target.verified,warnings:found.warnings,...(found.retryAt ? {status:'deferred',runAt:found.retryAt} : {})};
 }
 export async function contactDiscoveryStatus(store,config={}) {
   const policy=await getPolicy(store),today=new Date().toISOString().slice(0,10);
