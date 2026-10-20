@@ -13,7 +13,7 @@ import {sourcePlan} from '../server/services/discovery.mjs';
 import {buildSearchPlan} from '../server/services/search-plan.mjs';
 import {sharedBackground,warmPeople,warmHook,prioritizeWarmContacts} from '../server/services/warm-connections.mjs';
 import {findCompanyContacts} from '../server/services/contact-discovery.mjs';
-import {buildJobDocuments,documentFingerprint,documentEvidence,ensureJobDocuments,renderTextPDF,selectDocumentEvidence} from '../server/services/job-documents.mjs';
+import {buildJobDocuments,documentFingerprint,documentEvidence,ensureJobDocuments,renderTextPDF,selectDocumentEvidence,coverLetterText} from '../server/services/job-documents.mjs';
 import {normalizeSequence,DEFAULT_FOLLOWUPS} from '../server/services/sequences.mjs';
 import {queueCampaign} from '../server/services/outreach.mjs';
 import {tokenCipher} from '../server/providers/mail/oauth.mjs';
@@ -71,7 +71,8 @@ test('per-job documents contain source text, real history and education, dedupli
   const document=store.state.jobDocuments[0];assert.match(document.resume.base64,/^JVBER/);assert.ok(document.coverLetter.size>1000);
   const extracted=await extractText(new Uint8Array(Buffer.from(document.resume.base64,'base64')),{mergePages:true});assert.match(extracted.text,/Previous Advisory/);assert.match(extracted.text,/Example University/);assert.match(extracted.text,/Prepared cash flow models using Excel/);assert.ok(!extracted.text.includes('10 years'));
   const unique=documentEvidence(store.state);assert.equal(unique.filter(e=>e.text==='Prepared cash flow models using Excel.').length,1);
-  assert.ok(document.wordCount>=200 && document.wordCount<350,`Cover length ${document.wordCount}`);
+  assert.ok(document.wordCount>=200 && document.wordCount<=270,`Cover length ${document.wordCount}`);
+  const longEvidence=[{text:'Prepared cash flow models and reconciled financial statements for review. '.repeat(10)}];assert.equal(coverLetterText(store.state,job,longEvidence).join(' ').split(/\s+/).length,250);
   assert.equal((await ensureJobDocuments(job,store,queue)).id,document.id);
   store.state.profile.master.summary.headline='Updated headline';await store.save();assert.equal((await buildJobDocuments({payload:{jobId:job.id,fingerprint}},store,queue)).status,'cancelled');
 });
