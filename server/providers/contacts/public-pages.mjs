@@ -42,7 +42,7 @@ export async function publicCompanyPages(domain,{load=page}={}) {
   let robots;
   try {robots=await load(`https://${domain}/robots.txt`,domain);} catch(error) {if(error.httpStatus===404)robots={text:''};else return [];}
   const pages=[];
-  for(const path of ['/careers','/jobs','/contact','/contact-us']) if(robotsAllows(robots.text,path)) {
+  for(const path of ['/careers','/jobs','/contact','/contact-us','/about','/team','/leadership']) if(robotsAllows(robots.text,path)) {
     try {pages.push(await load(`https://${domain}${path}`,domain));} catch {}
   }
   return pages;

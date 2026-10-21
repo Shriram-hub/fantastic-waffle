@@ -16,6 +16,7 @@ export function Applications() {
         <a className="btn" href="/api/export/applications">
           Export CSV
         </a>
+        <Button onClick={()=>setModal({type:'import-applications'})}>Import CSV</Button>
         <Button primary onClick={() => setModal({ type: "add-job" })}>
           + Add application
         </Button>

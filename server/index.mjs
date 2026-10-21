@@ -1,6 +1,6 @@
 import {resumeLinkSummaries} from './services/engagement.mjs';
 import {inboxActions} from './services/inbox-actions.mjs';
-import {ensureJobDocuments} from './services/job-documents.mjs';
+import {ensureJobDocuments,hydrateDocument} from './services/job-documents.mjs';
 import { taskEvents } from "./events.mjs";
 import { ensureSearchMatrix } from "./services/autopilot.mjs";
 import { profileScope } from "./services/autopilot-policy.mjs";
@@ -12,8 +12,11 @@ import {buildSearchPlan,rankOpportunity} from './services/search-plan.mjs';
 import {updateCandidateFromLegacy} from './services/candidate-profile.mjs';
 import {workspaceAuth,sameOrigin} from './workspace-auth.mjs';
 import {careerOverview} from './services/career.mjs';
-import {contactDiscoveryStatus} from './services/contact-discovery.mjs';
+import {contactDiscoveryStatus,findCompanyContacts} from './services/contact-discovery.mjs';
+import {resolveCompany} from './providers/contacts/company.mjs';
 import {checkContactProviders} from './services/contact-provider-checks.mjs';
+import {embeddedWorkerEnabled,requestQueueDrain} from './services/worker-control.mjs';
+import {extensionCORS} from './request-origin.mjs';
 import {gzipSync} from 'node:zlib';
 import { openConfiguredStore } from "./store-config.mjs";
 import { spawn } from "node:child_process";
@@ -39,7 +42,7 @@ function publicState(s,preferences) {
   const {
     previews,
     apolloResults,
-    career,contactDiscoveryRuns,jobDocuments,resumeTracking,alertConfig,
+    career,contactDiscoveryRuns,jobDocuments,resumeTracking,alertConfig,jobPitches,
     ...rest
   } = s;
   return {
@@ -77,7 +80,7 @@ export function createApp({
   config = process.env,
   dataDir = config.DATA_DIR || "./data",
   fetcher = fetch,
-  store: providedStore
+  store: providedStore,wakeWorker
 } = {}) {
   const store = providedStore || openStore(dataDir);
   const upgrade = upgradeRoutes(store, config, fetcher);
@@ -132,19 +135,27 @@ export function createApp({
     res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; object-src 'none'");
     try {
       const publicUrl = new URL(req.url || "/", "http://localhost");
+      if(extensionCORS(req,res,publicUrl.pathname))return;
       if (req.method === "GET" && publicUrl.pathname === "/api/health") return json(res,200,{ok:true,version:"0.5.0"});
       if(req.method==='POST' && publicUrl.pathname==='/api/internal/workspace-check') {
         const supplied=Buffer.from(String(req.headers['x-orbit-scheduler'] || '')),expected=Buffer.from(config.AUTOPILOT_CRON_SECRET || '');
         if(!expected.length || supplied.length!==expected.length || !timingSafeEqual(supplied,expected))fail('Invalid scheduler credential.',401);
         const result=await bootstrap(),contacts=await contactDiscoveryStatus(store,config);
         let documentCheck;
+        let contactFallbackCheck;
+        if(publicUrl.searchParams.get('checkContactFallback')==='true') {
+          const selected=publicUrl.searchParams.get('jobId'),job=selected ? store.state.jobs.find(j=>j.id===selected && !j.isDemo) : store.state.jobs.find(j=>!j.isDemo && /Deloitte|Goldman Sachs|State Street|BDO India/i.test(j.company));
+          const company=job ? await resolveCompany(job,fetcher,store) : null;
+          const found=company ? await findCompanyContacts(job,company,{store,config:{...config,FREE_CONTACT_WEB_SEARCH:'false'},fetcher,allowCredits:false,allowWarmSearch:false,limit:3}) : null;
+          contactFallbackCheck={company:job?.company || null,domain:company?.domain || null,requiresDomainReview:company?.requiresDomainReview || false,prospects:found?.contacts.length || 0,verifiedMailboxes:found?.contacts.filter(c=>c.emailStatus==='verified').length || 0,domainHealth:found?.contacts[0]?.domainVerification || null,warnings:found?.warnings || [],note:'Read-only free-source check. No contact/search credits or email sends.'};
+        }
         if(publicUrl.searchParams.get('checkDocuments')==='true') {
           const job=store.state.jobs.find(j=>!j.isDemo && !j.archived && !j.requiresSourceReview && j.discoveryMatch?.recommendable) || store.state.jobs.find(j=>!j.isDemo && !j.archived && !j.requiresSourceReview);
           const document=job ? await ensureJobDocuments(job,store,upgrade.queue,config,fetcher,false) : null;
           documentCheck=document ? {ok:true,documentId:document.id,resumeBytes:document.resume.size,coverLetterBytes:document.coverLetter.size,coverLetterWords:document.wordCount,storage:document.resume.storage?.kind || 'memory'} : {ok:false,reason:'No active role or the source profile changed.'};
         }
         return json(res,200,{ok:true,indexed:result.search.indexed,matches:result.search.matches,storage:store.kind || 'sqlite',googleConfigured:result.setup.googleConfigured,
-          contactDiscovery:{hunterConfigured:contacts.hunterConfigured,dailyLimit:contacts.dailyLimit,usedToday:contacts.usedToday},career:{available:true,openTasks:result.data.careerSummary.stats.openTasks},features:{regionalBoards:true,documents:true,sequenceSteps:3,copilotVersion:"0.7.0",phoneAlerts:true,automaticInterviewPrep:true},documentCheck,mail:{connectedAccounts:result.accounts.length,liveSending:result.setup.liveSendEnabled},providerChecks:publicUrl.searchParams.get('checkContacts')==='true' ? await checkContactProviders(store,config,fetcher) : undefined});
+          contactDiscovery:{hunterConfigured:contacts.hunterConfigured,dailyLimit:contacts.dailyLimit,usedToday:contacts.usedToday},career:{available:true,openTasks:result.data.careerSummary.stats.openTasks},features:{regionalBoards:true,documents:true,sequenceSteps:3,copilotVersion:"0.8.0",phoneAlerts:true,automaticInterviewPrep:true,companyPitch:true,mailboxSelfTests:true,extensionAutoPair:true},documentCheck,contactFallbackCheck,mail:{connectedAccounts:result.accounts.length,liveSending:result.setup.liveSendEnabled},providerChecks:publicUrl.searchParams.get('checkContacts')==='true' ? await checkContactProviders(store,config,fetcher) : undefined});
       }
       if(await auth.handle(req,res,publicUrl,{json,bodyJSON}))return;
       if (await upgrade.publicRoute(req, res, publicUrl, {
@@ -178,6 +189,12 @@ export function createApp({
         version: "0.5.0"
       });
       if (method === "GET" && path === "/api/events") return events.connect(req,res);
+      if(method==='POST' && path==='/api/queue/flush') {
+        await bodyJSON(req);
+        const due=await store.db.prepare("SELECT count(*) AS count FROM tasks WHERE status='queued' AND run_at<=?").get(Date.now());
+        if(wakeWorker)wakeWorker();else void requestQueueDrain(store,upgrade.queue,config,fetcher);
+        return json(res,202,{ok:true,due:Number(due.count),message:'Worker notified. Only due tasks run; pacing, approvals and send limits remain in force.'});
+      }
       if (method === 'GET' && path === '/api/bootstrap') {
         return json(res,200,await bootstrap());
       }
@@ -234,10 +251,10 @@ export function createApp({
         const subject = `=?UTF-8?B?${Buffer.from(m.subject).toString("base64")}?=`;
         const wrapped = data => data.match(/.{1,76}/g)?.join("\r\n") || "";
         let eml = `To: ${m.to}\r\nFrom: ${s.profile.email}\r\nSubject: ${subject}\r\nMIME-Version: 1.0\r\nX-Unsent: 1\r\nContent-Type: multipart/mixed; boundary="${boundary}"\r\n\r\n--${boundary}\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n${wrapped(Buffer.from(m.body).toString("base64"))}\r\n`;
-        if (c.attachResume && s.resume) {
-          const original = await hydrateResume(s.resume, store, config);
-          eml += `--${boundary}\r\nContent-Type: application/octet-stream\r\nContent-Disposition: attachment; filename="${filename(s.resume.name)}"\r\nContent-Transfer-Encoding: base64\r\n\r\n${wrapped(original.base64)}\r\n`;
-        }
+        const document=(s.jobDocuments || []).find(d=>d.id===c.documentSetId),attachments=[];
+        if(c.attachResume && s.resume)attachments.push(document ? await hydrateDocument(document,'resume',store,config) : await hydrateResume(s.resume,store,config));
+        if(c.attachCoverLetter && document)attachments.push(await hydrateDocument(document,'coverLetter',store,config));
+        for(const attachment of attachments)eml += `--${boundary}\r\nContent-Type: ${/\.pdf$/i.test(attachment.name) ? 'application/pdf' : 'application/octet-stream'}\r\nContent-Disposition: attachment; filename="${filename(attachment.name)}"\r\nContent-Transfer-Encoding: base64\r\n\r\n${wrapped(attachment.base64)}\r\n`;
         eml += `--${boundary}--\r\n`;
         return download(res, eml, "message/rfc822", `${m.name}-draft.eml`);
       }
@@ -417,7 +434,7 @@ export function createApp({
           const seen = new Set(s.contacts.filter(c => c.email).map(c => c.email.toLowerCase()));
           for (const [i, row] of rows.entries()) {
             try {
-              const c = normalizeContact(row);
+              const c = normalizeContact({...row,email_status:'unverified'});
               if (!c.email) {
                 errors.push(`Row ${i + 2}: missing email`);
                 continue;
@@ -441,7 +458,7 @@ export function createApp({
           });
         }
         if (path === "/api/contacts" && method === "POST") {
-          const c = normalizeContact(data, "Manual");
+          const c = normalizeContact({...data,email_status:'unverified'}, "Manual");
           if (!c.email) fail("Enter an email address.");
           if (s.contacts.some(x => x.email === c.email)) fail("This email is already in your contacts.", 409);
           s.contacts.push(c);
@@ -587,16 +604,16 @@ export function createApp({
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const host = process.env.HOST || "127.0.0.1";
   if (!["127.0.0.1", "localhost", "::1"].includes(host) && !process.env.WORKSPACE_PASSWORD) throw new Error("Set WORKSPACE_PASSWORD before binding to a non-loopback address.");
-  const app = createApp({store:await openConfiguredStore()});
+  let child;
+  const app = createApp({store:await openConfiguredStore(),wakeWorker:()=>{if(child?.connected)child.send({type:'queue-wake'});else void requestQueueDrain(app.store,app.queue,process.env,fetch);}});
   await app.ready;
   const port = Number(process.env.PORT || 3000);
   app.server.listen(port, host, () => console.log(`Orbit is running at http://${host}:${app.server.address().port}`));
   let stopping = false;
-  let child;
-  if (process.env.RUN_EMBEDDED_WORKER === "true") {
+  if (embeddedWorkerEnabled(process.env)) {
     // Leave room for the API, network buffers, and PDF parsing on Render Free.
     const workerArgs=[...(process.env.RENDER_EXTERNAL_URL ? ['--max-old-space-size=160'] : []),fileURLToPath(new URL("./worker.mjs",import.meta.url))];
-    child = spawn(process.execPath,workerArgs,{stdio:"inherit",env:{...process.env,RUN_EMBEDDED_WORKER:"false"}});
+    child = spawn(process.execPath,workerArgs,{stdio:['inherit','inherit','inherit','ipc'],env:{...process.env,RUN_EMBEDDED_WORKER:"false",ENABLE_EMBEDDED_WORKER:'false'}});
     child.on("error",() => { console.error("Embedded worker could not start."); shutdown(1); });
     child.on("exit",() => { if (!stopping) { console.error("Embedded worker exited; restarting the service."); shutdown(1); } });
   }

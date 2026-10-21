@@ -1,4 +1,9 @@
 import {sameApplicationLocation,sameApplicationHost} from '../extension/location.mjs';
+import {redeemPackage} from './services/extension-pairing.mjs';
+import {mailCheckRoutes} from './mail-check-routes.mjs';
+import {jobPitchRoutes} from './job-pitch-routes.mjs';
+import {queueBrowserContacts} from './services/browser-contacts.mjs';
+import {maintenanceRoutes} from './workspace-maintenance.mjs';
 import {documentFingerprint,documentSummary} from './services/job-documents.mjs';
 import {warmHook} from './services/warm-connections.mjs';
 import {extensionEnhancements} from './extension-routes.mjs';
@@ -61,12 +66,16 @@ export function upgradeRoutes(store, config, fetcher) {
   const career=careerRoutes(store,queue,config);
   const documents=documentRoutes(store,queue,config);
   const notifications=notificationRoutes(store,config);
+  const mailChecks=mailCheckRoutes(store,queue);
+  const jobPitches=jobPitchRoutes(store,queue,config);
+  const maintenance=maintenanceRoutes(store,queue);
   async function publicRoute(req, res, u, {
     json,
     bodyJSON
   }) {
     if (await autopilot.publicRoute(req,res,u,{json,bodyJSON})) return true;
     const path = u.pathname;
+    if(path==='/api/extension/pair' && req.method==='POST'){json(res,200,await redeemPackage(await bodyJSON(req),store,config));return true;}
     if (await unsubscribeRoute(req,res,u,store,queue)) return true;
     if (path === "/api/webhooks/microsoft") {
       if (u.searchParams.has("validationToken")) {
@@ -135,10 +144,11 @@ export function upgradeRoutes(store, config, fetcher) {
       await serveResumeLink(req,res,share[1],store,queue,config);
       return true;
     }
-    if (["/api/extension/next", "/api/extension/report", "/api/extension/submission", "/api/extension/resume",'/api/extension/profile','/api/extension/context','/api/extension/import-linkedin','/api/extension/questions','/api/extension/documents','/api/extension/copilot'].includes(path)) {
+    if ((path!=='/api/contacts/import-browser-profiles' || req.headers.authorization?.startsWith('Bearer ')) && ["/api/extension/next", "/api/extension/report", "/api/extension/submission", "/api/extension/resume",'/api/extension/profile','/api/extension/context','/api/extension/import-linkedin','/api/extension/questions','/api/extension/documents','/api/extension/copilot','/api/extension/import-browser-profiles','/api/contacts/import-browser-profiles'].includes(path)) {
       const token = req.headers.authorization?.replace(/^Bearer /, "") || "",
         valid = await store.db.prepare("SELECT id FROM extension_tokens WHERE id=? AND expires>?").get(hash(token), Date.now());
       if (!valid) fail("The extension token expired or was revoked.", 401);
+      if(['/api/extension/import-browser-profiles','/api/contacts/import-browser-profiles'].includes(path) && req.method==='POST'){json(res,202,await queueBrowserContacts(await bodyJSON(req),store,queue));return true;}
       if(await extensionEnhancements(req,res,u,{json,bodyJSON,valid,store,queue,config,fetcher}))return true;
       if(path==='/api/extension/profile' && req.method==='GET') {json(res,200,{profile:{...store.state.profile,master:candidateProfile(store.state.profile)},qa:store.state.settings.qaBank || [],resume:!!store.state.resume});return true;}
       if(path==='/api/extension/context' && req.method==='POST') {
@@ -263,6 +273,9 @@ export function upgradeRoutes(store, config, fetcher) {
     json,
     bodyJSON
   }) {
+    if(await mailChecks(req,res,u,{json,bodyJSON}))return true;
+    if(await jobPitches(req,res,u,{json,bodyJSON}))return true;
+    if(await maintenance(req,res,u,{json,bodyJSON}))return true;
     if (await notifications(req,res,u,{json,bodyJSON})) return true;
     if (await documents(req,res,u,{json,bodyJSON})) return true;
     if (await candidate(req,res,u,{json,bodyJSON})) return true;
@@ -300,12 +313,12 @@ export function upgradeRoutes(store, config, fetcher) {
     if (method === "GET" && oauth) {
       if (oauth[2] === "start") {
         res.writeHead(302, {
-          Location: await startOAuth(oauth[1], store, config)
+          Location: await startOAuth(oauth[1], store, config,req)
         });
         res.end();
       } else {
         if (u.searchParams.has("error")) fail("Mailbox access was not granted.");
-        await completeOAuth(oauth[1], u.searchParams.get("code"), u.searchParams.get("state"), store, config, fetcher);
+        await completeOAuth(oauth[1], u.searchParams.get("code"), u.searchParams.get("state"), store, config, fetcher,req);
         res.writeHead(302, {
           Location: `${config.WEB_BASE_URL || ""}/#connections`
         });
@@ -497,6 +510,7 @@ export function upgradeRoutes(store, config, fetcher) {
     if (path === "/api/extension/token") {
       if (method === "DELETE") {
         await store.db.exec("DELETE FROM extension_tokens");
+        await store.db.prepare("DELETE FROM oauth_states WHERE id LIKE 'extension-package:%'").run();
         json(res, 200, {
           ok: true
         });

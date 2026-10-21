@@ -1,6 +1,7 @@
 import { accessAccount } from "./oauth.mjs";
 import { remoteJSON } from "../http.mjs";
 import { fail, hash } from "../../domain.mjs";
+import {mailFailure} from './http.mjs';
 const encode = (v) => Buffer.from(v).toString("base64");
 export function mimeMessage(message, sender, attachment) {
   for (const v of [
@@ -93,7 +94,7 @@ export async function sendNative(
     if (!r.ok)
       return {
         status: r.status >= 500 ? "unknown" : "failed",
-        error: `Gmail returned HTTP ${r.status}.`,
+        error: (await mailFailure(r,'Gmail')).message,
       };
     let data;
     try {
@@ -135,7 +136,7 @@ export async function sendNative(
         }
       : {
           status: r.status >= 500 ? "unknown" : "failed",
-          error: `Outlook returned HTTP ${r.status}.`,
+          error: (await mailFailure(r,'Outlook')).message,
         };
   } catch {
     return {

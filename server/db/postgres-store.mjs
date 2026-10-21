@@ -120,7 +120,7 @@ export async function openPostgresStore(config = process.env, suppliedPool) {
     await db.exec('BEGIN');
     try {
       if (!await db.prepare("SELECT id FROM workspace_meta WHERE id='local'").get()) {
-        for (const [table, values] of Object.entries(entries(initialState()))) for (const row of values) await write(table,row.id,row.value,false);
+        for (const [table, values] of Object.entries(entries(initialState(false)))) for (const row of values) await write(table,row.id,row.value,false);
       }
       await db.exec('COMMIT');
     } catch (e) { await db.exec('ROLLBACK'); throw e; }

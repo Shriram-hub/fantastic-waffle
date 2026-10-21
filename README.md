@@ -8,7 +8,9 @@ campaign drafts. Planner & interview prep adds task deadlines, calendar export,
 STAR stories, job-specific practice guides and search analytics. See
 [contact discovery and career tools](docs/CONTACT_DISCOVERY.md).
 
-SQLite remains the local default. Set `DATABASE_URL` to use the real PostgreSQL runtime, including durable jobs, send logs, encrypted mailbox credentials, and private resume objects. `RUN_EMBEDDED_WORKER=true` supervises a worker alongside the API on a single hosting service. Google sign-in protects this private personal workspace; Gmail/Outlook mailbox consent remains separate. See [Google sign-in setup](docs/GOOGLE_SIGN_IN.md).
+SQLite remains the local default. Set `DATABASE_URL` to use the real PostgreSQL runtime, including durable jobs, send logs, encrypted mailbox credentials, and private resume objects. A supervised worker starts alongside the API by default on a single hosting service; `ENABLE_EMBEDDED_WORKER=false` disables it for separate-worker deployments. Google sign-in protects this private personal workspace; Gmail/Outlook mailbox consent remains separate. See [Google sign-in setup](docs/GOOGLE_SIGN_IN.md).
+
+See [production finalization and setup](docs/PRODUCTION_FINALIZATION.md) for the contact fallback, job-to-pitch workflow, extension 0.8 automatic pairing, mailbox self-tests, and CSV backup/restore.
 
 ## Automatic job discovery
 

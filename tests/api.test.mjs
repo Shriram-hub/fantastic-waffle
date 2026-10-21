@@ -1,4 +1,5 @@
 import test from "node:test";
+import {initialState} from "../server/fixtures.mjs";
 import assert from "node:assert/strict";
 import { createApp } from "../server/index.mjs";
 import { handlers, runOne } from "../server/worker.mjs";
@@ -26,6 +27,7 @@ async function workspace(
 ) {
   config={ENABLE_JOB_DISCOVERY:"false",...config};
   const app = createApp({ dataDir: ":memory:", config, fetcher });
+  await app.ready;await app.store.replace(initialState(true));
   await new Promise((resolve) => app.server.listen(0, "127.0.0.1", resolve));
   t.after(async () => {
     app.server.closeAllConnections();
@@ -82,6 +84,7 @@ async function live(t, fetcher) {
   await w.call("/api/contacts/import", {
     csv: "name,email,company,title,email_status\nRiley,hr@company.com,Company,Recruiter,verified",
   });
+  await w.store.refresh();for(const c of w.store.state.contacts){c.emailStatus='verified';c.verification={provider:'Verified test fixture',status:'verified'};}await w.store.save();
   const s = (await w.call("/api/state")).json;
   const c = (
     await w.call("/api/campaigns", {
@@ -243,6 +246,7 @@ test("CSV import reports duplicates and invalid emails without silently verifyin
   assert.equal(r.json.skipped, 2);
   const contacts = (await w.call("/api/state")).json.contacts;
   assert.equal(contacts[0].source, "CSV");
+  assert.equal(contacts[0].emailStatus, "unverified");
   assert.equal(contacts[1].emailStatus, "unverified");
 });
 test("campaign drafts contain actual attachments and send remains disabled without explicit setup", async (t) => {
@@ -431,6 +435,7 @@ test("follow-up sync detects a reply and cancels before sending a second message
   await w.call("/api/contacts/import", {
     csv: "name,email,company,email_status\nRiley,hr@company.com,Company,verified",
   });
+  await w.store.refresh();for(const c of w.store.state.contacts){c.emailStatus='verified';c.verification={provider:'Verified test fixture',status:'verified'};}await w.store.save();
   w.store.db
     .prepare(
       "INSERT INTO mail_accounts(id,provider,email,secret,metadata) VALUES(?,?,?,?,?)",

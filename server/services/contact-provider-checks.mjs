@@ -3,6 +3,15 @@ import {searchApollo} from '../providers/contacts/apollo.mjs';
 import {remoteJSON} from '../providers/http.mjs';
 import {contactProviderError} from '../providers/contacts/errors.mjs';
 
+export async function recordContactProviderFailure(store,provider,error) {
+  if(!error.providerStatus)return;
+  const safe=contactProviderError(provider,error);
+  await store.refresh();
+  const previous=store.state.contactProviderChecks || {checks:[]};
+  store.state.contactProviderChecks={checkedAt:now(),checks:[...previous.checks.filter(c=>c.provider!==provider),{provider,configured:true,ok:false,httpStatus:error.providerStatus,message:safe.message,endpoint:'Discovery'}]};
+  await store.save();
+}
+
 // Read-only checks: Apollo documents People API Search as zero-credit, and
 // Hunter Account Stats is free. No contact is saved and no email is sent.
 export async function checkContactProviders(store,config={},fetcher=fetch) {

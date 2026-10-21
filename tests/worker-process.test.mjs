@@ -68,7 +68,7 @@ test("a real separate worker process claims persisted work and stores private re
 
 test('embedded worker starts with the hosted API and shuts down with its parent',async t=>{
   const dir=mkdtempSync(join(tmpdir(),'orbit-embedded-'));
-  const child=spawn(process.execPath,['server/index.mjs'],{cwd:new URL('../',import.meta.url),env:{...process.env,HOST:'127.0.0.1',PORT:'0',DATA_DIR:dir,DATABASE_URL:'',RENDER_EXTERNAL_URL:'https://example.onrender.com',RUN_EMBEDDED_WORKER:'true',ENABLE_JOB_DISCOVERY:'false',REDIS_URL:'',ENABLE_LIVE_SEND:'false'},stdio:['ignore','pipe','pipe']});
+  const child=spawn(process.execPath,['server/index.mjs'],{cwd:new URL('../',import.meta.url),env:{...process.env,HOST:'127.0.0.1',PORT:'0',DATA_DIR:dir,DATABASE_URL:'',RENDER_EXTERNAL_URL:'https://example.onrender.com',RUN_EMBEDDED_WORKER:undefined,ENABLE_EMBEDDED_WORKER:undefined,ENABLE_JOB_DISCOVERY:'false',REDIS_URL:'',ENABLE_LIVE_SEND:'false'},stdio:['ignore','pipe','pipe']});
   let output='';child.stdout.on('data',data=>output+=data);child.stderr.on('data',data=>output+=data);
   t.after(async()=>{if(child.exitCode===null){child.kill('SIGTERM');await new Promise(resolve=>child.once('exit',resolve));}rmSync(dir,{recursive:true,force:true});});
   for(let i=0;i<100 && !/http:\/\/127\.0\.0\.1:\d+/.test(output);i++)await pause(50);

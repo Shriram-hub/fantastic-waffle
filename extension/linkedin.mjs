@@ -1,3 +1,19 @@
+export function extractLinkedInCompanyPeople() {
+  if(!/(^|\.)linkedin\.com$/.test(location.hostname) || !/^\/(company\/|jobs\/view\/)/.test(location.pathname))throw Error('Open a LinkedIn company people page or job listing.');
+  const clean=el=>String(el?.innerText || el?.textContent || '').split('\n').map(s=>s.trim()).filter(Boolean).filter((s,i,a)=>a.indexOf(s)===i).join(' ').slice(0,300);
+  const company=clean(document.querySelector('[data-testid="job-details-company-name"],.job-details-jobs-unified-top-card__company-name,.jobs-unified-top-card__company-name,.org-top-card-summary__title')) || (location.pathname.startsWith('/company/') ? clean(document.querySelector('h1')) : '');
+  const people=[];
+  for(const a of document.querySelectorAll('a[href*="/in/"]')) {
+    const card=a.closest('li,.org-people-profile-card,.artdeco-card,[data-view-name="profile-component-entity"]') || a.parentElement;
+    if(card?.closest('[hidden],[aria-hidden="true"]') || getComputedStyle(card).display==='none' || getComputedStyle(card).visibility==='hidden')continue;
+    let u;try{u=new URL(a.href);if(!/(^|\.)linkedin\.com$/.test(u.hostname) || !u.pathname.startsWith('/in/'))continue;}catch{continue;}
+    const name=clean(a.querySelector('span[aria-hidden="true"],.artdeco-entity-lockup__title') || a).replace(/\s*[·•].*$/,'').trim(),title=clean(card.querySelector('.artdeco-entity-lockup__subtitle,.lt-line-clamp--multi-line,.t-14.t-black--light')) || clean(card).replace(name,'').trim();
+    if(!/recruit|talent|human resources|\bhr\b|hiring|manager|director|chief|founder|partner|vice president|head of/i.test(title) || name.split(/\s+/).length<2 || people.some(p=>p.linkedinUrl===u.origin+u.pathname))continue;
+    people.push({name,title,linkedinUrl:u.origin+u.pathname});if(people.length>=25)break;
+  }
+  if(!company || !people.length)throw Error('No visible company recruiters were found. Open the company People page, load the relevant profiles, and try again.');
+  return {company,profiles:people,sourceUrl:location.origin+location.pathname};
+}
 export function extractLinkedInProfile() {
   // Explicit popup action on the user's current authenticated profile tab.
   if(!/(^|\.)linkedin\.com$/.test(location.hostname) || !location.pathname.startsWith('/in/'))throw Error('Open your own linkedin.com/in/ profile.');

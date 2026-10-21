@@ -1,6 +1,7 @@
 import { randomBytes, createCipheriv, createDecipheriv, createHash } from "node:crypto";
-import { remoteJSON } from "../http.mjs";
+import {mailJSON as remoteJSON} from './http.mjs';
 import { fail, hash } from "../../domain.mjs";
+import {requestBase} from '../../request-origin.mjs';
 const b64 = v => Buffer.from(v).toString("base64url");
 export function tokenCipher(config) {
   const key = Buffer.from(config.TOKEN_ENCRYPTION_KEY || "", "base64");
@@ -24,31 +25,31 @@ export function tokenCipher(config) {
     }
   };
 }
-export function oauthConfig(provider, config) {
+export function oauthConfig(provider, config,req) {
   const google = provider === "google";
   if (!google && provider !== "microsoft") fail("Unsupported OAuth provider.");
   const clientId = config[google ? "GOOGLE_CLIENT_ID" : "MICROSOFT_CLIENT_ID"],
     clientSecret = config[google ? "GOOGLE_CLIENT_SECRET" : "MICROSOFT_CLIENT_SECRET"];
   if (!clientId || !clientSecret) fail("Configure the provider client ID and secret first.", 503);
-  const base = (config.PUBLIC_BASE_URL || "http://127.0.0.1:3000").replace(/\/$/, "");
+  const base=requestBase(req,config);
   return {
     clientId,
     clientSecret,
-    redirect: `${base}/api/oauth/${provider}/callback`,
+    redirect: config[google ? 'GOOGLE_OAUTH_REDIRECT_URI' : 'MICROSOFT_OAUTH_REDIRECT_URI'] || (google ? config.OAUTH_REDIRECT_URI : '') || `${base}/api/oauth/${provider}/callback`,
     auth: google ? "https://accounts.google.com/o/oauth2/v2/auth" : "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
     token: google ? "https://oauth2.googleapis.com/token" : "https://login.microsoftonline.com/common/oauth2/v2.0/token",
     scope: google ? "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send" : "offline_access User.Read Mail.Read Mail.Send Mail.ReadWrite"
   };
 }
-export async function startOAuth(provider, store, config) {
-  const options = oauthConfig(provider, config),
+export async function startOAuth(provider, store, config,req) {
+  const options = oauthConfig(provider, config,req),
     cipher = tokenCipher(config),
     state = b64(randomBytes(32)),
     verifier = b64(randomBytes(32));
   await store.db.prepare("DELETE FROM oauth_states WHERE expires<?").run(Date.now());
   await store.db.prepare("INSERT INTO oauth_states(id,secret,expires) VALUES(?,?,?)").run(hash(state), cipher.seal({
     provider,
-    verifier
+    verifier,redirect:options.redirect
   }), Date.now() + 600000);
   const url = new URL(options.auth);
   url.search = new URLSearchParams({
@@ -66,13 +67,14 @@ export async function startOAuth(provider, store, config) {
   });
   return url.href;
 }
-export async function completeOAuth(provider, code, state, store, config, fetcher = fetch) {
+export async function completeOAuth(provider, code, state, store, config, fetcher = fetch,req) {
   const cipher = tokenCipher(config),
-    options = oauthConfig(provider, config),
+    options = oauthConfig(provider, config,req),
     row = await store.db.prepare("SELECT * FROM oauth_states WHERE id=?").get(hash(state || ""));
   if (!row || row.expires < Date.now()) fail("OAuth state expired. Start the connection again.", 403);
   const saved = cipher.open(row.secret);
   if (saved.provider !== provider) fail("OAuth provider mismatch.", 403);
+  options.redirect=saved.redirect || options.redirect;
   await store.db.prepare("DELETE FROM oauth_states WHERE id=?").run(row.id);
   const tokens = await remoteJSON(options.token, {
     method: "POST",

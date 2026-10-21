@@ -159,7 +159,7 @@ test('company ambiguity, guessed addresses, catch-all verification and missing c
   const store=await personal(openStore(':memory:'));t.after(()=>store.close());const queue=taskQueue(store),mock=providerMock();
   await savePolicy({enabled:true,acknowledged:true},store,{});
   await prepare(store,queue,await getPolicy(store),mock.fetcher,2);
-  assert.equal(store.state.contacts.length,0);assert.equal(store.state.campaigns.length,0);
+  assert.ok(store.state.contacts.every(c=>c.emailStatus!=='verified'));assert.equal(store.state.campaigns.length,0);
   assert.ok(!(mock.calls.some(u=>u.includes('apollo.io'))));
 });
 test('Himalayas preserves attribution/restrictions and the scheduler endpoint requires its separate credential',async t=>{

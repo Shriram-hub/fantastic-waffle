@@ -60,7 +60,7 @@ test('Google login verifies signed identity, PKCE, nonce, browser binding and ex
   const w=await setup(t,{fetcher:async(url,options)=>{
     if(String(url).endsWith('/certs'))return new Response(JSON.stringify({keys:[jwk]}),{headers:{'Content-Type':'application/json'}});
     assert.equal(String(url),'https://oauth2.googleapis.com/token');tokenCalls++;
-    const body=new URLSearchParams(options.body);assert.equal(body.get('code_verifier'),expectedVerifier);assert.equal(body.get('redirect_uri'),'http://127.0.0.1:3000/api/oauth/google/callback');
+    const body=new URLSearchParams(options.body);assert.equal(body.get('code_verifier'),expectedVerifier);assert.match(body.get('redirect_uri'),/^http:\/\/127\.0\.0\.1:\d+\/api\/oauth\/google\/callback$/);
     const id_token=await new SignJWT({email:'owner@candidate.com',email_verified:emailVerified,name:'Owner',nonce:savedNonce}).setProtectedHeader({alg:'RS256',kid:'test-key'}).setSubject(subject).setAudience(audience).setIssuer(issuer).setIssuedAt().setExpirationTime('5m').sign(privateKey);
     return new Response(JSON.stringify({id_token,access_token:'unused-for-login'}),{headers:{'Content-Type':'application/json'}});
   }});

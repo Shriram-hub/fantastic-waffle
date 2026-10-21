@@ -3,6 +3,7 @@ services:
     build: .
     env_file: .env
     environment:
+      ENABLE_EMBEDDED_WORKER: "false"
       RUN_EMBEDDED_WORKER: "false"
       HOST: 0.0.0.0
       DATA_DIR: /app/data

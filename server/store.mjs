@@ -185,7 +185,7 @@ export function openStore(directory) {
         .get();
       const previous =
         legacy && db.prepare("SELECT data FROM workspace WHERE id=1").get();
-      overwrite(previous ? JSON.parse(previous.data) : initialState());
+      overwrite(previous ? JSON.parse(previous.data) : initialState(false));
       db.prepare("INSERT INTO migrations(version,applied_at) VALUES(2,?)").run(
         new Date().toISOString(),
       );

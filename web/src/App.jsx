@@ -82,6 +82,7 @@ export default function App() {
     reload().catch(setError);
     const listen = () => setRoute(location.hash.slice(1) || "jobs");
     window.addEventListener("hashchange", listen);
+    listen(); // Capture a deep link changed while the session was loading.
     const events = new EventSource('/api/events');
     events.addEventListener('auth-required',()=>window.dispatchEvent(new Event('orbit:auth-required')));
     let refreshTimer;

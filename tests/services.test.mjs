@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { openStore } from "../server/store.mjs";
+import {openStore as openEmptyStore} from "../server/store.mjs";
+const openStore=path=>{const s=openEmptyStore(path);s.replace(initialState(true));return s;};
 import { tokenCipher, startOAuth, completeOAuth } from "../server/providers/mail/oauth.mjs";
 import { syncMailbox } from "../server/providers/mail/inbox.mjs";
 import { classifyEmail, ingestMessage, scheduleMailboxSync, INBOX_SYNC_INTERVAL } from "../server/services/inbox.mjs";
@@ -340,7 +341,7 @@ test("browser answer mapping uses only approved fields and native MIME retains r
 });
 
 test('MX precheck saves verifier credits on dead/null-MX domains and holds temporary DNS failures',async()=>{
-  let credits=0;const fetcher=async()=>{credits++;throw Error('Must not call paid verifier');};
+  let credits=0;const fetcher=async url=>{if(String(url).includes('dns.google'))return response({Status:2});credits++;throw Error('Must not call paid verifier');};
   const missing=async()=>{throw Object.assign(Error('NXDOMAIN'),{code:'ENOTFOUND'});};
   const temporary=async()=>{throw Object.assign(Error('temporary'),{code:'ETIMEOUT'});};
   assert.equal((await verifyWorkEmail('hr@company.com',{HUNTER_API_KEY:'test'},fetcher,missing)).emailStatus,'invalid');

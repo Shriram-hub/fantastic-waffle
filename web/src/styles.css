@@ -160,6 +160,15 @@
   max-height: 75vh;
   overflow: auto;
 }
+.mailbox-checks { padding: 12px 0; }
+.mailbox-checks .hint { overflow-wrap: anywhere; }
+.modal-body .contact-row .grow { min-width: 0; }
+.modal-body .contact-row p { overflow-wrap: anywhere; }
+@media(max-width:600px) {
+  .modal-body .contact-row { flex-wrap: wrap; gap: 10px; }
+  .modal-body .contact-row .grow { flex-basis: 100%; }
+  .opportunity-bottom .btn-row { flex-wrap: wrap; justify-content: flex-end; }
+}
 .preview-tabs {
   display: flex;
   gap: 7px;

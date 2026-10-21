@@ -111,7 +111,7 @@ export function scoreJob(job, profile) {
     ],
   };
 }
-export function parseCSV(raw) {
+export function parseCSV(raw,{required='email'}={}) {
   if (typeof raw !== "string" || raw.length > 2_000_000)
     fail("CSV must be under 2 MB.");
   const rows = [];
@@ -148,9 +148,9 @@ export function parseCSV(raw) {
       .replace(/\s+/g, "_"),
   );
   if(!headers.includes('email')){const alias=headers.findIndex(h=>['email_address','work_email','emailaddress','workemail'].includes(h));if(alias>=0)headers[alias]='email';}
-  if (!headers.includes("email"))
+  if (!headers.includes(required))
     fail(
-      "The CSV needs an email column. Use name, email, company, title, email_status.",
+      required==='email' ? "The CSV needs an email column. Use name, email, company, title, email_status." : 'The CSV needs a URL column. Use Company, Role, Stage, URL, Notes.',
     );
   if (rows.length > 500) fail("Import up to 500 contacts at a time.");
   return rows.map((r) =>
@@ -171,6 +171,8 @@ export function normalizeContact(row, source = "CSV") {
     email,
     company: text(row.company || row.company_name || row.organization, 150),
     title: text(row.title || row.job_title || row.role, 150),
+    linkedinUrl:safeUrl(row.linkedin_url || row.linkedin || ''),
+    confidence:null,
     source,
     emailStatus: row.email_status === "verified" ? "verified" : "unverified",
     suppressed: false,
@@ -232,10 +234,11 @@ export function previewCampaign(campaign, state) {
     }
     seen.add(c.email.toLowerCase());
     const senderProfile={...state.profile,resumeUrl:campaign.resumeLinks?.[c.id]?.url || state.profile.resumeUrl};
-    const subject = renderTemplate(campaign.subject, c, senderProfile);
+    const personal=campaign.personalizedMessages?.[c.id];
+    const subject = renderTemplate(personal?.subject || campaign.subject, c, senderProfile);
     if (/[\r\n]/.test(subject))
       fail("A contact contains a newline that cannot be used in a subject.");
-    const rendered=renderTemplate(campaign.body,c,senderProfile);
+    const rendered=renderTemplate(personal?.body || campaign.body,c,senderProfile);
     const link=campaign.resumeLinks?.[c.id]?.url;
     const body = `${rendered}${link && !rendered.includes(link) ? `\n\nMy résumé: ${link}` : ""}\n\n${state.profile.name}\n${state.profile.email}\nTo stop receiving messages from me, reply with “unsubscribe”.`;
     messages.push({
@@ -246,7 +249,7 @@ export function previewCampaign(campaign, state) {
       subject,
       body,
       isDemo: c.isDemo || sampleEmail(c.email),
-      emailStatus: c.emailStatus,
+      emailStatus: c.requiresDomainReview ? 'domain-review' : c.emailStatus,
     });
   }
   if (!messages.length)
@@ -268,13 +271,14 @@ export function campaignFingerprint(campaign, state) {
     name: campaign.name,
     subject: campaign.subject,
     body: campaign.body,
+    personalizedMessages:campaign.personalizedMessages || null,
     contactIds: campaign.contactIds,
     attachResume: campaign.attachResume,
     profile: state.profile,
     resume: state.resume
       ? state.resume.contentHash || hash(state.resume.base64)
       : null,
-    contacts: campaign.contactIds.map(cid => {const c=state.contacts.find(c=>c.id===cid);return c && Object.fromEntries(['id','name','email','company','title','emailStatus','suppressed','isDemo','icebreaker','jobTitle','jobUrl','warmSignals','warmOpener'].map(k=>[k,c[k]]));}),
+    contacts: campaign.contactIds.map(cid => {const c=state.contacts.find(c=>c.id===cid);return c && Object.fromEntries(['id','name','email','company','title','emailStatus','requiresDomainReview','suppressed','isDemo','icebreaker','jobTitle','jobUrl','warmSignals','warmOpener'].map(k=>[k,c[k]]));}),
     documentSetId:campaign.documentSetId || null,trackResume:campaign.trackResume || false,attachCoverLetter:campaign.attachCoverLetter || false,resumeLinks:campaign.resumeLinks || null,
     jobId: campaign.jobId || null,
     autopilot: campaign.autopilot || null,

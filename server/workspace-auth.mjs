@@ -3,6 +3,7 @@ import {createRemoteJWKSet,jwtVerify,customFetch} from 'jose';
 import {hash,fail} from './domain.mjs';
 import {tokenCipher,oauthConfig} from './providers/mail/oauth.mjs';
 import {remoteJSON} from './providers/http.mjs';
+import {requestBase} from './request-origin.mjs';
 
 const SESSION_SECONDS=7*86400,STATE_SECONDS=600;
 const random=()=>randomBytes(32).toString('base64url');
@@ -21,14 +22,14 @@ export function sameOrigin(req) {
   if(req.headers.origin && new URL(req.headers.origin).host!==req.headers.host)fail('Cross-origin writes are blocked.',403);
 }
 export function workspaceAuth(store,config,fetcher=fetch) {
-  const secure=new URL(config.PUBLIC_BASE_URL || config.RENDER_EXTERNAL_URL || 'http://localhost').protocol==='https:';
-  const sessionName=secure ? '__Host-orbit_session' : 'orbit_session',stateName=secure ? '__Host-orbit_oauth' : 'orbit_oauth';
-  const cookie=(name,value,seconds)=>`${name}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${seconds}${secure ? '; Secure' : ''}`;
+  const names=req=>{const secure=new URL(requestBase(req,config)).protocol==='https:';return {secure,sessionName:secure ? '__Host-orbit_session' : 'orbit_session',stateName:secure ? '__Host-orbit_oauth' : 'orbit_oauth'};};
+  const cookie=(req,name,value,seconds)=>`${name}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${seconds}${names(req).secure ? '; Secure' : ''}`;
   const googleConfigured=!!(config.GOOGLE_CLIENT_ID && config.GOOGLE_CLIENT_SECRET && config.TOKEN_ENCRYPTION_KEY);
   const required=!!config.WORKSPACE_PASSWORD;
   const googleKeys=createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs'),{[customFetch]:fetcher});
   const owner=()=>store.db.prepare("SELECT * FROM workspace_identity WHERE id='owner'").get();
   async function session(req) {
+    const {sessionName}=names(req);
     const token=cookies(req)[sessionName];if(!/^[a-zA-Z0-9_-]{43}$/.test(token || ''))return null;
     const row=await store.db.prepare('SELECT body,expires FROM auth_sessions WHERE id=?').get(hash(token));
     if(!row || row.expires<Date.now())return null;
@@ -38,15 +39,17 @@ export function workspaceAuth(store,config,fetcher=fetch) {
     if(value.method==='google') {const identity=await owner();if(!identity || identity.subject!==value.subject)return null;}
     return value;
   }
-  async function createSession(res,identity) {
+  async function createSession(req,res,identity) {
+    const {sessionName}=names(req);
     const token=random();
     await store.db.prepare('DELETE FROM auth_sessions WHERE expires<?').run(Date.now());
     await store.db.prepare('INSERT INTO auth_sessions(id,body,expires) VALUES(?,?,?)').run(hash(token),JSON.stringify({...identity,credentialVersion:hash(config.WORKSPACE_PASSWORD)}),Date.now()+SESSION_SECONDS*1000);
-    res.setHeader('Set-Cookie',cookie(sessionName,token,SESSION_SECONDS));
+    res.setHeader('Set-Cookie',cookie(req,sessionName,token,SESSION_SECONDS));
   }
   const redirect=(res,path)=>{res.writeHead(303,{Location:path});res.end();return true;};
   async function handle(req,res,url,{json,bodyJSON}) {
     const path=url.pathname;
+    const {sessionName,stateName}=names(req);
     if(req.method==='GET' && path==='/api/auth/session') {
       const current=await session(req),identity=await owner();
       json(res,200,{required,authenticated:!required || !!current,method:current?.method || (!required ? 'local' : null),user:current?.method==='google' ? {email:current.email,name:current.name} : null,googleConfigured,googleLinked:!!identity,passwordEnabled:required});return true;
@@ -61,27 +64,27 @@ export function workspaceAuth(store,config,fetcher=fetch) {
       if(!passwordValid(data.password,config))fail('That workspace password is incorrect.',401);
       await store.db.prepare("DELETE FROM auth_rate_limits WHERE id='password'").run();
       const old=cookies(req)[sessionName];if(old)await store.db.prepare('DELETE FROM auth_sessions WHERE id=?').run(hash(old));
-      await createSession(res,{method:'password'});json(res,200,{ok:true});return true;
+      await createSession(req,res,{method:'password'});json(res,200,{ok:true});return true;
     }
     if(req.method==='POST' && path==='/api/auth/logout') {
       sameOrigin(req);const token=cookies(req)[sessionName];if(token)await store.db.prepare('DELETE FROM auth_sessions WHERE id=?').run(hash(token));
-      res.setHeader('Set-Cookie',[cookie(sessionName,'',0),cookie(stateName,'',0)]);json(res,200,{ok:true});return true;
+      res.setHeader('Set-Cookie',[cookie(req,sessionName,'',0),cookie(req,stateName,'',0)]);json(res,200,{ok:true});return true;
     }
     if(req.method==='GET' && path==='/api/auth/google/start') {
       if(!googleConfigured) return redirect(res,'/?auth_error=google_configuration');
       const identity=await owner(),current=await session(req);
       if(!identity && current?.method!=='password')return redirect(res,'/?auth_error=unlock_to_link');
       // Only the password-authenticated owner can bind the first Google identity.
-      const state=`signin.${random()}`,binding=random(),verifier=random(),nonce=random(),options=oauthConfig('google',config);
+      const state=`signin.${random()}`,binding=random(),verifier=random(),nonce=random(),options=oauthConfig('google',config,req);
       await store.db.prepare('DELETE FROM oauth_states WHERE expires<?').run(Date.now());
-      await store.db.prepare('INSERT INTO oauth_states(id,secret,expires) VALUES(?,?,?)').run(hash(state),tokenCipher(config).seal({purpose:'signin',binding:hash(binding),verifier,nonce,canLink:!identity && current?.method==='password',linkSession:!identity ? hash(cookies(req)[sessionName]) : null}),Date.now()+STATE_SECONDS*1000);
+      await store.db.prepare('INSERT INTO oauth_states(id,secret,expires) VALUES(?,?,?)').run(hash(state),tokenCipher(config).seal({purpose:'signin',binding:hash(binding),verifier,nonce,redirect:options.redirect,canLink:!identity && current?.method==='password',linkSession:!identity ? hash(cookies(req)[sessionName]) : null}),Date.now()+STATE_SECONDS*1000);
       const target=new URL(options.auth);target.search=new URLSearchParams({client_id:options.clientId,redirect_uri:options.redirect,response_type:'code',scope:'openid email profile',state,nonce,code_challenge:createHash('sha256').update(verifier).digest('base64url'),code_challenge_method:'S256',prompt:'select_account'});
-      res.setHeader('Set-Cookie',cookie(stateName,binding,STATE_SECONDS));return redirect(res,target.href);
+      res.setHeader('Set-Cookie',cookie(req,stateName,binding,STATE_SECONDS));return redirect(res,target.href);
     }
     // Reuse the mailbox callback URI already registered in Google Cloud. The
     // encrypted, browser-bound state purpose keeps login and Gmail grants apart.
     if(req.method==='GET' && path==='/api/oauth/google/callback' && url.searchParams.get('state')?.startsWith('signin.')) {
-      res.setHeader('Set-Cookie',cookie(stateName,'',0));
+      res.setHeader('Set-Cookie',cookie(req,stateName,'',0));
       try {
         const state=url.searchParams.get('state'),row=await store.db.prepare('SELECT * FROM oauth_states WHERE id=?').get(hash(state));
         if(!row || row.expires<Date.now())fail('Expired sign-in.',403);
@@ -91,7 +94,7 @@ export function workspaceAuth(store,config,fetcher=fetch) {
         if(!consumed.changes)fail('Sign-in already used.',403);
         if(url.searchParams.has('error'))return redirect(res,'/?auth_error=google_denied');
         const code=url.searchParams.get('code');if(!code || code.length>4096)fail('Missing authorization code.',403);
-        const options=oauthConfig('google',config);
+        const options=oauthConfig('google',config,req);options.redirect=saved.redirect || options.redirect;
         const tokens=await remoteJSON(options.token,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:options.clientId,client_secret:options.clientSecret,redirect_uri:options.redirect,grant_type:'authorization_code',code,code_verifier:saved.verifier}).toString()},fetcher);
         const {payload}=await jwtVerify(tokens.id_token,googleKeys,{issuer:['https://accounts.google.com','accounts.google.com'],audience:options.clientId,algorithms:['RS256'],requiredClaims:['sub','iat','exp','nonce','email','email_verified'],maxTokenAge:'10m',clockTolerance:30});
         if(payload.nonce!==saved.nonce || payload.email_verified!==true || typeof payload.sub!=='string' || typeof payload.email!=='string' || payload.azp && payload.azp!==options.clientId)fail('Invalid Google identity.',403);
@@ -104,9 +107,9 @@ export function workspaceAuth(store,config,fetcher=fetch) {
         }
         if(identity.subject!==payload.sub)return redirect(res,'/?auth_error=wrong_account');
         const old=cookies(req)[sessionName];if(old)await store.db.prepare('DELETE FROM auth_sessions WHERE id=?').run(hash(old));
-        await createSession(res,{method:'google',subject:payload.sub,email:payload.email,name:String(payload.name || '').slice(0,150)});
+        await createSession(req,res,{method:'google',subject:payload.sub,email:payload.email,name:String(payload.name || '').slice(0,150)});
         // Both cookies must survive: remove the one-time binding and set a new session.
-        res.setHeader('Set-Cookie',[res.getHeader('Set-Cookie'),cookie(stateName,'',0)]);
+        res.setHeader('Set-Cookie',[res.getHeader('Set-Cookie'),cookie(req,stateName,'',0)]);
         return redirect(res,'/');
       } catch(error) {
         // Never put authorization codes, tokens, identity claims or provider text in URLs/logs.

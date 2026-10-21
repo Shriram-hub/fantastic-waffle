@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Orbit Application Assistant",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Fill an application from your approved Orbit profile, then hand control back for review and submission.",
   "permissions": [
     "storage",
@@ -18,6 +18,7 @@
     "https://*.ashbyhq.com/*",
     "https://www.linkedin.com/jobs/*",
     "https://www.linkedin.com/in/*",
+    "https://www.linkedin.com/company/*",
     "https://*.smartrecruiters.com/*",
     "https://*.taleo.net/*",
     "https://*.icims.com/*",
@@ -42,6 +43,7 @@
         "https://*.myworkdayjobs.com/*",
         "https://*.ashbyhq.com/*",
         "https://www.linkedin.com/jobs/*",
+        "https://www.linkedin.com/company/*",
         "https://*.smartrecruiters.com/*",
         "https://*.taleo.net/*",
         "https://*.icims.com/*",

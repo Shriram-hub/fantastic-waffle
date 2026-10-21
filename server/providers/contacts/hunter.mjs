@@ -1,11 +1,12 @@
 import { remoteJSON } from "../http.mjs";
 import { id, now, text, emailValid,fail,safeUrl } from "../../domain.mjs";
-import {companyDomain} from './company.mjs';
+import {companyDomain,cleanCompanyName} from './company.mjs';
 import {contactProviderError} from './errors.mjs';
 
 export const searchHunter=async(domain,key,limit=3,fetcher=fetch)=>(await hunterSearch({domain},key,limit,fetcher)).contacts;
 export const searchHunterCompany=(company,key,limit=3,fetcher=fetch)=>hunterSearch({company},key,limit,fetcher);
-const normalizedName=value=>String(value || '').toLowerCase().replace(/\b(inc|incorporated|llc|ltd|limited|corporation)\b/g,'').replace(/[^a-z0-9]/g,'');
+export const searchHunterDomain=(domain,key,limit=3,fetcher=fetch)=>hunterSearch({domain},key,limit,fetcher);
+const normalizedName=value=>cleanCompanyName(value).toLowerCase().replace(/[^a-z0-9]/g,'');
 export async function findHunterEmail(person,domain,key,fetcher=fetch) {
   const parts=person.name.trim().split(/\s+/),url=new URL('https://api.hunter.io/v2/email-finder');
   if(parts.length<2 || !companyDomain(domain))return null;
@@ -38,5 +39,6 @@ async function hunterSearch(query, key, limit = 3, fetcher = fetch) {
       const sources=(p.sources || []).map(s=>({url:safeUrl(s.uri),lastSeen:text(s.last_seen_on,40)})).filter(s=>s.url).slice(0,5);
       return {id:id(),name:text([p.first_name,p.last_name].filter(Boolean).join(' '),150) || 'Hiring team',email:p.value.toLowerCase(),company:text(result.data.organization,150),title:text(p.position || p.position_raw,150) || (p.department==='hr' ? 'Human resources' : 'Company contact'),emailStatus:status,source:'Hunter',sources,linkedinUrl:safeUrl(p.linkedin),companyDomain:domain,suppressed:false,isDemo:false,createdAt:now(),verification:{provider:'Hunter',status,at:at ? new Date(at).toISOString() : now(),reference:sources[0]?.url || '',result:status==='verified' ? 'Recently verified by Hunter' : status==='catch-all' ? 'Catch-all domain; blocked from sending' : 'Needs mailbox verification'}};
     });
-  return {company:{domain,name:text(result.data.organization,150) || domain,source:'Hunter company search',reference:'https://hunter.io/'},contacts};
+  const pattern=/^(?:[._-]|\{(?:first|last|f|l)\})+$/.test(result.data.pattern || '') ? result.data.pattern : '';
+  return {company:{domain,name:text(result.data.organization,150) || domain,source:'Hunter company search',reference:'https://hunter.io/',pattern},pattern,contacts};
 }

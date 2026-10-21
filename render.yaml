@@ -16,7 +16,7 @@ services:
         value: "24"
       - key: HOST
         value: 0.0.0.0
-      - key: RUN_EMBEDDED_WORKER
+      - key: ENABLE_EMBEDDED_WORKER
         value: "true"
       - key: ENABLE_LIVE_SEND
         value: "false"

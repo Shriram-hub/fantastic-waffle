@@ -12,6 +12,9 @@ import {providerCall} from './services/provider-budget.mjs';
 import {getPolicy} from './services/autopilot-policy.mjs';
 import {buildJobDocuments} from './services/job-documents.mjs';
 import {deliverAlert} from './services/notifications.mjs';
+import {sendNative} from './providers/mail/native.mjs';
+import {buildJobPitch} from './services/job-pitch.mjs';
+import {importBrowserContacts} from './services/browser-contacts.mjs';
 import {inboxActions} from './services/inbox-actions.mjs';
 import {buildInterviewPrep} from './services/career.mjs';
 import { extractStructuredResume, extractCandidateProfile, generateIcebreaker, classifyInboxAI, embedTexts, cosineSimilarity, factPreservingTailor } from "./services/ai.mjs";
@@ -48,6 +51,23 @@ export function handlers(store, queue, config = {}, fetcher = fetch, dependencie
     };
   }
   return {
+    async 'contacts.browser-import'(task){return importBrowserContacts(task,store,config,fetcher,dependencies);},
+    async 'job.auto-pitch'(task){return buildJobPitch(task,store,queue,config,fetcher,dependencies);},
+    async 'mail.test-send'(task) {
+      const a=await store.db.prepare('SELECT id,email,metadata FROM mail_accounts WHERE id=?').get(task.payload.accountId);if(!a)return {status:'cancelled'};
+      let result;
+      try{result=await sendNative({to:a.email,subject:'Orbit connection test',body:'Your connected mailbox can send through Orbit. This test was requested from Connections and sent only to your own address.',messageKey:task.id},a.id,store,config,null,fetcher);}
+      catch(error){result={status:'failed',error:error.status ? error.message : 'Mailbox connection failed. Reconnect OAuth in Connections.'};}
+      const row=await store.db.prepare('SELECT metadata FROM mail_accounts WHERE id=?').get(a.id);if(row){const meta=JSON.parse(row.metadata);meta.connectionTests={...meta.connectionTests,send:{at:now(),...result}};await store.db.prepare('UPDATE mail_accounts SET metadata=? WHERE id=?').run(JSON.stringify(meta),a.id);}
+      return result;
+    },
+    async 'mail.test-inbox'(task) {
+      let result;
+      try{result={status:'completed',...await inboxSync(task.payload.accountId),at:now()};}
+      catch(error){result={status:'failed',at:now(),error:error.status ? error.message : 'Inbox connection failed. Reconnect OAuth in Connections.'};}
+      const row=await store.db.prepare('SELECT metadata FROM mail_accounts WHERE id=?').get(task.payload.accountId);if(row){const meta=JSON.parse(row.metadata);meta.connectionTests={...meta.connectionTests,inbox:result};await store.db.prepare('UPDATE mail_accounts SET metadata=? WHERE id=?').run(JSON.stringify(meta),task.payload.accountId);}
+      return result;
+    },
     async 'alert.send'(task){return deliverAlert(task,store,config,fetcher);},
     async 'documents.build'(task){return buildJobDocuments(task,store,queue,config,fetcher);},
     async 'career.prep'(task){return buildInterviewPrep(task,store,queue,config,fetcher);},
@@ -337,6 +357,9 @@ export async function startWorker(config = process.env) {
     queue = taskQueue(store),
     registry = handlers(store, queue, config);
   let stopping = false;
+  let wake,wakeRequested=false;
+  const onWake=message=>{if(message?.type==='queue-wake'){wakeRequested=true;wake?.();}};
+  process.on('message',onWake);
   let redisWorker, connection, bull;
   for (const signal of ["SIGTERM", "SIGINT"]) process.once(signal, () => {
     stopping = true;
@@ -389,11 +412,13 @@ export async function startWorker(config = process.env) {
         removeOnFail: 100
       });
     } else await runOne(store, queue, registry);
-    await pause(store.kind === "postgres" ? 5000 : 1000);
+    if(wakeRequested)wakeRequested=false;
+    else await new Promise(resolve=>{const timer=setTimeout(done,store.kind==='postgres' ? 5000 : 1000);function done(){clearTimeout(timer);wake=null;resolve();}wake=done;});
   }
   if (redisWorker) await redisWorker.close();
   if (bull) await bull.close();
   if (connection) await connection.quit();
+  process.off('message',onWake);
   await store.close();
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await startWorker();

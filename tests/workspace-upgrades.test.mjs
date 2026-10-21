@@ -59,10 +59,10 @@ test('warm hooks require explicit shared-background evidence; co-occurring keywo
   await prioritizeWarmContacts(store.state.contacts,store.state.jobs[0],store,cfg,()=>assert.fail('Cached search repeated'),true);
   store.state.profile.master.education=[];assert.equal(warmHook({...people[0],company:'Example Bank'},store.state),'');
 });
-test('warm prospects can be saved without guessed addresses; a work-email finder must return the exact corporate domain',async t=>{
+test('warm prospects retain unverified suggestions; a work-email finder must return the exact corporate domain',async t=>{
   const store=await workspace(t);store.state.contacts=[];await store.save();
   const fetcher=async url=>{const u=new URL(url);if(u.hostname==='serpapi.com')return response({organic_results:[{title:'Riley Test - Recruiter at Example Bank',link:'https://www.linkedin.com/in/riley-test/',snippet:'Education: Example University.'}]});assert.equal(u.pathname,'/v2/email-finder');return response({data:{email:'wrong@other-company.com',verification:{status:'valid'}}});};
-  const found=await findCompanyContacts(store.state.jobs[0],{domain:'company.com'},{store,config:{SERPAPI_API_KEY:'mock'},fetcher,pages:async()=>[],allowWarmSearch:true,limit:3});assert.equal(found.contacts.length,1);assert.equal(found.contacts[0].email,'');assert.equal(found.contacts[0].emailStatus,'unverified');
+  const found=await findCompanyContacts(store.state.jobs[0],{domain:'company.com'},{store,config:{SERPAPI_API_KEY:'mock'},fetcher,pages:async()=>[],allowWarmSearch:true,limit:3});const prospect=found.contacts.find(c=>c.name==='Riley Test');assert.ok(prospect);assert.equal(prospect.emailStatus,'unverified');assert.ok(!found.contacts.some(c=>c.emailStatus==='verified'));
   const catchAll=await findHunterEmail({name:'Riley Test'},'company.com','mock',async()=>response({data:{email:'riley@company.com',accept_all:true,verification:{status:'valid'}}}));assert.equal(catchAll.emailStatus,'catch-all');
 });
 test('per-job documents contain source text, real history and education, deduplicate evidence, cache and cancel stale work',async t=>{

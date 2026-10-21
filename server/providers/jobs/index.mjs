@@ -165,6 +165,7 @@ export function mergeJobListings(existing, incoming, source, board = "") {
         origin.active = false;
   }
   for (const next of incoming) {
+    if(next.isDemo)continue;
     const key = canonicalJobKey(next),
       old = map.get(key),
       origin = { id: next.id, source, board, url: next.url, active: true };

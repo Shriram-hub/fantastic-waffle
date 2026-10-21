@@ -18,7 +18,7 @@ export function postgresQueue(store) {
     return decode(await db.prepare(dedupeKey ? "SELECT * FROM tasks WHERE dedupe_key=?" : "SELECT * FROM tasks WHERE id=?").get(dedupeKey || id));
   }
   async function reconcileExpired() {
-    for (const task of await db.prepare("SELECT id,kind,payload FROM tasks WHERE status='unknown' AND lease_until IS NOT NULL AND kind IN ('campaign.send','campaign.followup','alert.send')").all()) {
+    for (const task of await db.prepare("SELECT id,kind,payload FROM tasks WHERE status='unknown' AND lease_until IS NOT NULL AND kind IN ('campaign.send','campaign.followup','alert.send','mail.test-send')").all()) {
       await db.prepare("UPDATE outreach_send_log SET status='unknown',updated_at=? WHERE task_id=? AND status='sending'").run(Date.now(),task.id);
       const payload = JSON.parse(task.payload),
         row = await db.prepare("SELECT body FROM campaigns WHERE id=?").get(payload.campaignId || "");
@@ -42,7 +42,7 @@ export function postgresQueue(store) {
   }
   async function finish(task, result, error) {
     const clock = Date.now(),
-      outbound = ["campaign.send", "campaign.followup", "alert.send"].includes(task.kind),
+      outbound = ["campaign.send", "campaign.followup", "alert.send", "mail.test-send"].includes(task.kind),
       status = error ? outbound ? "unknown" : task.attempts < task.max_attempts ? "queued" : "failed" : result?.status === "deferred" ? "queued" : result?.status === "failed" ? "failed" : result?.status === "unknown" ? "unknown" : result?.status === "cancelled" ? "cancelled" : "completed";
     const update = await db.prepare("UPDATE tasks SET status=?,result=?,error=?,run_at=?,lease_until=NULL,lease_token=NULL,updated_at=? WHERE id=? AND lease_token=? AND status='running'").run(status, result ? JSON.stringify(result) : null, error ? String(error.message).slice(0, 1000) : null, result?.runAt || clock + (error ? Math.min(3600000, 2000 * 2 ** task.attempts) : 0), clock, task.id, task.lease_token);
     if (!update.changes) fail("Worker lease lost; completion was not recorded.", 409);
@@ -55,8 +55,8 @@ export function postgresQueue(store) {
       const clock = Date.now();
       await db.exec("BEGIN IMMEDIATE");
       try {
-        await db.prepare("UPDATE tasks SET status='unknown',error='Outbound send lease expired; reconcile before retrying.',lease_token=NULL,updated_at=? WHERE status='running' AND lease_until<? AND kind IN ('campaign.send','campaign.followup','alert.send')").run(clock, clock);
-        await db.prepare("UPDATE tasks SET status=CASE WHEN attempts>=max_attempts THEN 'failed' ELSE 'queued' END,lease_token=NULL,updated_at=? WHERE status='running' AND lease_until<? AND kind NOT IN ('campaign.send','campaign.followup','alert.send')").run(clock, clock);
+        await db.prepare("UPDATE tasks SET status='unknown',error='Outbound send lease expired; reconcile before retrying.',lease_token=NULL,updated_at=? WHERE status='running' AND lease_until<? AND kind IN ('campaign.send','campaign.followup','alert.send','mail.test-send')").run(clock, clock);
+        await db.prepare("UPDATE tasks SET status=CASE WHEN attempts>=max_attempts THEN 'failed' ELSE 'queued' END,lease_token=NULL,updated_at=? WHERE status='running' AND lease_until<? AND kind NOT IN ('campaign.send','campaign.followup','alert.send','mail.test-send')").run(clock, clock);
         await reconcileExpired();
         await db.exec("COMMIT");
       } catch (e) {
@@ -81,7 +81,7 @@ export function postgresQueue(store) {
     },
     async retry(id) {
       const t = await this.get(id);
-      if (!t || t.status !== "failed" || ["campaign.send", "campaign.followup", "alert.send"].includes(t.kind)) fail("Only failed non-sending tasks can be retried.", 409);
+      if (!t || t.status !== "failed" || ["campaign.send", "campaign.followup", "alert.send", "mail.test-send"].includes(t.kind)) fail("Only failed non-sending tasks can be retried.", 409);
       await db.prepare("UPDATE tasks SET status='queued',attempts=0,run_at=?,updated_at=? WHERE id=?").run(Date.now(), Date.now(), id);
     },
     async logs(id) {

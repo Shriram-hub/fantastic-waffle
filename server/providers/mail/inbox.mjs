@@ -1,5 +1,5 @@
 import { accessAccount } from "./oauth.mjs";
-import { remoteJSON } from "../http.mjs";
+import {mailJSON as remoteJSON} from './http.mjs';
 import { stripHtml, fail, now } from "../../domain.mjs";
 const decode = s => Buffer.from(s || "", "base64url").toString("utf8");
 const googleText = p => [p.mimeType === "text/plain" ? decode(p.body?.data) : p.mimeType === "text/html" ? stripHtml(decode(p.body?.data)) : "", ...(p.parts || []).map(googleText)].filter(Boolean).join("\n");

@@ -61,7 +61,7 @@ test('batch limits, cancelled searches, suppression and shared daily budgets rem
   await queue.cancel(run.targets[0].taskId);await store.refresh();assert.equal((await contactDiscoveryStatus(store,config)).runs[0].targets[0].status,'cancelled');
   const next=await store.run(()=>startContactDiscovery({source:'domains',domains:['company.com'],allowCredits:true,contactsPerCompany:1},store,queue,config));assert.ok(!next.existing);
   store.state.contacts.push({id:'suppressed',email:'hr@company.com',suppressed:true,isDemo:false,emailStatus:'unverified'});await store.save();
-  let calls=0;const fetcher=async()=>{calls++;return response({data:{domain:'company.com',emails:[]}});};
+  let calls=0;const fetcher=async url=>{if(!String(url).includes('api.hunter.io'))return new Response('blocked',{status:403});calls++;return response({data:{domain:'company.com',emails:[]}});};
   await runOne(store,queue,handlers(store,queue,config,fetcher,{lookupMx:mx,contactPages:publicPages}),next.run.targets[0].taskId);await store.refresh();assert.equal(calls,1);assert.equal(store.state.contacts.find(c=>c.id==='suppressed').suppressed,true);assert.equal(store.db.prepare('SELECT count(*) AS n FROM provider_requests').get().n,1);
 });
 test('contact discovery and CSV export require owner auth; CSV neutralizes formulas and includes provenance',async t=>{
@@ -75,7 +75,7 @@ test('contact discovery and CSV export require owner auth; CSV neutralizes formu
 });
 test('a missing robots file allows bounded public pages while blocked robots stops discovery',async()=>{
   let calls=0;const pages=await publicCompanyPages('company.com',{load:async url=>{calls++;if(url.endsWith('/robots.txt'))throw Object.assign(Error('Missing'),{httpStatus:404});return {url,text:'Published recruiting page'};}});
-  assert.equal(pages.length,4);assert.equal(calls,5);
+  assert.equal(pages.length,7);assert.equal(calls,8);
   calls=0;assert.deepEqual(await publicCompanyPages('company.com',{load:async()=>{calls++;throw Object.assign(Error('Blocked'),{httpStatus:403});}}),[]);assert.equal(calls,1);
 });
 test('provider CSV aliases preserve people and company fields without trusting a valid label as verified',()=>{
@@ -98,7 +98,7 @@ test('free provider checks report endpoint errors and cache safe summaries witho
 });
 test('a daily-budget pause preserves contacts and resumes cached discovery without charging a second domain search',async t=>{
   const store=await personal(t),queue=taskQueue(store),config={HUNTER_API_KEY:'test',CONTACT_API_DAILY_LIMIT:'1'};let searches=0,verifications=0;
-  const fetcher=async url=>{if(String(url).includes('domain-search')){searches++;return response({data:{domain:'company.com',emails:[{value:'hr@company.com',department:'hr'}]}});}verifications++;return response({data:{status:'valid',accept_all:false}});};
+  const fetcher=async url=>{if(String(url).includes('domain-search')){searches++;return response({data:{domain:'company.com',emails:[{value:'hr@company.com',department:'hr'}]}});}if(!String(url).includes('email-verifier'))return new Response('blocked',{status:403});verifications++;return response({data:{status:'valid',accept_all:false}});};
   const {run}=await store.run(()=>startContactDiscovery({source:'domains',domains:['company.com'],contactsPerCompany:1,allowCredits:true},store,queue,config));
   const registry=handlers(store,queue,config,fetcher,{lookupMx:mx,contactPages:async()=>[]}),taskId=run.targets[0].taskId;
   const paused=await runOne(store,queue,registry,taskId);assert.equal(paused.status,'queued');assert.ok(paused.run_at>Date.now());await store.refresh();assert.equal(store.state.contacts[0].emailStatus,'unverified');assert.equal(store.state.contactDiscoveryRuns[0].targets[0].added,1);

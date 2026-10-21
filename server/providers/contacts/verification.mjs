@@ -1,29 +1,20 @@
-import { Resolver } from "node:dns/promises";
+import {domainMailHealth} from './dns.mjs';
 import { remoteJSON } from "../http.mjs";
 import { fail, emailValid, now } from "../../domain.mjs";
 import {contactProviderError} from './errors.mjs';
-export async function checkEmailDomain(email, lookupMx) {
+export async function checkEmailDomain(email, lookupMx, fetcher=fetch) {
   if (!emailValid(email)) fail("There is no valid work email to verify.");
-  const resolver = new Resolver({timeout:3000,tries:1});
   const domain = email.split("@")[1];
-  let mx;
-  try { mx = await (lookupMx || (name => resolver.resolveMx(name)))(domain); }
-  catch(error) {
-    // ENODATA can mean an implicit MX; let the verifier check A/AAAA fallback.
-    if (error.code !== "ENODATA") {
-      const status = error.code === "ENOTFOUND" ? "invalid" : "unverified";
-      return {emailStatus:status,verification:{provider:"DNS",status,at:now(),result:error.code === "ENOTFOUND" ? "Domain does not exist" : "DNS temporarily unavailable"}};
-    }
-  }
-  if (mx?.length && mx.every(record => !record.exchange || record.exchange === "."))
-    return {emailStatus:"invalid",verification:{provider:"DNS",status:"invalid",at:now(),result:"Domain explicitly rejects email (null MX)"}};
+  const health=await domainMailHealth(domain,{lookupMx,fetcher});
+  if(health.status==='invalid')return {emailStatus:'invalid',domainVerification:health,verification:{provider:health.provider,status:'invalid',at:now(),result:health.reason}};
+  if(!health.hasMx)return {emailStatus:'unverified',domainVerification:health,verification:{provider:health.provider,status:'unverified',at:now(),result:health.reason}};
   return null; // MX is a domain precheck, never proof that a mailbox exists.
 }
 export async function verifyWorkEmail(email, config, fetcher = fetch, lookupMx) {
-  const rejected = await checkEmailDomain(email, lookupMx);
+  const rejected = await checkEmailDomain(email, lookupMx,fetcher);
   if (rejected) return rejected;
   if (!config.HUNTER_API_KEY)
-    return {emailStatus:"unverified",verification:{provider:"DNS",status:"unverified",at:now(),result:"Mailbox verification requires a verification provider"}};
+    return rejected || {emailStatus:"unverified",verification:{provider:"DNS",status:"unverified",at:now(),result:"Mailbox verification requires a verification provider"}};
   const url = new URL("https://api.hunter.io/v2/email-verifier");
   url.search = new URLSearchParams({ email, api_key: config.HUNTER_API_KEY });
   let response;try{response=await remoteJSON(url.href,{},fetcher,30000);}catch(error){

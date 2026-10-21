@@ -137,7 +137,7 @@ export async function deliverTask(task, store, queue, config, fetcher = fetch) {
     const share=await store.db.prepare("SELECT revoked,expires FROM public_resumes WHERE id=?").get(c.resumeShare.id);
     if (!share || share.revoked || share.expires<Date.now()) return {status:"cancelled",reason:"The résumé link expired or was revoked. Review a fresh draft."};
   }
-  if (!c || !contact || contact.suppressed || contact.emailStatus !== "verified" || contact.isDemo || sampleEmail(contact.email) || config.ENABLE_LIVE_SEND !== "true") return {
+  if (!c || !contact || contact.suppressed || contact.requiresDomainReview || contact.emailStatus !== "verified" || contact.isDemo || sampleEmail(contact.email) || config.ENABLE_LIVE_SEND !== "true") return {
     status: "cancelled",
     reason: "Campaign, contact, verification, or sending permission is no longer valid."
   };

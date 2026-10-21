@@ -123,6 +123,7 @@ export function mergeDiscoveryResults(state,results,plan) {
       for(const origin of old.sources) if(origin.source===descriptor.source && origin.board===descriptor.board) origin.active=false;
     }
     for(const job of jobs) {
+      if(job.isDemo)continue;
       const key=canonicalJobKey(job),old=map.get(key),origin={id:job.id,source:descriptor.source,board:descriptor.board,url:job.url,active:true};
       if(old) {
         old.sources ||= [{id:old.id,source:old.source,board:old.board || '',url:old.url,active:!old.archived}];

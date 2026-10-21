@@ -47,6 +47,8 @@ document.querySelector("#forget").addEventListener("click", async () => {
   status.textContent = "Connection forgotten.";
 });
 const saved = await chrome.storage.session.get(["base", "lastResult"]);
+try{const connection=await chrome.runtime.sendMessage({type:'connection-status'});if(connection?.base)form.elements.base.value=connection.base;status.textContent=connection?.paired ? `Connected to ${connection.base}. Review and submit each application yourself.` : 'Open Orbit → Connections → Pair extension with this workspace.';}catch{status.textContent='Open Orbit Connections to pair this extension.';}
+if(!saved.base)try{const configured=await (await fetch(chrome.runtime.getURL('config.json'))).json();if(configured.serverUrl)form.elements.base.value=configured.serverUrl;}catch{}
 if (saved.base) form.elements.base.value = saved.base;
 if (saved.lastResult)
   document.querySelector("#result").textContent =
@@ -81,3 +83,4 @@ for(const [selector,type,options] of [['#current','fill-current',{}],['#history'
 document.querySelector('#suggest').addEventListener('click',async event=>{event.target.disabled=true;try{const result=await chrome.runtime.sendMessage({type:'suggest-answers'});status.textContent=result.error || result.message;}catch(error){status.textContent=error.message;}finally{event.target.disabled=false;}});
 
 for(const [selector,type] of [['#pause-batch','batch-pause'],['#resume-batch','batch-resume'],['#skip-batch','batch-skip']])document.querySelector(selector).addEventListener('click',async()=>{const r=await chrome.runtime.sendMessage({type});status.textContent=r.error || r.message;});
+document.querySelector('#company-contacts').addEventListener('click',async event=>{event.target.disabled=true;try{const tab=await activePageAccess(),r=await chrome.runtime.sendMessage({type:'pull-company-recruiters',tabId:tab.id});status.textContent=r.error || r.message;}catch(error){status.textContent=error.message;}finally{event.target.disabled=false;}});

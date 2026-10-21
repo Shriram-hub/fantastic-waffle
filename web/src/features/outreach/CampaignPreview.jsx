@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp, api, stages, split, fmt } from '../../shared/workspace.jsx';
 import { Button, Badge, Heading, Empty, Panel, Field, Company, Modal, ConfirmAction, Sample } from '../../shared/ui.jsx';
-export function CampaignPreview({ id, close }) {
+export function CampaignPreview({ id, jobId, close }) {
   const { data, perform, notify } = useApp(),
     [preview, setPreview] = useState(null),
     [index, setIndex] = useState(0),
@@ -13,6 +13,7 @@ export function CampaignPreview({ id, close }) {
       .catch((e) => setError(e.message));
   }, [id]);
   const c = data.campaigns.find((c) => c.id === id),
+    job = data.jobs.find(j=>j.id===(jobId || c?.jobId)),
     m = preview?.messages[index],
     canSend =
       preview?.liveSendReady &&
@@ -93,11 +94,14 @@ export function CampaignPreview({ id, close }) {
             >
               Download this draft
             </a>
+            {job && <a className="btn" href={job.url} target="_blank" rel="noreferrer">Open application ↗</a>}
             {canSend && (
               <Button
                 primary
                 disabled={!approved}
-                onClick={() =>
+                onClick={() => {
+                  const opened=job && window.open(job.url,"_blank","noopener,noreferrer");
+                  void opened;
                   perform(async () => {
                     await api(`/campaigns/${id}/send`, {
                       previewId: preview.previewId,
@@ -106,10 +110,10 @@ export function CampaignPreview({ id, close }) {
                     });
                     notify("Campaign queued. Follow progress in Automation.");
                     close();
-                  })
-                }
+                  });
+                }}
               >
-                Queue approved campaign
+                {job ? "Queue sequence & open application" : "Queue approved campaign"}
               </Button>
             )}
           </div>

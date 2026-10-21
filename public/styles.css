@@ -1495,6 +1495,8 @@ textarea::placeholder {
   color: #9eac8c;
 }
 dialog {
+  inset: 0;
+  margin: auto;
   border: 1px solid #dce6d3;
   border-radius: 15px;
   box-shadow: 0 25px 100px #223d2930;

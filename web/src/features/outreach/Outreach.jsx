@@ -1,3 +1,4 @@
+import {QueueNowButton} from '../../shared/QueueNowButton.jsx';
 import {SequenceBuilder,followupDefaults} from './SequenceBuilder.jsx';
 import {JobDocuments} from '../resume/JobDocuments.jsx';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -36,7 +37,7 @@ export function Outreach() {
       <Heading
         title="A thoughtful hello goes further."
         subtitle="Personalize your introduction. Preview every recipient. Send with measured pacing."
-      />
+      ><QueueNowButton/></Heading>
       <div className="two-column">
         <form
           onSubmit={(e) => {

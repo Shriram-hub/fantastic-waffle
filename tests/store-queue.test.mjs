@@ -47,6 +47,7 @@ test("independent processes preserve separate edits and reject conflicting edits
   const dir = directory(t),
     a = openStore(dir),
     b = openStore(dir);
+  a.replace(initialState(true));b.refresh();
   t.after(() => {
     a.close();
     b.close();

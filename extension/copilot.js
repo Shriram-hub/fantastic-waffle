@@ -11,10 +11,13 @@
   const content=document.createElement('div');
   const button=(label,type,primary=false)=>{const b=document.createElement('button');b.className=`action ${primary ? 'primary' : ''}`;b.textContent=label;b.addEventListener('click',async event=>{if(!event.isTrusted)return;b.disabled=true;try{const r=await chrome.runtime.sendMessage({type});status.textContent=r.error || r.message || 'Ready for review.';if(!r.error)await refresh();}catch{status.textContent='Pair or reconnect your extension in its popup.';}finally{b.disabled=false;}});return b;};
   async function refresh(){
+    const companyPage=/(^|\.)linkedin\.com$/.test(location.hostname) && /^\/(?:company\/|jobs\/view\/)/.test(location.pathname);
+    if(companyPage){content.replaceChildren(button('Pull company recruiters to Orbit','pull-company-recruiters',true));status.textContent='Import names, roles and public profile links already visible on this page. Email suggestions require mailbox verification.';if(location.pathname.startsWith('/company/'))return;}
     try {const data=await chrome.runtime.sendMessage({type:'copilot-context'});content.replaceChildren();
       if(data.error){status.textContent=data.error;return;}
-      if(!data.matched){status.textContent=data.message;return;}
+      if(!data.matched){status.textContent=data.message;if(companyPage)content.append(button('Pull company recruiters to Orbit','pull-company-recruiters',true));return;}
       status.textContent=`${data.job.company} · ${data.job.title}`;
+      if(companyPage)content.append(button('Pull company recruiters to Orbit','pull-company-recruiters',true));
       const match=document.createElement('h3');match.textContent=data.match.score===null ? 'Set target roles in Orbit' : `${data.match.score}% profile match`;content.append(match);
       const keywords=document.createElement('p');keywords.textContent=data.missingKeywords.length ? `Keywords to review: ${data.missingKeywords.join(', ')}` : 'No gaps found among the checked keywords.';content.append(keywords);
       const note=document.createElement('small');note.textContent=data.note;content.append(note);

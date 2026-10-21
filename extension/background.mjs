@@ -1,12 +1,28 @@
 import {sameApplicationLocation,sameApplicationHost} from './location.mjs';
 import {buildAnswers,fillApplication,fieldKey} from './autofill.mjs';
-import {extractLinkedInProfile} from './linkedin.mjs';
+import {extractLinkedInProfile,extractLinkedInCompanyPeople} from './linkedin.mjs';
+let installation;
+async function installationConfig() {
+  if(installation!==undefined)return installation;
+  try{installation=await (await fetch(chrome.runtime.getURL('config.json'))).json();}catch{installation={};}
+  return installation;
+}
+async function autoPair() {
+  const {base,token}=await chrome.storage.session.get(['base','token']);if(base && token)return;
+  const config=await installationConfig();if(!config.serverUrl)return;
+  await chrome.storage.session.set({base:config.serverUrl});
+  if(!config.pairingCode || config.expiresAt<Date.now())return;
+  const response=await fetch(`${config.serverUrl}/api/extension/pair`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:config.pairingCode}),signal:AbortSignal.timeout(15000)}),data=await response.json();
+  if(response.ok)await chrome.storage.session.set({base:config.serverUrl,token:data.token,expiresAt:data.expiresAt});
+}
+chrome.runtime.onInstalled?.addListener(()=>{void autoPair().catch(()=>{});});
 export function combineResults(results) {
   const reports=results.map(r=>r.result).filter(Boolean);
   if(!reports.length)return null;
   return {status:reports.some(r=>r.status==='blocked') ? 'blocked' : 'needs-review',filled:reports.reduce((sum,r)=>sum+(r.filled || 0),0),added:reports.reduce((sum,r)=>sum+(r.added || 0),0),missing:[...new Set(reports.flatMap(r=>r.missing || []))].slice(0,60),questions:[...new Map(reports.flatMap(r=>r.questions || []).map(q=>[q.label,q])).values()].slice(0,20)};
 }
 async function request(path,body) {
+  await autoPair();
   const {base,token}=await chrome.storage.session.get(['base','token']);
   if(!base || !token)throw Error('Pair the extension first.');
   const response=await fetch(`${base}/api/extension/${path}`,{method:body ? 'POST' : 'GET',headers:{Authorization:`Bearer ${token}`,...(body ? {'Content-Type':'application/json'} : {})},...(body ? {body:JSON.stringify(body)} : {})});
@@ -97,10 +113,19 @@ async function startBatch(taskIds) {
   await chrome.storage.session.set({batch:{ids:[...new Set(taskIds)],completed:0,total:taskIds.length,paused:false,startedAt:Date.now()}});return advanceBatch();
 }
 chrome.runtime.onMessage.addListener((message,sender,respond)=>{
-  if(!['workspace-batch','copilot-context','copilot-fill','batch-pause','batch-resume','batch-skip','register-workspace'].includes(message.type))return;
+  if(!['connection-status','pull-company-recruiters','workspace-pair','workspace-batch','copilot-context','copilot-fill','batch-pause','batch-resume','batch-skip','register-workspace'].includes(message.type))return;
   (async()=>{
     const {base,currentTask,batch}=await chrome.storage.session.get(['base','currentTask','batch']);
     const extensionPage=sender.url?.startsWith(chrome.runtime.getURL(''));
+    if(message.type==='connection-status') {
+      if(!extensionPage)throw Error('Open the extension popup.');
+      await autoPair();const state=await chrome.storage.session.get(['base','token','expiresAt']);return {paired:!!state.token,base:state.base,expiresAt:state.expiresAt};
+    }
+    if(message.type==='workspace-pair') {
+      const installed=await installationConfig(),expected=base || installed.serverUrl;
+      if(!expected || !sender.tab?.id || new URL(sender.url).origin!==expected || !/^[A-Za-z0-9_-]{43}$/.test(message.token || ''))throw Error('Pair from the configured Orbit workspace.');
+      await chrome.storage.session.set({base:expected,token:message.token,expiresAt:message.expiresAt || Date.now()+86400000});return {message:'Extension paired for 24 hours. No URL or token copying needed.'};
+    }
     if(message.type==='register-workspace') {
       if(!extensionPage || !base)throw Error('Pair using the extension popup.');
       await chrome.scripting.unregisterContentScripts({ids:['orbit-workspace']}).catch(()=>{});
@@ -109,6 +134,12 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
       return {ok:true};
     }
     if(!sender.tab?.id && !extensionPage)throw Error('Open a supported application page.');
+    if(message.type==='pull-company-recruiters') {
+      const tabId=extensionPage ? message.tabId : sender.tab.id,tab=await chrome.tabs.get(tabId),u=new URL(tab.url);
+      if(!/(^|\.)linkedin\.com$/.test(u.hostname) || !/^\/(company\/|jobs\/view\/)/.test(u.pathname))throw Error('Open a LinkedIn company People page or job listing.');
+      const [result]=await chrome.scripting.executeScript({target:{tabId},func:extractLinkedInCompanyPeople});
+      return request('import-browser-profiles',result.result);
+    }
     if(message.type==='workspace-batch') {
       if(!sender.url || !base || new URL(sender.url).origin!==base)throw Error('Start a batch from your paired Orbit workspace.');
       return startBatch(message.taskIds);

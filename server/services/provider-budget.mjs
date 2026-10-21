@@ -18,7 +18,7 @@ async function reservedCall(store, key, provider, limit, operation) {
   await store.db.exec("BEGIN IMMEDIATE");
   try {
     const day = new Date().toISOString().slice(0,10);
-    const jobs=['JSearch','SerpApi'].includes(provider),clause=jobs ? "provider IN ('JSearch','SerpApi')" : "provider NOT IN ('JSearch','SerpApi')";
+    const jobs=['JSearch','SerpApi','Brave'].includes(provider),clause=jobs ? "provider IN ('JSearch','SerpApi','Brave')" : "provider NOT IN ('JSearch','SerpApi','Brave')";
     const used = (await store.db.prepare(`SELECT count(*) AS count FROM provider_requests WHERE day=? AND ${clause}`).get(day)).count;
     if (Number(used) >= limit) fail(jobs ? 'Daily optional search API limit reached. Free job sources continue.' : "Daily contact API request limit reached. Discovery will continue; contact lookup resumes on a later sweep.", 429);
     const inserted = await store.db.prepare("INSERT OR IGNORE INTO provider_requests(id,provider,day,status,created_at) VALUES(?,?,?,'started',?)").run(requestId,provider,day,Date.now());

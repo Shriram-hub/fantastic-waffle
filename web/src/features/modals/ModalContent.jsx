@@ -8,6 +8,8 @@ import { ApplicationModal } from '../tracker/ApplicationModal.jsx';
 import { ImportEmailModal } from '../tracker/ImportEmailModal.jsx';
 import { ApolloModal } from '../outreach/ApolloModal.jsx';
 import { CampaignPreview } from '../outreach/CampaignPreview.jsx';
+import {AutoPitchModal} from '../jobs/AutoPitchModal.jsx';
+import {ImportApplicationsModal} from '../tracker/ImportApplicationsModal.jsx';
 export function ModalContent({ modal, close }) {
   const { data, perform, notify, go,setCareerJobId } = useApp(),
     [textValue, setText] = useState(""),
@@ -20,7 +22,9 @@ export function ModalContent({ modal, close }) {
         .catch((e) => notify(e.message, true));
   }, [modal.id, modal.type]);
   if (modal.type === "campaign-preview")
-    return <CampaignPreview id={modal.id} close={close} />;
+    return <CampaignPreview id={modal.id} jobId={modal.jobId} close={close} />;
+  if(modal.type==="auto-pitch")return <AutoPitchModal jobId={modal.id} close={close}/>;
+  if(modal.type==='import-applications')return <ImportApplicationsModal close={close}/>;
   if (modal.type === "apollo") return <ApolloModal close={close} />;
   if (modal.type === "job") {
     const j = result?.job?.id===modal.id ? result.job : data.jobs.find((j) => j.id === modal.id);
@@ -240,6 +244,8 @@ export function ModalContent({ modal, close }) {
       </Modal>
     );
   const descriptions = {
+    'confirm-domain': `I checked the company’s official website and confirm that ${modal.domain} belongs to ${modal.company}. This confirms the domain only; mailbox verification remains separate.`,
+    "clear-demo": "Remove only sample jobs, sample contacts, sample applications and their queued work. Your real profile, files, mailboxes and real records are retained.",
     reset: `This replaces your current profile, résumé, jobs, applications, contacts, campaigns, mailbox connections, and queued tasks${modal.demo ? " with fictional sample data" : ""}. Export your applications first if needed.`,
     extract:
       "The worker will send your résumé text to the configured model provider for structured extraction. This may incur API usage charges. Review every extracted value before using it.",
@@ -254,6 +260,8 @@ export function ModalContent({ modal, close }) {
     "browser-batch": `${Math.min(modal.ids?.length || 0,10)} selected opportunities will be queued for your paired Chrome extension. It fills recognized fields and your approved answers, then stops for review. It does not solve verification challenges or submit an application.`,
   };
   const action = async () => {
+    if(modal.type==='confirm-domain')await api('/contacts/company-domain/confirm',{domain:modal.domain,company:modal.company,confirmed:true});
+    if(modal.type==="clear-demo"){await api("/workspace/clear-demo-data",{confirmed:true});notify("Sample records removed.");}
     if (modal.type === "reset") {
       await api("/workspace/reset", {
         confirm: modal.demo ? "LOAD_DEMO" : "START_FRESH",

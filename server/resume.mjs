@@ -8,7 +8,8 @@ const decodeXML = (s) =>
     .replace(/&gt;/g, ">")
     .replace(/&amp;/g, "&")
     .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'");
+    .replace(/&apos;/g, "'")
+    .replace(/&#(x[0-9a-f]+|\d+);/gi,(_,value)=>{const cp=value[0].toLowerCase()==='x' ? parseInt(value.slice(1),16) : Number(value);return cp>0 && cp<=0x10ffff && !(cp>=0xd800 && cp<=0xdfff) ? String.fromCodePoint(cp) : '';});
 function docxText(buffer) {
   // Read only the main document from the ZIP central directory. Never extract files.
   let end = -1;
@@ -51,7 +52,7 @@ function docxText(buffer) {
           ? inflateRawSync(compressed, { maxOutputLength: 2_000_000 })
           : compressed
       ).toString("utf8");
-      return decodeXML(xml.replace(/<\/w:p>/g, "\n").replace(/<[^>]+>/g, ""));
+      return decodeXML(xml.replace(/<\/w:p>/g, "\n").replace(/<w:(?:tab|br)\b[^>]*\/?\s*>/g,'\n').replace(/<\/w:tc>/g,'\t').replace(/<[^>]+>/g, ""));
     }
     pos += 46 + len + extra + comment;
   }
@@ -64,8 +65,10 @@ export function resumeSuggestions(resumeText) {
   return {email,skills};
 }
 export async function parseResumeAsync(file) {
-  const result=parseResume(file);
-  if(/\.pdf$/i.test(file.name) && !result.resume.text) {
+  if(!/\.pdf$/i.test(file.name))return parseResume(file);
+  const validated=validateResumeUpload(file);
+  const result={resume:{...validated,text:'',uploadedAt:new Date().toISOString()},suggestions:resumeSuggestions(''),warning:''};
+  if(/\.pdf$/i.test(file.name)) {
     try {
       const {extractText,getDocumentProxy}=await import('unpdf');
       const pdf=await getDocumentProxy(new Uint8Array(Buffer.from(file.base64,'base64')));
