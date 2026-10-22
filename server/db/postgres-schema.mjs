@@ -4,6 +4,7 @@ import {
   jsonb,
   timestamp,
   integer,
+  bigint,
   boolean,
   vector,
   index,
@@ -121,3 +122,9 @@ export const outreachSendLog = pgTable("outreach_send_log", {
   providerId: text("provider_id"),
   updatedAt: timestamp("updated_at",{withTimezone:true}).notNull().defaultNow(),
 }, table => [uniqueIndex("outreach_recipient_step").on(table.userId,table.contactEmail,table.campaignId,table.sequenceStep)]);
+
+// Durable first-touch identity is scoped to workspace, normalized email and role.
+export const outreachJobReservations=pgTable('outreach_job_reservations',{
+  workspaceId:text('workspace_id').notNull(),contactEmail:text('contact_email').notNull(),jobId:text('job_id').notNull(),campaignId:text('campaign_id').notNull(),taskId:text('task_id').notNull(),createdAt:bigint('created_at',{mode:'number'}).notNull()
+},table=>[uniqueIndex('outreach_job_recipient').on(table.workspaceId,table.contactEmail,table.jobId)]);
+export const workerHealth=pgTable('worker_health',{id:text('id').primaryKey(),status:text('status').notNull(),heartbeatAt:bigint('heartbeat_at',{mode:'number'}).notNull()});

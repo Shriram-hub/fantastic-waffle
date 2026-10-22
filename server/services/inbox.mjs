@@ -136,7 +136,7 @@ export async function ingestMessage(message, store) {
     const a = s.applications.find(a => a.id === result.applicationId);
     const oldTime = a.lastEmailAt ? Date.parse(a.lastEmailAt) : 0;
     const timely = Date.parse(message.receivedAt) >= oldTime;
-    const terminal = ["Offer", "Rejected", "Withdrawn"].includes(a.stage);
+    const terminal = ["Offer", "Rejected", "Withdrawn", "Archived"].includes(a.stage);
     const forward = result.proposedStage === "Rejected" || (ranks[result.proposedStage] ?? -1) >= (ranks[a.stage] ?? 0);
     if (timely && !terminal && forward) {
       a.stage = result.proposedStage;

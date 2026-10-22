@@ -14,7 +14,7 @@ export async function fetchPublicFeed(source,fetcher=fetch) {
     const data=await remoteJSON('https://jobicy.com/api/v2/remote-jobs?count=200',{},fetcher);
     if(!Array.isArray(data.jobs)) fail('Jobicy returned an unexpected response.',502);
     jobs=data.jobs.filter(j=>j.id && j.jobTitle && safeUrl(j.url)).slice(0,200).map(j=>({
-      id:`jobicy-${j.id}`,company:j.companyName,title:stripHtml(j.jobTitle),location:j.jobGeo || 'Remote',workMode:'Remote',salary:j.annualSalaryMin ? `${j.salaryCurrency || ''} ${j.annualSalaryMin} – ${j.annualSalaryMax || j.annualSalaryMin}` : 'Not listed',
+      id:`jobicy-${j.id}`,company:j.companyName,companyLogo:safeUrl(j.companyLogo),title:stripHtml(j.jobTitle),location:j.jobGeo || 'Remote',workMode:'Remote',salary:j.annualSalaryMin ? `${j.salaryCurrency || ''} ${j.annualSalaryMin} – ${j.annualSalaryMax || j.annualSalaryMin}` : 'Not listed',
       description:stripHtml(j.jobDescription || j.jobExcerpt),tags:j.jobIndustry || [],category:j.jobIndustry?.[0] || 'Other',type:j.jobType?.join(', ') || 'Not listed',url:safeUrl(j.url),publishedAt:j.pubDate || now(),attribution:'Jobicy',
     }));
   }

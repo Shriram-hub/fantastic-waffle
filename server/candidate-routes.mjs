@@ -32,7 +32,7 @@ export async function importLinkedIn(data,store,queue,config={}) {
 export function candidateRoutes(store,queue,config,fetcher) {
   return async(req,res,url,{json,bodyJSON})=>{
     const path=url.pathname;
-    if(path==='/api/extension/download' && req.method==='GET') {const base=requestBase(req,config),pairing=config.TOKEN_ENCRYPTION_KEY ? await packagePairing(store,config,base) : {serverUrl:base};res.writeHead(200,{'Content-Type':'application/zip','Content-Disposition':'attachment; filename="orbit-extension.zip"','Cache-Control':'no-store'});res.end(await extensionPackage(pairing));return true;}
+    if(path==='/api/extension/download' && req.method==='GET') {const base=requestBase(req,config),pairing=config.TOKEN_ENCRYPTION_KEY ? await packagePairing(store,config,base) : {serverUrl:base};res.writeHead(200,{'Content-Type':'application/zip','Content-Disposition':'attachment; filename="veloce-ai-extension.zip"','Cache-Control':'no-store'});res.end(await extensionPackage(pairing));return true;}
     if(path==='/api/profile/master' && req.method==='GET') {json(res,200,{master:candidateProfile(store.state.profile),updatedAt:store.state.profile.masterUpdatedAt || null});return true;}
     if(path==='/api/profile/master' && req.method==='PUT') {
       const data=await bodyJSON(req),parsed=MasterProfileSchema.safeParse(data.master);

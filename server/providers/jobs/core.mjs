@@ -37,6 +37,7 @@ export async function fetchCoreJobs(source, board = "", fetcher = fetch) {
     jobs = data.jobs.map((j) => ({
       id: `remotive-${j.id}`,
       company: j.company_name,
+      companyLogo:safeUrl(j.company_logo),
       title: j.title,
       location: j.candidate_required_location || "Remote",
       workMode: "Remote",

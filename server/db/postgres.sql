@@ -19,3 +19,7 @@ CREATE TABLE IF NOT EXISTS tasks(id text PRIMARY KEY,user_id text NOT NULL REFER
 
 -- A follow-up is a distinct step; a worker restart cannot claim the same step twice.
 CREATE TABLE IF NOT EXISTS outreach_send_log(user_id text NOT NULL REFERENCES users(id),contact_email text NOT NULL,campaign_id text NOT NULL REFERENCES campaigns(id),sequence_step integer NOT NULL DEFAULT 0,task_id text,status text NOT NULL,provider_id text,updated_at timestamptz NOT NULL DEFAULT now(),UNIQUE(user_id,contact_email,campaign_id,sequence_step));
+
+-- Runtime outbox role scope. Email is normalized before reservation.
+CREATE TABLE IF NOT EXISTS outreach_job_reservations(workspace_id TEXT NOT NULL,contact_email TEXT NOT NULL CHECK(contact_email=lower(trim(contact_email))),job_id TEXT NOT NULL,campaign_id TEXT NOT NULL,task_id TEXT NOT NULL,created_at BIGINT NOT NULL,PRIMARY KEY(workspace_id,contact_email,job_id));
+CREATE TABLE IF NOT EXISTS worker_health(id TEXT PRIMARY KEY,status TEXT NOT NULL,heartbeat_at BIGINT NOT NULL);

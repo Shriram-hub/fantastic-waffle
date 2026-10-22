@@ -67,25 +67,30 @@ export function Field({ label, children, hint }) {
     </label>
   );
 }
-export function Company({ name }) {
-  return <span className="company-mark">{name?.[0] || "O"}</span>;
+export function Company({name,jobId,logo}) {
+  const [failed,setFailed]=React.useState(false);
+  useEffect(()=>setFailed(false),[jobId,logo]);
+  return <span className="company-mark" role="img" aria-label={name ? `${name} logo` : undefined}>{jobId && logo && !failed ? <img src={`/api/jobs/${encodeURIComponent(jobId)}/logo`} loading="lazy" decoding="async" alt="" onError={()=>setFailed(true)}/> : name?.split(/\s+/).map(part=>part[0]).slice(0,2).join('') || 'V'}</span>;
 }
-export function Modal({ title, children, onClose, wide = false }) {
+export function Modal({ title, children, onClose, wide = false,className='' }) {
+  const titleId=React.useId();
   const ref = useRef(null);
   useEffect(() => {
     const el = ref.current;
+    const previous=document.activeElement;
     el.showModal();
     const cancel = (e) => {
       e.preventDefault();
       onClose();
     };
     el.addEventListener("cancel", cancel);
-    return () => el.removeEventListener("cancel", cancel);
+    return () => {el.removeEventListener("cancel",cancel);if(el.open)el.close();requestAnimationFrame(()=>{if(previous?.isConnected && !document.querySelector('dialog[open]'))previous.focus({preventScroll:true});});};
   }, []);
   return (
     <dialog
       ref={ref}
-      className={wide ? "wide" : ""}
+      className={`${wide ? "wide" : ""} ${className}`}
+      aria-labelledby={titleId}
       onClick={(e) => {
         if (e.target === ref.current) {
           const rect = ref.current.getBoundingClientRect();
@@ -100,7 +105,7 @@ export function Modal({ title, children, onClose, wide = false }) {
       }}
     >
       <div className="modal-head">
-        <h2>{title}</h2>
+        <h2 id={titleId}>{title}</h2>
         <button
           className="icon-button"
           onClick={onClose}

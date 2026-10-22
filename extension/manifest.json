@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Orbit Application Assistant",
-  "version": "0.8.0",
-  "description": "Fill an application from your approved Orbit profile, then hand control back for review and submission.",
+  "name": "Veloce AI Application Assistant",
+  "version": "0.9.0",
+  "description": "Fill an application from your approved Veloce AI profile, then hand control back for review and submission.",
   "permissions": [
     "storage",
     "scripting",
@@ -33,7 +33,8 @@
     "type": "module"
   },
   "action": {
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_title": "Veloce AI · Application Copilot"
   },
   "content_scripts": [
     {

@@ -1,3 +1,4 @@
+import {withDeadline,boundedFetcher} from '../providers/deadline.mjs';
 import {hash,id,now,fail,text,sampleEmail} from '../domain.mjs';
 import {resolveCompany,companyDomain} from '../providers/contacts/company.mjs';
 import {searchHunterDomain,searchHunterCompany,findHunterEmail} from '../providers/contacts/hunter.mjs';
@@ -14,13 +15,16 @@ import {recordContactProviderFailure} from './contact-provider-checks.mjs';
 const week=()=>Math.floor(Date.now()/(7*86400000));
 const retryFor=error=>error.status===429 ? Date.UTC(new Date().getUTCFullYear(),new Date().getUTCMonth(),new Date().getUTCDate()+1,0,5) : null;
 export async function findCompanyContacts(job,company,{store,config={},fetcher=fetch,pages,lookupMx,allowCredits=false,allowWarmSearch=false,limit=3,dailyLimit=20,seedContacts=[],hunterSearched=false,allowPublic=true}={}) {
+  const healthPending=withDeadline(signal=>domainMailHealth(company.domain,{lookupMx,fetcher:boundedFetcher(fetcher,signal)}),4000).catch(()=>({domain:company.domain,status:'unknown',hasMx:false,gateway:'Unknown',provider:'DNS',reason:'Domain check reached its deadline'}));
   const warnings=[],existing=store.state.contacts.filter(c=>!c.isDemo && !c.suppressed && c.emailStatus==='verified' && c.email?.split('@')[1]===company.domain);
   let candidates=[...existing,...seedContacts],retryAt=null;
   const call=(key,fn)=>providerCall(store,`contacts-v2:${week()}:${key}`,'Hunter',dailyLimit,fn);
+  const hunterPending=(async()=>{
   if(!hunterSearched && allowCredits && config.HUNTER_API_KEY && candidates.length<limit) {
-    try{const result=await call(`domain:${company.domain}`,()=>searchHunterDomain(company.domain,config.HUNTER_API_KEY,5,fetcher));candidates.push(...(Array.isArray(result) ? result : result.contacts));if(result.pattern)company.pattern=result.pattern;}
+    try{const result=await call(`domain:${company.domain}`,()=>withDeadline(signal=>searchHunterDomain(company.domain,config.HUNTER_API_KEY,5,boundedFetcher(fetcher,signal))));candidates.push(...(Array.isArray(result) ? result : result.contacts));if(result.pattern)company.pattern=result.pattern;}
     catch(error){await recordContactProviderFailure(store,'Hunter',error);retryAt=retryFor(error);warnings.push(error.status ? error.message : 'Hunter could not complete. Public careers-page discovery continued.');}
   }
+  })();
   if(allowPublic && candidates.filter(c=>c.emailStatus==='verified').length<limit) {
     try{
       const saved=await store.db.prepare('SELECT body FROM companies WHERE domain=?').get(company.domain),cache=saved ? JSON.parse(saved.body).publicLookup : null,mode=allowWarmSearch ? 'search' : 'public';
@@ -32,7 +36,8 @@ export async function findCompanyContacts(job,company,{store,config={},fetcher=f
     }
     catch{warnings.push('Public company careers pages were unavailable.');}
   }
-  const health=await domainMailHealth(company.domain,{lookupMx,fetcher});
+  await hunterPending;
+  const health=await healthPending;
   if(allowPublic && health.hasMx && candidates.length<limit)for(const local of ['careers','hr','talent','recruiting']) {
     candidates.push({id:id(),name:'Hiring team',title:'Suggested hiring inbox',email:`${local}@${company.domain}`,company:job.company,companyDomain:company.domain,emailStatus:'unverified',source:'Suggested role inbox',confidence:null,suppressed:false,isDemo:false,createdAt:now(),domainVerification:health,verification:{provider:health.provider,status:'unverified',at:now(),result:'Domain has MX records. This address is a suggestion; its mailbox has not been verified.'}});
     if(candidates.length>=limit)break;
@@ -41,7 +46,7 @@ export async function findCompanyContacts(job,company,{store,config={},fetcher=f
   for(const c of candidates)if(c.email && !sampleEmail(c.email) && c.email.split('@')[1]?.toLowerCase()===company.domain) {
     const old=byEmail.get(c.email.toLowerCase());if(!old || old.emailStatus!=='verified' && c.emailStatus==='verified')byEmail.set(c.email.toLowerCase(),c);
   }
-  const warm=await prioritizeWarmContacts([...byEmail.values()],job,store,config,fetcher,allowWarmSearch);
+  const warm=await withDeadline(signal=>prioritizeWarmContacts([...byEmail.values()],job,store,config,boundedFetcher(fetcher,signal),allowWarmSearch)).catch(()=>({contacts:[...byEmail.values()],people:[],warnings:['Warm search reached its deadline.']}));
   warnings.push(...warm.warnings);
   const prospects=[];
   for(const person of warm.people)if(!warm.contacts.some(c=>c.name.toLowerCase()===person.name.toLowerCase())) {

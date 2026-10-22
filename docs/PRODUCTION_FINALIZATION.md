@@ -1,6 +1,8 @@
-# Using the hardened Orbit workspace
+# Using the hardened Veloce AI workspace
 
-Orbit continues to use Render and Supabase. No Vercel, Neon, Redis service, SMTP server or extra paid worker is required by this release.
+The interface and runtime hardening release is documented in [VELOCE_AI.md](VELOCE_AI.md).
+
+Veloce AI continues to use Render and Supabase. No Vercel, Neon, Redis service, SMTP server or extra paid worker is required by this release.
 
 ## Start with a real profile
 
@@ -12,7 +14,7 @@ Upload the original PDF, DOCX or TXT in Profile. PDF extraction uses `unpdf` asy
 
 Company resolution cleans legal, regional and job-board suffixes, checks saved companies and curated official corporate references, uses company website/application URLs, and tries Clearbit with a four-second deadline. Guessed domains can be probed using HTTPS DNS, but **a working domain is not proof of which company owns it**. Those suggestions require confirmation before outreach.
 
-Contact lookup reuses verified contacts, optionally uses Hunter, then checks permitted public company careers/contact/about/team/leadership pages. Source-supported people can also come from SerpApi or Brave when approved, and bounded public DuckDuckGo/Yahoo results when available. HTTP blocks and challenges are treated as unavailable sources. Orbit does not route around access restrictions or pretend a search is unlimited.
+Contact lookup reuses verified contacts, optionally uses Hunter, then checks permitted public company careers/contact/about/team/leadership pages. Source-supported people can also come from SerpApi or Brave when approved, and bounded public DuckDuckGo/Yahoo results when available. HTTP blocks and challenges are treated as unavailable sources. Veloce AI does not route around access restrictions or pretend a search is unlimited.
 
 Hunter domain patterns are retained even when a successful response contains no people. Public page/search results are cached for a day; paid requests retain their existing durable reservation and result cache. Provider failures show the actual HTTP category without exposing the key or response body. Apollo access failure does not stop the fallback path.
 
@@ -28,7 +30,7 @@ If no published address is available, a domain with MX records can produce expli
 
 There are no outbound SMTP/Port 25 probes. DNS has a three-second native deadline and Google DNS-over-HTTPS fallback. Google Workspace, Microsoft 365, Zoho and enterprise gateways are displayed as domain metadata. Timeouts never label a guessed mailbox invalid. Null MX and nonexistent domains are rejected. Catch-all addresses remain blocked.
 
-AI memory is not used to invent current recruiters or email addresses. Gemini selects candidate résumé evidence and drafts from saved facts; actual people need a source. For companies inaccessible to server search, open their LinkedIn People page, load the relevant visible profiles, and use the extension’s **Pull company recruiters to Orbit** action. It imports up to 25 visible names, roles and links; email patterns remain unverified. Use Verify selected in Contacts to approve Hunter verification credits.
+AI memory is not used to invent current recruiters or email addresses. Gemini selects candidate résumé evidence and drafts from saved facts; actual people need a source. For companies inaccessible to server search, open their LinkedIn People page, load the relevant visible profiles, and use the extension’s **Pull company recruiters to Veloce AI** action. It imports up to 25 visible names, roles and links; email patterns remain unverified. Use Verify selected in Contacts to approve Hunter verification credits.
 
 ## One company pitch from a job card
 
@@ -58,7 +60,7 @@ Google Cloud must still allow that callback, enable Gmail API for mailbox operat
 
 Download from Connections while signed in. Unzip and load `orbit-extension` from `chrome://extensions` with Developer mode enabled, or reload the installed folder after replacing its files.
 
-The ZIP includes this deployment’s address and a one-use installation code expiring in 15 minutes. It contains no workspace password, API keys, Google tokens or reusable workspace login session. On installation the code can be redeemed for a revocable 24-hour extension token. After a browser restart or expired code, refresh Orbit and click **Pair extension with this workspace**. The isolated bridge requests a scoped token through the signed-in page; it does not copy credentials into the website’s localStorage or broadcast them in page messages.
+The ZIP includes this deployment’s address and a one-use installation code expiring in 15 minutes. It contains no workspace password, API keys, Google tokens or reusable workspace login session. On installation the code can be redeemed for a revocable 24-hour extension token. After a browser restart or expired code, refresh Veloce AI and click **Pair extension with this workspace**. The isolated bridge requests a scoped token through the signed-in page; it does not copy credentials into the website’s localStorage or broadcast them in page messages.
 
 Only capability-protected extension endpoints have extension-origin CORS. Normal private workspace APIs still require owner authentication. Revoking extension tokens also invalidates unused installation codes. Application batches remain sequential and wait for your real submission and an ATS confirmation before advancing.
 

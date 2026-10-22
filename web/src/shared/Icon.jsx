@@ -1,5 +1,11 @@
-import React from 'react';
+import React,{useId} from 'react';
 const paths={
+  documents:'M14 2H6v20h14V8l-6-6M14 2v6h6M9 12h8M9 16h6',
+  sun:'M12 3v1M12 20v1M3 12h1M20 12h1M5.6 5.6l.7.7M17.7 17.7l.7.7M5.6 18.4l.7-.7M17.7 6.3l.7-.7M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0',
+  moon:'M20.8 13A9 9 0 0 1 11 3.2 9 9 0 1 0 20.8 13',
+  sidebar:'M3 4h18v16H3zM9 4v16M5.5 8h1M5.5 12h1',
+  download:'M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4',
+  command:'M8 8V5a2 2 0 1 0-2 2h12a2 2 0 1 0-2-2v14a2 2 0 1 0 2-2H6a2 2 0 1 0 2 2V8',
   career:'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2M7 14h3M7 17h7',
   jobs:'M21 21l-4.5-4.5M10.5 18a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15',
   overview:'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z',
@@ -14,3 +20,5 @@ const paths={
   bookmark:'M6 3h12v18l-6-4-6 4V3',spark:'m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3',
 };
 export function Icon({name,size=20,...rest}) {return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...rest}><path d={paths[name] || paths.jobs}/></svg>;}
+
+export function BrandMark({size=36,...rest}) {const gradient=useId();return <svg width={size} height={size} viewBox="0 0 40 40" fill="none" aria-hidden="true" className="brand-mark" {...rest}><defs><linearGradient id={gradient} x1="2" y1="2" x2="38" y2="38" gradientUnits="userSpaceOnUse"><stop stopColor="#4F46E5"/><stop offset="1" stopColor="#06B6D4"/></linearGradient></defs><rect width="40" height="40" rx="12" fill={`url(#${gradient})`}/><path d="m9 12 8 17 14-19h-8l-6 9-3-7H9Z" fill="white"/><path d="m23 29 8-11v11h-8Z" fill="white" opacity=".5"/></svg>;}

@@ -7,11 +7,11 @@ import { initialState } from '../fixtures.mjs';
 import { fail } from '../domain.mjs';
 
 const tables = ['workspace_meta', 'user_profiles', 'resumes', ...Object.values(collections)];
-const runtimeTables = [...tables, 'tasks', 'task_logs', 'mail_accounts', 'oauth_states', 'inbox_messages', 'resume_versions', 'embeddings', 'apply_tasks', 'extension_tokens', 'send_leases', 'send_budget', 'public_resumes', 'outreach_send_log', 'unsubscribe_tokens', 'ai_cache', 'resume_objects', 'companies', 'search_matrices', 'autopilot_config', 'autopilot_schedule', 'autopilot_runs', 'autopilot_activity', 'provider_requests', 'job_search_config', 'job_search_runs', 'job_source_health', 'job_source_cache', 'discovered_boards', 'outreach_company_budget', 'migrations'];
+const runtimeTables = [...tables, 'tasks', 'task_logs', 'mail_accounts', 'oauth_states', 'inbox_messages', 'resume_versions', 'embeddings', 'apply_tasks', 'extension_tokens', 'send_leases', 'send_budget', 'public_resumes', 'outreach_send_log', 'outreach_job_reservations', 'worker_health', 'unsubscribe_tokens', 'ai_cache', 'resume_objects', 'companies', 'search_matrices', 'autopilot_config', 'autopilot_schedule', 'autopilot_runs', 'autopilot_activity', 'provider_requests', 'job_search_config', 'job_search_runs', 'job_source_health', 'job_source_cache', 'discovered_boards', 'outreach_company_budget', 'migrations'];
 export function postgresSQL(sql) {
   let result = sql.replace(/INSERT OR IGNORE INTO/gi, 'INSERT INTO');
   if (/INSERT OR IGNORE INTO/i.test(sql)) result += ' ON CONFLICT DO NOTHING';
-  result = result.replace(/json_extract\(payload,'\$\.accountId'\)/g, "(payload::jsonb->>'accountId')").replace(/\browid\b/g, 'row_order').replace(/SET count=count\+1/g, 'SET count=orbit_runtime.send_budget.count+1');
+  result = result.replace(/json_extract\(((?:[a-z_]+\.)?(?:payload|body)),'\$\.([a-zA-Z0-9_]+)'\)/g, "($1::jsonb->>'$2')").replace(/\browid\b/g, 'row_order').replace(/SET count=count\+1/g, 'SET count=orbit_runtime.send_budget.count+1');
   // Only table positions are qualified; column names and string literals stay intact.
   result = result.replace(/\b(FROM|JOIN|INTO|UPDATE|REFERENCES)\s+([a-z_]+)\b/gi, (all, keyword, table) => [...runtimeTables,'workspace_identity','auth_sessions','auth_rate_limits'].includes(table) ? `${keyword} orbit_runtime.${table}` : all);
   let quoted = false, parameter = 0, output = '';
@@ -54,7 +54,7 @@ export async function openPostgresStore(config = process.env, suppliedPool) {
     });
   };
   function normalize(row) {
-    return Object.fromEntries(Object.entries(row).map(([key, value]) => [key, ['run_at','attempts','max_attempts','lease_until','created_at','updated_at','at','expires','revoked','views','count','not_before','sequence_step','next_run','cursor','checked_at','scanned','matched','expires_at'].includes(key) && value !== null ? Number(value) : value]));
+    return Object.fromEntries(Object.entries(row).map(([key, value]) => [key, ['run_at','attempts','max_attempts','lease_until','created_at','updated_at','at','expires','revoked','views','count','not_before','heartbeat_at','sequence_step','next_run','cursor','checked_at','scanned','matched','expires_at'].includes(key) && value !== null ? Number(value) : value]));
   }
   const query = async (sql, values = []) => (session.getStore()?.client || pool).query(postgresSQL(sql), values.map(v => v === undefined ? null : v));
   const db = {

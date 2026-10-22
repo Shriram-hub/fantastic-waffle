@@ -4,12 +4,14 @@ export const STAGES = [
   "Saved",
   "Ready",
   "Applied",
+  "Outreach Sent",
   "Interview",
   "Assessment",
   "Interview scheduled",
   "Offer",
   "Rejected",
   "Withdrawn",
+  "Archived",
 ];
 export const id = () => randomUUID();
 export const now = () => new Date().toISOString();
@@ -216,7 +218,7 @@ export function previewCampaign(campaign, state) {
   if (!recipients.length || recipients.some((c) => !c))
     fail("Select at least one existing contact.");
   if (recipients.length > 100)
-    fail("A prototype campaign supports up to 100 recipients.");
+    fail("A campaign supports up to 100 recipients.");
   const seen = new Set();
   const excluded = [];
   const messages = [];

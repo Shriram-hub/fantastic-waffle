@@ -1,4 +1,6 @@
-# Orbit v0.5 · Career workspace
+# Veloce AI · Autonomous Career & Cold Outreach OS
+
+[Latest Veloce AI release and deployment guide](docs/VELOCE_AI.md)
 
 A working personal workspace for job discovery, résumé preparation, application tracking, browser-assisted filling, inbox updates, company contacts, and reviewed outreach.
 
@@ -10,11 +12,11 @@ STAR stories, job-specific practice guides and search analytics. See
 
 SQLite remains the local default. Set `DATABASE_URL` to use the real PostgreSQL runtime, including durable jobs, send logs, encrypted mailbox credentials, and private resume objects. A supervised worker starts alongside the API by default on a single hosting service; `ENABLE_EMBEDDED_WORKER=false` disables it for separate-worker deployments. Google sign-in protects this private personal workspace; Gmail/Outlook mailbox consent remains separate. See [Google sign-in setup](docs/GOOGLE_SIGN_IN.md).
 
-See [production finalization and setup](docs/PRODUCTION_FINALIZATION.md) for the contact fallback, job-to-pitch workflow, extension 0.8 automatic pairing, mailbox self-tests, and CSV backup/restore.
+See [production finalization and setup](docs/PRODUCTION_FINALIZATION.md) for the contact fallback, job-to-pitch workflow, extension 0.9 automatic pairing, mailbox self-tests, and CSV backup/restore.
 
 ## Automatic job discovery
 
-Open **Discover jobs**, choose target roles and location once, or upload a résumé
+Open **Jobs Feed**, choose target roles and location once, or upload a résumé
 and use the roles derived from its text. Searches run every two hours without a
 contact API key or email connection. An initial Explore feed populates on the
 host with `DISCOVERY_BOOTSTRAP=true`. Public sources include Remotive, Arbeitnow,
@@ -83,7 +85,7 @@ Copy `.env.example` to `.env` to configure optional services. No provider creden
 
 | Area              | Working implementation                                                                                                                                                                                                                                  |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Interface         | React components, Vite production build, Tailwind + retained Orbit styles, responsive views, explicit connection/queue status.                                                                                                                          |
+| Interface         | React components, Vite production build, unified theme tokens + self-hosted fonts, responsive views, explicit connection/queue status.                                                                                                                          |
 | Persistence       | Relational SQLite tables, v1 migration, foreign keys and indexes, request-scoped snapshots, per-record conflict checks across API/worker processes.                                                                                                     |
 | Workers           | Durable SQLite/PostgreSQL task outbox, atomic claims, expiring leases, logs, cancellation, backoff for retryable tasks, separate worker process. Optional Redis + BullMQ dispatch.                                                                                 |
 | Job feeds         | Remotive, Greenhouse/Lever/Ashby boards, Arbeitnow, Himalayas, Remote OK, Jobicy, optional Adzuna and Google Jobs aggregators. Canonical company/title/location deduplication preserves application-linked IDs and source provenance.                                                                |
@@ -103,7 +105,7 @@ Copy `.env.example` to `.env` to configure optional services. No provider creden
 1. Explore the fictional sample, then start a personal workspace. Save your real profile, target roles, skills, links, notice period, salary expectation, and exact approved screening answers.
 2. Upload a résumé. Watch extraction in **Automation**, review its text/suggestions, and optionally request structured extraction. Nothing inferred by a model silently replaces your profile.
 3. Set target roles and location in **Discover jobs**. Jobs appear as the background search checks sources. Choose jobs and prepare multiple applications. Additional company-board slugs are optional. Keyword matching works without a model key; semantic matching requires confirmation and an embedding model.
-4. Choose **Browser-assisted fill**, pair the extension, and open one queued form. Review all fields, complete unknown questions or verification directly, and submit yourself. Record the employer’s confirmation in Orbit.
+4. Choose **Browser-assisted fill**, pair the extension, and open one queued form. Review all fields, complete unknown questions or verification directly, and submit yourself. Record the employer’s confirmation in Veloce AI.
 5. Connect a mailbox or paste email updates. Automatic stage changes are opt-in and require a unique role match. Assessment links and explicit dates appear in the dashboard.
 6. Find/import relevant contacts, enrich/verify selected work emails, and optionally draft an evidence-backed opening line. Preview initial and follow-up messages, attachments, sender account, and recipients before queueing.
 
@@ -131,7 +133,7 @@ Model operations explicitly disclose that source text is sent to the configured 
 ## Browser extension
 
 1. Open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select this repository’s `extension/` folder.
-2. Generate a pairing token in Orbit’s **Connections**. Enter the Orbit address and token in the extension popup. A deployed HTTPS origin requires a one-time browser permission for that origin.
+2. Generate a pairing token in Veloce AI’s **Connections**. Enter the Veloce AI address and token in the extension popup. A deployed HTTPS origin requires a one-time browser permission for that origin.
 3. Queue supported opportunities and choose **Open & fill next application**. The extension operates one form per click in your actual browser session.
 4. After opening a multi-step form or completing a verification challenge yourself, use **Fill the current application again**. If the lease expires, requeue it in Automation.
 5. Review and submit manually. An observed ATS success panel after a submission attempt can confirm Applied; otherwise enter the employer confirmation reference yourself. A Submit click alone stays pending. Revoke extension tokens when finished.
@@ -140,11 +142,11 @@ Recognized fields on Greenhouse, Lever, Ashby, Workday and LinkedIn job pages ar
 
 ## Outreach behavior
 
-Recipients receive individual messages. Sample, suppressed, missing, catch-all, invalid, and unverified addresses are blocked from real sending. **CSV “verified” labels are supplied by your source, not independently validated by Orbit**; use Hunter when independent verification is needed.
+Recipients receive individual messages. Sample, suppressed, missing, catch-all, invalid, and unverified addresses are blocked from real sending. CSV imports always remain unverified until a mailbox verifier confirms them; source labels cannot grant sending eligibility.
 
 Approved messages enter the durable outbox. The worker rechecks the contact, suppression, enabled sending, and approved content before dispatch. Default sending is 30 messages per account per UTC day, at most 50, with 3–8 minute pacing in the configured IANA time zone’s 09:00–11:00 weekday window. The time zone is explicit; the app does not guess a recipient’s location. Provider rules may require lower limits. Native OAuth and pacing do **not** guarantee primary-tab placement or prevent filtering.
 
-One approved follow-up can be queued after four business days. Gmail uses the provider thread ID and reply headers; Outlook uses a reply draft. The worker synchronizes the inbox before a follow-up. A detected reply, suppression, pause, stale/disconnected account, or changed approved content cancels it. Automatic reply detection requires a functioning mailbox connection; Resend-only campaigns do not schedule follow-ups.
+Two approved follow-ups can be queued after four and eight business days. Gmail uses the provider thread ID and reply headers; Outlook uses a reply draft. The worker synchronizes the inbox before a follow-up. A detected reply, suppression, pause, stale/disconnected account, or changed approved content cancels it. Automatic reply detection requires a functioning mailbox connection; Resend-only campaigns do not schedule follow-ups.
 
 Provider `accepted` means request acceptance, not confirmed delivery. Ambiguous network/provider outcomes and interrupted sends become `unknown` and are not automatically repeated. Reconcile them in the provider mailbox/dashboard. Automatic unsubscribe interpretation is not included; record those requests using Suppress.
 

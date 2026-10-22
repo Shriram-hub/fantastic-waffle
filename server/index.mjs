@@ -1,3 +1,5 @@
+import {companyLogos} from './services/company-logos.mjs';
+import {workerStatus} from './services/worker-health.mjs';
 import {resumeLinkSummaries} from './services/engagement.mjs';
 import {inboxActions} from './services/inbox-actions.mjs';
 import {ensureJobDocuments,hydrateDocument} from './services/job-documents.mjs';
@@ -112,6 +114,7 @@ export function createApp({
     if (!item) fail(`${label} not found.`, 404);
     return item;
   };
+  const logoFor=companyLogos(fetcher);
   const events = taskEvents(upgrade.queue,store,req=>auth.authenticated(req));
   async function bootstrap() {
     const named=async(label,fn)=>{try{return await fn();}catch(e){e.operation=label;throw e;}};
@@ -122,7 +125,7 @@ export function createApp({
       named('application-tasks',()=>store.db.prepare('SELECT id,application_id,status,body FROM apply_tasks ORDER BY rowid DESC LIMIT 100').all()),
     ]);
     const setup=setupReadiness(store,config);
-    return {data:publicState(store.state,preferences),search,autopilot,accounts,setup,
+    return {data:publicState(store.state,preferences),search,autopilot,accounts,setup,worker:await workerStatus(store),
       integrations:{remotive:true,greenhouse:true,lever:true,ashby:true,arbeitnow:true,himalayas:true,apollo:setup.apolloConfigured,hunter:setup.hunterConfigured,googleOAuth:setup.googleConfigured,microsoftOAuth:setup.microsoftConfigured,gmail:accounts.some(a=>a.provider==='google'),outlook:accounts.some(a=>a.provider==='microsoft'),resend:setup.resendConfigured,liveSendEnabled:setup.liveSendEnabled,ai:setup.aiConfigured,embeddings:!!(config.LLM_API_KEY && config.EMBEDDING_MODEL),adzuna:!!(config.ADZUNA_APP_ID && config.ADZUNA_APP_KEY),queueDriver:config.REDIS_URL ? 'BullMQ + Redis' : store.kind==='postgres' ? 'PostgreSQL' : 'SQLite',autoApply:'assisted'},
       vault:{versions:versions.map(v=>({id:v.id,kind:v.kind,title:JSON.parse(v.body).title,createdAt:v.created_at})),links:resumeLinkSummaries(links,store.state)},
       tasks:{tasks,applications:applications.map(a=>({...a,details:JSON.parse(a.body)}))}};
@@ -155,14 +158,14 @@ export function createApp({
           documentCheck=document ? {ok:true,documentId:document.id,resumeBytes:document.resume.size,coverLetterBytes:document.coverLetter.size,coverLetterWords:document.wordCount,storage:document.resume.storage?.kind || 'memory'} : {ok:false,reason:'No active role or the source profile changed.'};
         }
         return json(res,200,{ok:true,indexed:result.search.indexed,matches:result.search.matches,storage:store.kind || 'sqlite',googleConfigured:result.setup.googleConfigured,
-          contactDiscovery:{hunterConfigured:contacts.hunterConfigured,dailyLimit:contacts.dailyLimit,usedToday:contacts.usedToday},career:{available:true,openTasks:result.data.careerSummary.stats.openTasks},features:{regionalBoards:true,documents:true,sequenceSteps:3,copilotVersion:"0.8.0",phoneAlerts:true,automaticInterviewPrep:true,companyPitch:true,mailboxSelfTests:true,extensionAutoPair:true},documentCheck,contactFallbackCheck,mail:{connectedAccounts:result.accounts.length,liveSending:result.setup.liveSendEnabled},providerChecks:publicUrl.searchParams.get('checkContacts')==='true' ? await checkContactProviders(store,config,fetcher) : undefined});
+          contactDiscovery:{hunterConfigured:contacts.hunterConfigured,dailyLimit:contacts.dailyLimit,usedToday:contacts.usedToday},career:{available:true,openTasks:result.data.careerSummary.stats.openTasks},features:{regionalBoards:true,documents:true,sequenceSteps:3,copilotVersion:"0.9.0",phoneAlerts:true,automaticInterviewPrep:true,veloceUI:true,kanban:true,commandPalette:true,documentEditor:true,linkedInDrafts:true,companyPitch:true,mailboxSelfTests:true,extensionAutoPair:true},documentCheck,contactFallbackCheck,mail:{connectedAccounts:result.accounts.length,liveSending:result.setup.liveSendEnabled},providerChecks:publicUrl.searchParams.get('checkContacts')==='true' ? await checkContactProviders(store,config,fetcher) : undefined});
       }
       if(await auth.handle(req,res,publicUrl,{json,bodyJSON}))return;
       if (await upgrade.publicRoute(req, res, publicUrl, {
         json,
         bodyJSON
       })) return;
-      const publicAsset=['GET','HEAD'].includes(req.method) && (['/','/index.html','/favicon.svg'].includes(publicUrl.pathname) || /^\/assets\/[a-zA-Z0-9_.-]+$/.test(publicUrl.pathname));
+      const publicAsset=['GET','HEAD'].includes(req.method) && (['/','/index.html','/favicon.svg','/theme.js'].includes(publicUrl.pathname) || /^\/assets\/[a-zA-Z0-9_.-]+$/.test(publicUrl.pathname));
       if (!publicAsset && !await auth.authenticated(req)) {
         return json(res, 401, {
           error: "Sign in to open your workspace.",code:'AUTH_REQUIRED'
@@ -194,6 +197,12 @@ export function createApp({
         const due=await store.db.prepare("SELECT count(*) AS count FROM tasks WHERE status='queued' AND run_at<=?").get(Date.now());
         if(wakeWorker)wakeWorker();else void requestQueueDrain(store,upgrade.queue,config,fetcher);
         return json(res,202,{ok:true,due:Number(due.count),message:'Worker notified. Only due tasks run; pacing, approvals and send limits remain in force.'});
+      }
+      const logo=path.match(/^\/api\/jobs\/([^/]+)\/logo$/);
+      if(logo && method==='GET') {
+        const job=store.state.jobs.find(j=>j.id===logo[1]),image=job && await logoFor(job);
+        if(!image){res.writeHead(204);res.end();return;}
+        res.writeHead(200,{'Content-Type':image.type,'Cache-Control':'private, max-age=3600'});res.end(image.bytes);return;
       }
       if (method === 'GET' && path === '/api/bootstrap') {
         return json(res,200,await bootstrap());
@@ -567,6 +576,7 @@ export function createApp({
         "/": ["index.html", "text/html; charset=utf-8"],
         "/index.html": ["index.html", "text/html; charset=utf-8"],
         "/styles.css": ["styles.css", "text/css; charset=utf-8"],
+        "/theme.js": ["theme.js", "text/javascript; charset=utf-8"],
         "/favicon.svg": ["favicon.svg", "image/svg+xml"]
       };
       if (["/", "/index.html"].includes(path) && !existsSync(resolve(buildRoot, "index.html"))) fail("Build the interface with npm run build, or use npm run dev and open port 5173.", 503);
@@ -608,7 +618,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const app = createApp({store:await openConfiguredStore(),wakeWorker:()=>{if(child?.connected)child.send({type:'queue-wake'});else void requestQueueDrain(app.store,app.queue,process.env,fetch);}});
   await app.ready;
   const port = Number(process.env.PORT || 3000);
-  app.server.listen(port, host, () => console.log(`Orbit is running at http://${host}:${app.server.address().port}`));
+  app.server.listen(port, host, () => console.log(`Veloce AI is running at http://${host}:${app.server.address().port}`));
   let stopping = false;
   if (embeddedWorkerEnabled(process.env)) {
     // Leave room for the API, network buffers, and PDF parsing on Render Free.

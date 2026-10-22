@@ -1,3 +1,4 @@
+import {WorkspaceAppearance} from './WorkspaceAppearance.jsx';
 import {AlertSettings} from './AlertSettings.jsx';
 import {MailboxChecks} from './MailboxChecks.jsx';
 import {pairBrowserExtension} from '../../shared/browser-batch.mjs';
@@ -22,9 +23,10 @@ export function Connections() {
         title="Your tools, working together."
         subtitle="Explicit connections. Server-side secrets. A clear view of what is configured."
       />
+      <WorkspaceAppearance/>
       <SetupChecklist/>
       <AlertSettings/>
-      <section className="notice mb"><strong>Mail connects through Google or Microsoft OAuth</strong><p>Orbit sends and scans through HTTPS APIs, so Gmail App Password formatting and Render’s SMTP port restrictions do not apply. Connect the mailbox, then use the self-test buttons below. Register the exact callback URL shown in setup in Google Cloud.</p></section>
+      <section className="notice mb"><strong>Mail connects through Google or Microsoft OAuth</strong><p>Veloce AI sends and scans through HTTPS APIs, so Gmail App Password formatting and Render’s SMTP port restrictions do not apply. Connect the mailbox, then use the self-test buttons below. Register the exact callback URL shown in setup in Google Cloud.</p></section>
       <section className="notice mb"><strong>Free job discovery is included</strong><p>Greenhouse, Lever, Ashby and public feeds work without API keys. Optional JSEARCH_API_KEY or SERPAPI_API_KEY broadens coverage through Google Jobs. Save these in Render → Environment, then enable Google Jobs in search sources.</p><p>JSearch: {setup.jsearchConfigured ? 'key saved' : 'not configured'} · SerpApi: {setup.serpapiConfigured ? 'key saved' : 'not configured'}. Source health shows whether live provider requests succeed.</p></section>
       <div className="provider-grid">
         <section className="connection-card">
@@ -247,12 +249,12 @@ export function Connections() {
             <h2>Browser application assistant</h2>
             <p>
               Download and extract the assistant. Open chrome://extensions,
-              enable Developer mode, and load the orbit-extension folder.
-              The download includes this app’s address and a one-use installation code valid for 15 minutes. After installation, refresh Orbit and click Pair extension below if needed. No workspace password is included.
+              enable Developer mode, and load the veloce-ai-extension folder.
+              The download includes this app’s address and a one-use installation code valid for 15 minutes. After installation, refresh Veloce AI and click Pair extension below if needed. No workspace password is included.
               Tokens expire in 24 hours.
             </p>
             <div className="btn-row">
-              <a className="btn primary" href="/api/extension/download">Download Chrome extension 0.8</a>
+              <a className="btn primary" href="/api/extension/download">Download Chrome extension 0.9</a>
               <Button onClick={()=>perform(async()=>notify(await pairBrowserExtension()))}>Pair extension with this workspace</Button>
               <Button
                 onClick={() =>

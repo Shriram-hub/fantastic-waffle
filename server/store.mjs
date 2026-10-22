@@ -43,6 +43,8 @@ CREATE TABLE IF NOT EXISTS extension_tokens(id TEXT PRIMARY KEY, expires INTEGER
 CREATE TABLE IF NOT EXISTS send_leases(account_id TEXT PRIMARY KEY, not_before INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS send_budget(account_id TEXT NOT NULL,day TEXT NOT NULL,count INTEGER NOT NULL,PRIMARY KEY(account_id,day));
 
+CREATE TABLE IF NOT EXISTS outreach_job_reservations(workspace_id TEXT NOT NULL,contact_email TEXT NOT NULL CHECK(contact_email=lower(trim(contact_email))),job_id TEXT NOT NULL,campaign_id TEXT NOT NULL,task_id TEXT NOT NULL,created_at INTEGER NOT NULL,PRIMARY KEY(workspace_id,contact_email,job_id));
+CREATE TABLE IF NOT EXISTS worker_health(id TEXT PRIMARY KEY,status TEXT NOT NULL,heartbeat_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS outreach_send_log(user_id TEXT NOT NULL DEFAULT 'local',contact_email TEXT NOT NULL,campaign_id TEXT NOT NULL,sequence_step INTEGER NOT NULL DEFAULT 0,task_id TEXT NOT NULL,status TEXT NOT NULL,provider_id TEXT,updated_at INTEGER NOT NULL,PRIMARY KEY(user_id,contact_email,campaign_id,sequence_step));
 CREATE TABLE IF NOT EXISTS unsubscribe_tokens(id TEXT PRIMARY KEY,email TEXT NOT NULL,created_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS ai_cache(id TEXT PRIMARY KEY,body TEXT NOT NULL,created_at INTEGER NOT NULL);
@@ -147,7 +149,7 @@ export function openStore(directory) {
     for (const table of [
       "discovered_boards","outreach_company_budget","job_source_cache", "job_source_health", "job_search_runs", "job_search_config",
       "autopilot_runs", "autopilot_config", "autopilot_schedule", "autopilot_activity", "search_matrices", "provider_requests",
-      "outreach_send_log",
+      "outreach_job_reservations", "worker_health", "outreach_send_log",
       "unsubscribe_tokens",
       "ai_cache",
       "mail_accounts",

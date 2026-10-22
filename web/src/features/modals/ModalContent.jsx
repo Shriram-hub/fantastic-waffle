@@ -29,7 +29,7 @@ export function ModalContent({ modal, close }) {
   if (modal.type === "job") {
     const j = result?.job?.id===modal.id ? result.job : data.jobs.find((j) => j.id === modal.id);
     return (
-      <Modal title="A closer look" onClose={close}>
+      <Modal title="A closer look" onClose={close} wide>
         <div className="spread">
           <Company name={j.company} />
           <Sample value={j.isDemo} />
@@ -89,6 +89,10 @@ export function ModalContent({ modal, close }) {
         </p>
       </Modal>
     );
+  }
+  if(modal.type==='contact-detail') {
+    const contact=data.contacts.find(c=>c.id===modal.id);
+    return <Modal title="Contact details" onClose={close}>{contact ? <><div className="spread"><Company name={contact.company}/><Badge value={contact.emailStatus}/></div><h2 className="detail-title">{contact.name}</h2><p className="detail-company">{contact.title} · {contact.company}</p><p className="mono">{contact.email || 'Email not available'}</p><p className="hint">{contact.source}</p>{contact.linkedinUrl && <a className="btn mt" href={contact.linkedinUrl} target="_blank" rel="noreferrer">Open source profile ↗</a>}<div className="form-actions"><Button onClick={()=>{close();go('contacts');}}>Open Contact Discovery</Button></div></> : <p>Contact no longer available.</p>}</Modal>;
   }
   if (modal.type === "application")
     return <ApplicationModal id={modal.id} close={close} />;

@@ -50,7 +50,7 @@ export async function queueCampaign(c, data, store, queue, config, options = {})
     if (!(await store.db.prepare("SELECT id FROM mail_accounts WHERE id=?").get(c.accountId))) fail("Connect the selected mailbox first.");
   } else if (!config.RESEND_API_KEY || !config.EMAIL_FROM) fail("Connect a mailbox or configure Resend.", 503);
   const recipients = preview.messages.filter(m => !c.deliveries.some(d => d.contactId === m.contactId && ["queued", "sending", "accepted", "unknown"].includes(d.status)));
-  if (!recipients.length) fail("These recipients are already queued, accepted, or need reconciliation.", 409);
+  if (!recipients.length) return {status:c.status,deliveries:c.deliveries,existing:true};
   const limit = Math.max(1, Math.min(50, policy?.dailySendLimit || Number(s.settings.dailySendLimit) || 30)),
     zone = policy?.timeZone || s.settings.sendTimeZone || "UTC";
   let cursor = Date.now();
@@ -62,7 +62,20 @@ export async function queueCampaign(c, data, store, queue, config, options = {})
   try {
     const reserved = await store.db.prepare("SELECT run_at FROM tasks WHERE kind IN ('campaign.send','campaign.followup') AND status NOT IN ('cancelled','failed') AND json_extract(payload,'$.accountId')=? ORDER BY run_at DESC").all(accountId);
     const booked = reserved.map(r => r.run_at);
+    const existing=[];
+    let added=0;
     for (const m of recipients) {
+      if(c.jobId) {
+        const email=m.to.trim().toLowerCase();
+        const claim=await store.db.prepare('SELECT campaign_id,task_id FROM outreach_job_reservations WHERE workspace_id=? AND contact_email=? AND job_id=?').get('local',email,c.jobId);
+        // A cancelled task which never entered sending may be explicitly reviewed again.
+        const held=claim && await store.db.prepare('SELECT status FROM tasks WHERE id=?').get(claim.task_id);
+        const log=claim && await store.db.prepare('SELECT status FROM outreach_send_log WHERE task_id=?').get(claim.task_id);
+        if(claim && held?.status==='cancelled' && log?.status==='cancelled')await store.db.prepare('DELETE FROM outreach_job_reservations WHERE workspace_id=? AND contact_email=? AND job_id=?').run('local',email,c.jobId);
+        else if(claim){existing.push({taskId:claim.task_id,campaignId:claim.campaign_id,email,jobId:c.jobId});continue;}
+        const legacy=await store.db.prepare("SELECT l.task_id,l.campaign_id FROM outreach_send_log l JOIN campaigns c ON c.id=l.campaign_id WHERE l.user_id='local' AND lower(l.contact_email)=? AND l.sequence_step=0 AND json_extract(c.body,'$.jobId')=? AND l.status IN ('queued','sending','accepted','unknown') LIMIT 1").get(email,c.jobId);
+        if(legacy){await store.db.prepare('INSERT INTO outreach_job_reservations(workspace_id,contact_email,job_id,campaign_id,task_id,created_at) VALUES(?,?,?,?,?,?) ON CONFLICT(workspace_id,contact_email,job_id) DO NOTHING').run('local',email,c.jobId,legacy.campaign_id,legacy.task_id,Date.now());existing.push({taskId:legacy.task_id,campaignId:legacy.campaign_id,email,jobId:c.jobId});continue;}
+      }
       const domain=m.to.split('@')[1].toLowerCase();
       const companyReservations=await store.db.prepare("SELECT email FROM outreach_company_budget WHERE domain=? AND (status IN ('queued','sending','unknown') OR status='accepted' AND updated_at>?)").all(domain,Date.now()-14*86400000);
       if(companyReservations.filter(r=>r.email!==m.to.toLowerCase()).length>=(policy?.contactsPerCompany || 3)) fail('The 14-day contact limit for this company has been reached.',409);
@@ -90,6 +103,8 @@ export async function queueCampaign(c, data, store, queue, config, options = {})
         dedupeKey: `mail-${key}-${c.deliveries.filter(d => d.contactId === m.contactId).length}`,
         maxAttempts: 1
       });
+      if(c.jobId)await store.db.prepare('INSERT INTO outreach_job_reservations(workspace_id,contact_email,job_id,campaign_id,task_id,created_at) VALUES(?,?,?,?,?,?)').run('local',m.to.trim().toLowerCase(),c.jobId,c.id,task.id,Date.now());
+      added++;
       const reservation = await store.db.prepare("INSERT INTO outreach_send_log(user_id,contact_email,campaign_id,sequence_step,task_id,status,updated_at) VALUES('local',?,?,0,?,'queued',?) ON CONFLICT(user_id,contact_email,campaign_id,sequence_step) DO UPDATE SET task_id=excluded.task_id,status='queued',updated_at=excluded.updated_at WHERE outreach_send_log.status IN ('failed','cancelled')").run(m.to.toLowerCase(),c.id,task.id,Date.now());
       if (!reservation.changes) fail("This address already has a send reserved in this campaign.",409);
       await store.db.prepare("INSERT INTO outreach_company_budget(domain,email,task_id,status,updated_at) VALUES(?,?,?,'queued',?) ON CONFLICT(domain,email) DO UPDATE SET task_id=excluded.task_id,status='queued',updated_at=excluded.updated_at")
@@ -104,7 +119,9 @@ export async function queueCampaign(c, data, store, queue, config, options = {})
       booked.push(slot);
       cursor = slot + jitter();
     }
+    if(!added){if(!options.inTransaction)await store.db.exec("COMMIT");return {status:"Already reserved",deliveries:existing,existing:true};}
     c.status = "Queued";
+    options.existing=existing;
     c.approval = {
       fingerprint: p.fingerprint,
       at: now()
@@ -119,7 +136,8 @@ export async function queueCampaign(c, data, store, queue, config, options = {})
   }
   return {
     status: c.status,
-    deliveries: c.deliveries
+    deliveries: c.deliveries,
+    existing:options.existing?.length ? options.existing : false
   };
 }
 export async function deliverTask(task, store, queue, config, fetcher = fetch) {
@@ -201,6 +219,16 @@ export async function deliverTask(task, store, queue, config, fetcher = fetch) {
     limit = Math.max(1, Math.min(50, policy?.dailySendLimit || Number(s.settings.dailySendLimit) || 30));
   await store.db.exec("BEGIN IMMEDIATE");
   try {
+    if(!followup && c.jobId) {
+      let claim=await store.db.prepare('SELECT task_id FROM outreach_job_reservations WHERE workspace_id=? AND contact_email=? AND job_id=?').get('local',contact.email.trim().toLowerCase(),c.jobId);
+      if(!claim) {
+        // Older queued work must respect acceptance recorded before this upgrade.
+        const earlier=await store.db.prepare("SELECT l.task_id,l.campaign_id FROM outreach_send_log l JOIN campaigns c ON c.id=l.campaign_id WHERE l.user_id='local' AND lower(l.contact_email)=? AND l.sequence_step=0 AND json_extract(c.body,'$.jobId')=? AND l.status IN ('queued','sending','accepted','unknown') ORDER BY CASE WHEN l.status='accepted' THEN 0 WHEN l.status IN ('sending','unknown') THEN 1 ELSE 2 END,l.updated_at LIMIT 1").get(contact.email.trim().toLowerCase(),c.jobId);
+        await store.db.prepare('INSERT INTO outreach_job_reservations(workspace_id,contact_email,job_id,campaign_id,task_id,created_at) VALUES(?,?,?,?,?,?) ON CONFLICT(workspace_id,contact_email,job_id) DO NOTHING').run('local',contact.email.trim().toLowerCase(),c.jobId,earlier?.campaign_id || c.id,earlier?.task_id || task.id,Date.now());
+        claim=await store.db.prepare('SELECT task_id FROM outreach_job_reservations WHERE workspace_id=? AND contact_email=? AND job_id=?').get('local',contact.email.trim().toLowerCase(),c.jobId);
+      }
+      if(claim.task_id!==task.id){await store.db.exec('COMMIT');return {status:'cancelled',reason:'This role and email already have an outreach reservation.'};}
+    }
     const lease = await store.db.prepare("SELECT not_before FROM send_leases WHERE account_id=?").get(budgetAccount);
     const used = (await store.db.prepare("SELECT count FROM send_budget WHERE account_id=? AND day=?").get(budgetAccount, day))?.count || 0;
     if (used >= limit || lease && lease.not_before > currentTime) {
@@ -244,6 +272,10 @@ export async function deliverTask(task, store, queue, config, fetcher = fetch) {
   d.at = now();
   const latest = [...new Map(c.deliveries.map(x => [x.contactId, x])).values()];
   c.status = latest.every(x => x.status === "accepted") ? "Accepted by provider" : latest.some(x => ["unknown", "failed"].includes(x.status)) ? "Needs attention" : "Queued";
+  if(result.status==='accepted' && !followup && c.jobId) {
+    const application=s.applications.find(a=>a.jobId===c.jobId);
+    if(application && ['Saved','Ready'].includes(application.stage)){application.stage='Outreach Sent';application.updatedAt=now();application.history.push({stage:'Outreach Sent',at:now(),source:'Approved outreach accepted by mail provider'});}
+  }
   await store.save();
   if(c.autopilot) await activity(store,"delivery",`${c.name}: ${followup ? "follow-up" : "pitch"} ${result.status === "accepted" ? "accepted by the mail provider" : result.status}.`,1);
   if (result.status === "accepted" && !followup && c.sequence?.enabled && c.accountId) {

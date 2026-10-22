@@ -331,7 +331,7 @@ test("an approved campaign enters the outbox; only the worker calls the provider
         confirmCount: 1,
       })
     ).status,
-    409,
+    202,
   );
 });
 test("profile edits invalidate approval and later suppression cancels queued messages before delivery", async (t) => {

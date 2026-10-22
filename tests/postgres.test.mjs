@@ -129,3 +129,16 @@ test('PostgreSQL snapshot cache avoids repeated full index reads and observes an
   await a.refresh();assert.equal(a.state.profile.name,'New profile from worker');assert.equal(fullReads,first+1);
   await a.refresh();assert.equal(fullReads,first+1);
 });
+
+test('PostgreSQL reuses a role/email reservation across campaigns and exposes a real worker heartbeat',async t=>{
+  const {initialState}=await import('../server/fixtures.mjs'),{campaignFingerprint}=await import('../server/domain.mjs'),{queueCampaign}=await import('../server/services/outreach.mjs'),{workerHeartbeat,workerStatus}=await import('../server/services/worker-health.mjs');
+  const db=new PGlite();t.after(()=>db.close());const pool=poolFor(db),store=await openPostgresStore({},pool),queue=taskQueue(store),state=initialState(false);
+  Object.assign(state.profile,{name:'Casey Quinn',email:'casey@candidate.com'});state.jobs=[{id:'job',company:'Company',title:'Analyst',tags:[]}];state.contacts=[{id:'contact',email:'hr@company.com',emailStatus:'verified',name:'Hiring Team',company:'Company',isDemo:false,suppressed:false}];
+  const make=id=>({id,jobId:'job',name:id,subject:'Analyst',body:'Hi {{first_name}}',contactIds:['contact'],deliveries:[],status:'Draft',attachResume:false});state.campaigns=[make('one'),make('two')];
+  for(const c of state.campaigns)state.previews[c.id]={campaignId:c.id,fingerprint:campaignFingerprint(c,state),expires:Date.now()+60000};await store.replace(state);
+  const config={ENABLE_LIVE_SEND:'true',RESEND_API_KEY:'test',EMAIL_FROM:'casey@candidate.com'};
+  const prepare=id=>store.run(()=>queueCampaign(store.state.campaigns.find(c=>c.id===id),{previewId:id,approved:true,confirmCount:1},store,queue,config));
+  const first=await prepare('one'),second=await prepare('two');assert.equal(second.existing,true);assert.equal(second.deliveries[0].taskId,first.deliveries[0].taskId);assert.equal((await queue.list()).length,1);
+  await assert.rejects(store.db.prepare('INSERT INTO outreach_job_reservations(workspace_id,contact_email,job_id,campaign_id,task_id,created_at) VALUES(?,?,?,?,?,?)').run('local','hr@company.com','job','third','third',Date.now()),/duplicate key|unique constraint/i);
+  assert.equal((await workerStatus(store)).status,'offline');await workerHeartbeat(store,'processing');assert.equal((await workerStatus(store)).status,'processing');await store.db.prepare('UPDATE worker_health SET heartbeat_at=?').run(Date.now()-60000);assert.equal((await workerStatus(store)).status,'offline');
+});

@@ -103,12 +103,12 @@ export function CampaignPreview({ id, jobId, close }) {
                   const opened=job && window.open(job.url,"_blank","noopener,noreferrer");
                   void opened;
                   perform(async () => {
-                    await api(`/campaigns/${id}/send`, {
+                    const queued=await api(`/campaigns/${id}/send`, {
                       previewId: preview.previewId,
                       approved: true,
                       confirmCount: preview.messages.length,
                     });
-                    notify("Campaign queued. Follow progress in Automation.");
+                    notify(queued.existing ? "Existing outreach reservations reused. No duplicate messages queued." : "Campaign queued. Follow progress in Autopilot.");
                     close();
                   });
                 }}

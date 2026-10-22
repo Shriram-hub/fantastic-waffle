@@ -71,8 +71,8 @@ test('worker defaults on, bounded manual drain preserves future times, and outbo
   const outbound=await queue.enqueue('mail.test-send',{}, {maxAttempts:3}),claimed=await queue.claim(outbound.id);await queue.finish(claimed,null,Error('Unknown acceptance'));assert.equal((await queue.get(outbound.id)).status,'unknown');await assert.rejects(async()=>queue.retry(outbound.id),/Only failed/);
 });
 test('extension packages configure the live origin with an expiring one-use code, never workspace credentials; CORS is capability scoped',async t=>{
-  const store=workspace(t),w=await apiWorkspace(t,store),origin='chrome-extension://'+'a'.repeat(32),pair=await packagePairing(store,w.config,w.base),zip=zipEntries(await extensionPackage(pair)),config=JSON.parse(zip['orbit-extension/config.json']);
-  assert.equal(config.serverUrl,w.base);assert.ok(!zip['orbit-extension/config.json'].includes(Buffer.from('owner-test')));const manifest=JSON.parse(zip['orbit-extension/manifest.json']);assert.ok(manifest.host_permissions.includes(`${w.base}/*`));
+  const store=workspace(t),w=await apiWorkspace(t,store),origin='chrome-extension://'+'a'.repeat(32),pair=await packagePairing(store,w.config,w.base),zip=zipEntries(await extensionPackage(pair)),config=JSON.parse(zip['veloce-ai-extension/config.json']);
+  assert.equal(config.serverUrl,w.base);assert.ok(!zip['veloce-ai-extension/config.json'].includes(Buffer.from('owner-test')));const manifest=JSON.parse(zip['veloce-ai-extension/manifest.json']);assert.ok(manifest.host_permissions.includes(`${w.base}/*`));
   const redemption=await redeemPackage({code:pair.pairingCode},store,w.config);assert.match(redemption.token,/^[A-Za-z0-9_-]{43}$/);await assert.rejects(redeemPackage({code:pair.pairingCode},store,w.config),/expired|used/);
   const preflight=await fetch(w.base+'/api/extension/profile',{method:'OPTIONS',headers:{Origin:origin,'Access-Control-Request-Headers':'authorization'}});assert.equal(preflight.status,204);assert.equal(preflight.headers.get('access-control-allow-origin'),origin);assert.match(preflight.headers.get('access-control-allow-headers'),/Authorization/);
   const privateAPI=await fetch(w.base+'/api/state',{headers:{Origin:origin}});assert.equal(privateAPI.status,401);assert.equal(privateAPI.headers.has('access-control-allow-origin'),false);
@@ -112,4 +112,80 @@ test('self-mail tests require explicit consent, use only the connected address a
   assert.equal((await w.call('/api/mail/self/test-send',{})).status,400);const first=await (await w.call('/api/mail/self/test-send',{confirmed:true,to:'someone@unrelated.test'})).json(),again=await (await w.call('/api/mail/self/test-send',{confirmed:true})).json();assert.equal(first.taskId,again.taskId);assert.equal(first.to,'self@candidate.com');
   let to;const registry=handlers(store,queue,w.config,async(_url,options)=>{const raw=Buffer.from(JSON.parse(options.body).raw,'base64url').toString();to=raw.match(/^To: (.*)$/m)[1].trim();return response({id:'accepted-self-test',threadId:'thread'});});
   assert.equal((await runOne(store,queue,registry,first.taskId)).status,'completed');assert.equal(to,'self@candidate.com');const status=await (await w.call('/api/mail/self/test-status')).json();assert.equal(status.tests.send.status,'accepted');
+});
+
+test('Veloce LinkedIn drafts stay below clipboard limits without invented background claims',async()=>{
+  const {linkedInDrafts}=await import('../server/services/job-pitch.mjs');
+  const normal=linkedInDrafts({title:'Financial Analyst',company:'Deloitte'},{name:'Riley Quinn'},{name:'Casey Quinn'});
+  assert.match(normal.connectionNote,/Financial Analyst/);assert.match(normal.connectionNote,/Deloitte/);assert.match(normal.connectionNote,/Riley/);
+  for(const size of [1,100,2000]){const drafts=linkedInDrafts({title:'Finance '.repeat(size),company:'Company '.repeat(size)},{name:'😀'.repeat(size)},{name:'Casey '.repeat(size)});assert.ok(drafts.connectionNote.length<200);assert.ok(drafts.followUpDM.length<450);assert.ok(!/[\uD800-\uDBFF]$/.test(drafts.connectionNote));}
+  assert.ok(!normal.connectionNote.includes('years'));
+});
+test('simultaneous auto-pitch requests reuse one durable preparation without waiting for external APIs',async t=>{
+  const store=workspace(t),w=await apiWorkspace(t,store),started=Date.now();
+  const results=await Promise.all(Array.from({length:4},()=>w.call('/api/jobs/job/auto-pitch',{})));
+  assert.ok(Date.now()-started<5000);assert.ok(results.every(r=>r.status===202));const bodies=await Promise.all(results.map(r=>r.json()));
+  assert.equal(new Set(bodies.map(r=>r.pitch.taskId)).size,1);assert.equal(store.db.prepare("SELECT count(*) AS n FROM tasks WHERE kind='job.auto-pitch'").get().n,1);
+});
+test('outreach reservations are idempotent across campaigns for a normalized email and role, including uncertain sends',async t=>{
+  const {queueCampaign}=await import('../server/services/outreach.mjs'),{campaignFingerprint}=await import('../server/domain.mjs');
+  const store=workspace(t),queue=taskQueue(store),s=store.state;s.contacts=[{id:'r',name:'Riley',email:'HR@deloitte.com',company:'Deloitte',emailStatus:'verified',isDemo:false,suppressed:false}];
+  const make=id=>({id,name:id,jobId:'job',subject:'About the analyst role',body:'Hi {{first_name}}, may we discuss this role?',contactIds:['r'],deliveries:[],status:'Draft',attachResume:false});
+  const first=make('first'),second=make('second');s.campaigns=[first,second];
+  for(const c of s.campaigns)s.previews[c.id]={campaignId:c.id,expires:Date.now()+60000,fingerprint:campaignFingerprint(c,s)};
+  await store.save();const config={ENABLE_LIVE_SEND:'true',RESEND_API_KEY:'test-no-network',EMAIL_FROM:'casey@candidate.com'},approve=c=>({previewId:c.id,approved:true,confirmCount:1});
+  const a=await queueCampaign(first,approve(first),store,queue,config),b=await queueCampaign(second,approve(second),store,queue,config);
+  assert.equal(b.existing,true);assert.equal(b.deliveries[0].taskId,a.deliveries[0].taskId);assert.equal((await queue.list()).filter(t=>t.kind==='campaign.send').length,1);
+  const row=store.db.prepare('SELECT * FROM outreach_job_reservations').get();assert.equal(row.contact_email,'hr@deloitte.com');assert.equal(row.job_id,'job');
+  store.db.prepare("UPDATE outreach_send_log SET status='unknown' WHERE task_id=?").run(a.deliveries[0].taskId);
+  const repeated=await queueCampaign(second,approve(second),store,queue,config);assert.equal(repeated.existing,true);assert.equal((await queue.list()).length,1);
+  assert.throws(()=>store.db.prepare('INSERT INTO outreach_job_reservations(workspace_id,contact_email,job_id,campaign_id,task_id,created_at) VALUES(?,?,?,?,?,?)').run('local','HR@deloitte.com','job','rogue','rogue',Date.now()),/CHECK/);
+});
+test('document editing creates a new private PDF version and preserves the previously approved bytes',async t=>{
+  const {ensureJobDocuments,hydrateDocument}=await import('../server/services/job-documents.mjs');
+  const store=workspace(t),w=await apiWorkspace(t,store),queue=taskQueue(store);
+  const original=await ensureJobDocuments(store.state.jobs[0],store,queue,{}),before=await hydrateDocument(original,'resume',store,{});
+  const editor=await (await w.call(`/api/documents/${original.id}/editor`)).json();assert.ok(editor.model.sections.length);
+  editor.model.sections.unshift({heading:'Profile',lines:['Financial analyst focused on Excel forecasting and SQL reporting.']});editor.model.coverLetter=['Dear Hiring Team,','I am applying for the Financial Analyst position.','Kind regards, Casey Quinn'];
+  assert.equal((await w.call(`/api/documents/${original.id}/revisions`,{model:editor.model})).status,400);
+  const request=await (await w.call(`/api/documents/${original.id}/revisions`,{model:editor.model,confirmed:true})).json();
+  const done=await runOne(store,queue,handlers(store,queue,{}),request.task.id);assert.equal(done.status,'completed');await store.refresh();
+  const next=store.state.jobDocuments.find(d=>d.id===done.result.documentId);assert.notEqual(next.id,original.id);assert.equal(next.method,'User-reviewed edits');
+  assert.equal((await hydrateDocument(original,'resume',store,{})).base64,before.base64);assert.notEqual(next.resume.contentHash,original.resume.contentHash);
+  const parsed=await parseResumeAsync(await hydrateDocument(next,'resume',store,{}));assert.match(parsed.resume.text,/Financial analyst focused on Excel/);
+  assert.equal((await w.call(`/api/documents/${next.id}/resume`)).headers.get('content-type'),'application/pdf');
+});
+test('SSE uses unbuffered headers, a 20-second heartbeat, and cleans up its interval',async t=>{
+  const {taskEvents}=await import('../server/events.mjs'),{EventEmitter}=await import('node:events');
+  t.mock.timers.enable({apis:['setInterval']});const res=new EventEmitter();res.parts=[];res.writeHead=(status,headers)=>{res.status=status;res.headers=headers;};res.write=value=>res.parts.push(value);res.end=()=>{res.writableEnded=true;res.emit('close');};
+  const events=taskEvents({list:async()=>[]});await events.connect({},res);assert.equal(res.headers['X-Accel-Buffering'],'no');assert.equal(res.headers['Cache-Control'],'no-cache, no-transform');
+  t.mock.timers.tick(19999);assert.equal(res.parts.filter(p=>p===': heartbeat\n\n').length,0);t.mock.timers.tick(1);assert.equal(res.parts.filter(p=>p===': heartbeat\n\n').length,1);
+  res.end();t.mock.timers.tick(20000);assert.equal(res.parts.filter(p=>p===': heartbeat\n\n').length,1);events.close();
+});
+test('provider deadlines abort hung adapters, and independent public pages and search begin concurrently',async()=>{
+  const {withDeadline}=await import('../server/providers/deadline.mjs'),{findPublicContacts}=await import('../server/providers/contacts/free-xray.mjs');
+  let aborted=false;await assert.rejects(withDeadline(signal=>new Promise(()=>signal.addEventListener('abort',()=>{aborted=true;})),20),/deadline/);assert.equal(aborted,true);
+  let pageStarted=false,searchStarted=false,release;const gate=new Promise(resolve=>{release=resolve;}),fetcher=async()=>{searchStarted=true;if(pageStarted)release();await gate;return new Response('No public profiles');};
+  const found=await findPublicContacts({company:'Deloitte',description:'',url:'https://deloitte.com/job'},{domain:'deloitte.com'},{searchPeople:true,fetcher,pages:async()=>{pageStarted=true;if(searchStarted)release();await gate;return [{url:'https://deloitte.com/careers',text:'jobs@deloitte.com'}];}});
+  assert.equal(pageStarted && searchStarted,true);assert.equal(found[0].email,'jobs@deloitte.com');assert.equal(found[0].emailStatus,'unverified');
+});
+test('workspace branding rejects injected CSS and kanban transitions persist with a manual audit trail',async t=>{
+  const store=workspace(t),w=await apiWorkspace(t,store);
+  const invalid=await w.call('/api/settings',{brand:{name:'Custom',accent:'red;display:none'}});assert.equal(invalid.status,400);
+  const settings={...store.state.settings,brand:{name:'Casey Careers',accent:'#06B6D4'}};assert.equal((await w.call('/api/settings',settings)).status,200);await store.refresh();assert.equal(store.state.settings.brand.name,'Casey Careers');
+  const created=await (await w.call('/api/applications',{jobId:'job',stage:'Saved'})).json();await store.refresh();const id=store.state.applications[0].id;
+  for(const stage of ['Applied','Outreach Sent','Assessment','Interview','Offer','Archived']) {
+    const response=await fetch(w.base+`/api/applications/${id}`,{method:'PATCH',headers:w.headers,body:JSON.stringify({stage})});assert.equal(response.status,200);await store.refresh();assert.equal(store.state.applications[0].stage,stage);assert.equal(store.state.applications[0].history.at(-1).source,'Manual');if(stage==='Outreach Sent'){assert.equal((await w.call('/api/apply/queue',{jobIds:['job'],approved:true})).status,202);await store.refresh();assert.equal(store.state.applications[0].stage,'Outreach Sent');}
+  }
+});
+test('company logos use bounded provider raster assets without opening an arbitrary URL proxy',async()=>{
+  const {providerLogoURL,companyLogos}=await import('../server/services/company-logos.mjs');
+  for(const value of ['http://127.0.0.1/private','https://attacker.test/logo.png','https://remotive.com@attacker.test/logo','data:image/svg+xml,<svg/>'])assert.equal(providerLogoURL(value),'');
+  let requests=0;const png=Buffer.from('89504e470d0a1a0a00000000','hex'),logo=companyLogos(async(_url,options)=>{requests++;assert.equal(options.redirect,'error');assert.ok(options.signal);return new Response(png);});
+  const job={companyLogo:'https://remotive.com/job/123/logo'};assert.equal((await logo(job)).type,'image/png');assert.equal((await logo(job)).bytes.toString('hex'),png.toString('hex'));assert.equal(requests,1);
+  const invalid=companyLogos(async()=>new Response('<svg><script>alert(1)</script></svg>'));assert.equal(await invalid(job),null);
+});
+test('floating copilot mounts an accessible open Shadow DOM without inserting global host-page CSS',async()=>{
+  const source=await readFile(new URL('../extension/copilot.js',import.meta.url),'utf8'),dom=new JSDOM('<style>button {font-size:80px!important}</style><p>Host application</p>',{url:'https://jobs.lever.co/example/role',runScripts:'outside-only'});
+  try{dom.window.eval(source);const host=dom.window.document.getElementById('orbit-career-copilot');assert.ok(host.shadowRoot);assert.equal(host.shadowRoot.mode,'open');assert.match(host.shadowRoot.querySelector('#launch').textContent,/Veloce AI/);assert.match(host.shadowRoot.querySelector('style').textContent,/:host\{all:initial/);assert.equal(dom.window.document.querySelectorAll('style').length,1);assert.equal(host.style.getPropertyPriority('z-index'),'important');}finally{dom.window.close();}
 });

@@ -1,3 +1,4 @@
+import {workerHeartbeat} from './services/worker-health.mjs';
 import { resumeHash, hydrateResume, persistResume } from "./services/resume-storage.mjs";
 import { pathToFileURL } from "node:url";
 import { setTimeout as pause } from "node:timers/promises";
@@ -56,7 +57,7 @@ export function handlers(store, queue, config = {}, fetcher = fetch, dependencie
     async 'mail.test-send'(task) {
       const a=await store.db.prepare('SELECT id,email,metadata FROM mail_accounts WHERE id=?').get(task.payload.accountId);if(!a)return {status:'cancelled'};
       let result;
-      try{result=await sendNative({to:a.email,subject:'Orbit connection test',body:'Your connected mailbox can send through Orbit. This test was requested from Connections and sent only to your own address.',messageKey:task.id},a.id,store,config,null,fetcher);}
+      try{result=await sendNative({to:a.email,subject:'Veloce AI connection test',body:'Your connected mailbox can send through Veloce AI. This test was requested from Connections and sent only to your own address.',messageKey:task.id},a.id,store,config,null,fetcher);}
       catch(error){result={status:'failed',error:error.status ? error.message : 'Mailbox connection failed. Reconnect OAuth in Connections.'};}
       const row=await store.db.prepare('SELECT metadata FROM mail_accounts WHERE id=?').get(a.id);if(row){const meta=JSON.parse(row.metadata);meta.connectionTests={...meta.connectionTests,send:{at:now(),...result}};await store.db.prepare('UPDATE mail_accounts SET metadata=? WHERE id=?').run(JSON.stringify(meta),a.id);}
       return result;
@@ -304,8 +305,9 @@ export function handlers(store, queue, config = {}, fetcher = fetch, dependencie
 }
 export async function runOne(store, queue, registry, wantedId) {
   const task = await queue.claim(wantedId);
-  if (!task) return null;
-  const heartbeat = setInterval(() => Promise.resolve(queue.heartbeat(task)).catch(() => {}), 30000);
+  if (!task) {await workerHeartbeat(store);return null;}
+  await workerHeartbeat(store,'processing');
+  const heartbeat = setInterval(() => Promise.allSettled([queue.heartbeat(task),workerHeartbeat(store,'processing')]), 20000);
   try {
     await queue.log(task.id, `Started ${task.kind}`);
     const result = await store.run(async () => {
@@ -350,6 +352,7 @@ export async function runOne(store, queue, registry, wantedId) {
     return await queue.get(task.id);
   } finally {
     clearInterval(heartbeat);
+    await workerHeartbeat(store);
   }
 }
 export async function startWorker(config = process.env) {
@@ -383,7 +386,7 @@ export async function startWorker(config = process.env) {
     });
     redisWorker.on("error", () => console.error("Redis worker connection error; durable tasks remain in the database."));
   }
-  console.log(`Orbit worker started (${config.REDIS_URL ? "BullMQ + Redis" : `durable ${store.kind || "SQLite"} queue`}).`);
+  console.log(`Veloce AI worker started (${config.REDIS_URL ? "BullMQ + Redis" : `durable ${store.kind || "SQLite"} queue`}).`);
   let lastRecovery=0;
   while (!stopping) {
     if (Date.now()-lastRecovery>60000) {
@@ -419,6 +422,7 @@ export async function startWorker(config = process.env) {
   if (bull) await bull.close();
   if (connection) await connection.quit();
   process.off('message',onWake);
+  await workerHeartbeat(store,'stopped');
   await store.close();
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await startWorker();

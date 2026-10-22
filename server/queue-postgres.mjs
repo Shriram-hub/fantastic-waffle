@@ -77,7 +77,9 @@ export function postgresQueue(store) {
       return decode(await db.prepare("SELECT * FROM tasks WHERE id=?").get(id));
     },
     async cancel(id) {
-      return (await db.prepare("UPDATE tasks SET status='cancelled',updated_at=? WHERE id=? AND status='queued'").run(Date.now(), id)).changes;
+      const changed=(await db.prepare("UPDATE tasks SET status='cancelled',updated_at=? WHERE id=? AND status='queued'").run(Date.now(),id)).changes;
+      if(changed){await db.prepare("UPDATE outreach_send_log SET status='cancelled',updated_at=? WHERE task_id=? AND status='queued'").run(Date.now(),id);await db.prepare("UPDATE outreach_company_budget SET status='cancelled',updated_at=? WHERE task_id=? AND status='queued'").run(Date.now(),id);}
+      return changed;
     },
     async retry(id) {
       const t = await this.get(id);

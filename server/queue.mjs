@@ -190,11 +190,9 @@ export function taskQueue(store) {
       return decode(db.prepare("SELECT * FROM tasks WHERE id=?").get(id));
     },
     cancel(id) {
-      return db
-        .prepare(
-          "UPDATE tasks SET status='cancelled',updated_at=? WHERE id=? AND status='queued'",
-        )
-        .run(Date.now(), id).changes;
+      const changed=db.prepare("UPDATE tasks SET status='cancelled',updated_at=? WHERE id=? AND status='queued'").run(Date.now(),id).changes;
+      if(changed){db.prepare("UPDATE outreach_send_log SET status='cancelled',updated_at=? WHERE task_id=? AND status='queued'").run(Date.now(),id);db.prepare("UPDATE outreach_company_budget SET status='cancelled',updated_at=? WHERE task_id=? AND status='queued'").run(Date.now(),id);}
+      return changed;
     },
     retry(id) {
       const t = this.get(id);

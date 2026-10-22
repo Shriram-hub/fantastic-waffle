@@ -6,11 +6,34 @@ import {draftAutopilotPitch} from './ai.mjs';
 import {activity} from './autopilot-policy.mjs';
 
 const sourceHash=(s,j)=>hash({profile:s.profile,resume:s.resume?.contentHash || s.resume?.base64,text:s.resume?.text,job:{id:j.id,title:j.title,company:j.company,description:j.description,url:j.url,archived:j.archived}});
+// Bound UTF-16 length as well as Unicode code points for clipboard consumers.
+export function linkedInDrafts(job,contact,profile={}) {
+  const bound=(value,max)=>{let result=value.slice(0,max);if(/[\uD800-\uDBFF]$/.test(result))result=result.slice(0,-1);return result;};
+  const compact=(value,max)=>bound(String(value || '').replace(/\s+/g,' ').trim(),max);
+  const first=compact(contact.firstName || contact.name?.split(' ')[0] || 'there',24);
+  const role=compact(job.title,72),company=compact(job.company,44);
+
+  return {connectionNote:bound(`Hi ${first}, I’m interested in the ${role} role at ${company}. I’d love to connect and learn about the team.`,199),followUpDM:bound(`Thanks for connecting, ${first}. I’m exploring the ${role} opening at ${company}. ${compact(profile.name,50) ? `I’m ${compact(profile.name,50)}. ` : ''}Would you be the right person to ask about the role, or could you point me to the hiring team? Happy to share my tailored résumé.`,449)};
+}
 export function pitchSummary(run,store) {
   const document=(store.state.jobDocuments || []).find(d=>d.id===run.documentSetId);
-  return {...run,contacts:(run.contactIds || []).map(id=>store.state.contacts.find(c=>c.id===id)).filter(Boolean),documents:document ? documentSummary(document) : null};
+  return {...run,contacts:(run.contactIds || []).map(id=>store.state.contacts.find(c=>c.id===id)).filter(Boolean).map(contact=>({...contact,linkedIn:linkedInDrafts(store.state.jobs.find(j=>j.id===run.jobId) || {title:'open',company:contact.company},contact,store.state.profile)})),documents:document ? documentSummary(document) : null};
 }
+const pitchRequests=new WeakMap();
 export async function startJobPitch(jobId,data,store,queue,config={}) {
+  const previous=pitchRequests.get(store) || Promise.resolve();
+  const pending=previous.catch(()=>{}).then(()=>startReservedPitch(jobId,data,store,queue,config));
+  pitchRequests.set(store,pending);try{return await pending;}finally{if(pitchRequests.get(store)===pending)pitchRequests.delete(store);}
+}
+async function startReservedPitch(jobId,data,store,queue,config) {
+  await store.db.exec('BEGIN IMMEDIATE');
+  try {
+    await store.refresh();
+    const result=await reserveJobPitch(jobId,data,store,queue,config);
+    await store.db.exec('COMMIT');return result;
+  } catch(error){await store.db.exec('ROLLBACK');throw error;}
+}
+async function reserveJobPitch(jobId,data,store,queue,config) {
   const s=store.state,j=s.jobs.find(j=>j.id===jobId);
   if(!j || j.isDemo || j.archived || s.isDemo)fail('Choose an active, real job.',404);
   if(j.requiresSourceReview && data.sourceReviewed!==true)fail('Review this indexed listing on the original board before preparing a pitch.');
@@ -25,7 +48,7 @@ export async function startJobPitch(jobId,data,store,queue,config={}) {
   const run={id:id(),jobId,signature,sourceHash:scope,status:'queued',createdAt:now(),contactIds:[],options:{domain,allowCredits:data.allowCredits===true,allowSearch:data.allowSearch===true,useAI:data.useAI===true}};
   if(!s.applications.some(a=>a.jobId===jobId))s.applications.push({id:id(),jobId,stage:'Saved',notes:'Company pitch prepared from job feed',createdAt:now(),updatedAt:now(),isDemo:false,history:[{stage:'Saved',at:now(),source:'Company pitch preparation'}]});
   s.jobPitches=[run,...(s.jobPitches || []).slice(0,49)];
-  const task=await queue.enqueue('job.auto-pitch',{pitchId:run.id},{dedupeKey:`job-pitch:${run.id}`,maxAttempts:1});run.taskId=task.id;await store.save();
+  const task=await queue.enqueue('job.auto-pitch',{pitchId:run.id},{dedupeKey:`job-pitch:${run.id}`,maxAttempts:1});run.taskId=task.id;await store.save(true);
   return {pitch:pitchSummary(run,store)};
 }
 export async function buildJobPitch(task,store,queue,config,fetcher=fetch,dependencies={}) {

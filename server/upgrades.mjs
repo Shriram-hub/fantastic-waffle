@@ -155,7 +155,7 @@ export function upgradeRoutes(store, config, fetcher) {
         const data=await bodyJSON(req),row=await store.db.prepare("SELECT * FROM apply_tasks WHERE id=? AND token_hash=? AND status IN ('leased','needs-review','blocked')").get(data.taskId,valid.id);
         if(!row)fail('This application is no longer assigned to the paired browser.',409);
         const application=store.state.applications.find(a=>a.id===row.application_id),job=store.state.jobs.find(j=>j.id===application?.jobId),source=safeUrl(data.url);
-        if(!job || !source || !sameApplicationLocation(job.url,source) || !['Saved','Ready'].includes(application.stage))fail('Return to the queued application before filling.',409);
+        if(!job || !source || !sameApplicationLocation(job.url,source) || !['Saved','Ready','Outreach Sent'].includes(application.stage))fail('Return to the queued application before filling.',409);
         await store.db.prepare('UPDATE apply_tasks SET lease_until=? WHERE id=? AND token_hash=?').run(Date.now()+600000,row.id,valid.id);
         json(res,200,{profile:{...store.state.profile,master:candidateProfile(store.state.profile)},qa:store.state.settings.qaBank || [],resume:!!store.state.resume});return true;
       }
@@ -234,7 +234,7 @@ export function upgradeRoutes(store, config, fetcher) {
         } else if(data.status === "confirmed") {
           const evidence=text(data.evidence,500);
           if(row.status !== "submission-pending" || !details.submitAttemptAt || Date.now()-Date.parse(details.submitAttemptAt)>15*60000 || !/thank you for applying|application (?:has been )?(?:submitted|received|sent)|we have received your application|successfully submitted/i.test(evidence))fail("An ATS confirmation after a submission attempt is required.",409);
-          if(!["Saved","Ready","Applied"].includes(application.stage))fail("This application has already progressed past submission.",409);
+          if(!["Saved","Ready","Outreach Sent","Applied"].includes(application.stage))fail("This application has already progressed past submission.",409);
           details.confirmation={evidence,url:source.href,at:now()};
           application.stage="Applied";application.appliedAt=now();application.updatedAt=now();
           application.history.push({stage:"Applied",at:now(),source:`ATS confirmation: ${evidence}`});
@@ -394,8 +394,10 @@ export function upgradeRoutes(store, config, fetcher) {
       return true;
     }
     if (path === "/api/settings") {
+      if(data.brand!==undefined && (!data.brand || typeof data.brand.name!=='string' || !data.brand.name.trim() || data.brand.name.length>40 || !/^#[0-9a-f]{6}$/i.test(data.brand.accent || '')))fail('Choose a workspace name up to 40 characters and a six-digit hex accent color.');
       s.settings = {
         ...s.settings,
+        brand:data.brand ? {name:text(data.brand.name,40).trim(),accent:data.brand.accent} : s.settings.brand,
         greenhouseBoards: boardList(data.greenhouseBoards ?? s.settings.greenhouseBoards),
         leverBoards: boardList(data.leverBoards ?? s.settings.leverBoards),
         ashbyBoards: boardList(data.ashbyBoards ?? s.settings.ashbyBoards ?? []),
@@ -556,7 +558,7 @@ export function upgradeRoutes(store, config, fetcher) {
       if (data.approved !== true) fail("Approve opening these applications in your browser.");
       if (!Array.isArray(data.jobIds) || !data.jobIds.length || data.jobIds.length > 20) fail("Choose 1–20 jobs.");
       const jobs = [...new Set(data.jobIds)].map(jid => find(s.jobs, jid, "Job"));
-      if (jobs.some(j => s.applications.some(a => a.jobId === j.id && !["Saved", "Ready"].includes(a.stage)))) fail("Only Saved or Ready opportunities can be queued for form filling.");
+      if (jobs.some(j => s.applications.some(a => a.jobId === j.id && !["Saved", "Ready", "Outreach Sent"].includes(a.stage)))) fail("Only Saved, Ready or Outreach Sent opportunities can be queued for form filling.");
       if (jobs.some(j => !extensionAllowed(j.url))) fail('Choose public HTTPS application URLs. Grant each custom portal permission in the extension.');
       for (const j of jobs) if (!s.applications.some(a => a.jobId === j.id)) s.applications.push({
         id: id(),
@@ -593,7 +595,7 @@ export function upgradeRoutes(store, config, fetcher) {
       const row = await store.db.prepare("SELECT * FROM apply_tasks WHERE id=?").get(requeue[1]);
       if (!row || !["blocked", "needs-review", "leased", "submission-pending"].includes(row.status)) fail("This application cannot be requeued.", 409);
       const a = find(s.applications, row.application_id, "Application");
-      if (!["Saved", "Ready"].includes(a.stage)) fail("This opportunity is already past preparation.", 409);
+      if (!["Saved", "Ready", "Outreach Sent"].includes(a.stage)) fail("This opportunity is already past preparation.", 409);
       await store.db.prepare("UPDATE apply_tasks SET status='queued',token_hash=NULL,lease_until=NULL WHERE id=?").run(row.id);
       json(res, 200, {
         ok: true

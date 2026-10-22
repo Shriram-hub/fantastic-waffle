@@ -13,6 +13,7 @@ export default defineConfig({
       "/api": "http://127.0.0.1:3000",
       "/r": "http://127.0.0.1:3000",
       "/resume.css": "http://127.0.0.1:3000",
+      "/theme.js": "http://127.0.0.1:3000",
       "/print.js": "http://127.0.0.1:3000",
       "/favicon.svg": "http://127.0.0.1:3000",
     },

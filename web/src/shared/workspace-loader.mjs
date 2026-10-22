@@ -19,3 +19,24 @@ export function workspaceLoader(load,{delay=ms=>new Promise(resolve=>setTimeout(
     return request;
   };
 }
+
+// Own reconnect scheduling instead of stacking it on EventSource's fixed retry.
+// Close the previous socket before reconnecting, and stop completely on logout.
+export function connectWorkspaceEvents({handlers={},onConnection=()=>{},EventSourceClass=globalThis.EventSource,schedule=setTimeout,cancel=clearTimeout,random=Math.random}={}) {
+  let stream,timer,closed=false,attempt=0;
+  function connect() {
+    if(closed)return;
+    stream=new EventSourceClass('/api/events');
+    stream.addEventListener('ready',event=>{attempt=0;onConnection(true);handlers.ready?.(event);});
+    for(const [name,handler] of Object.entries(handlers))if(name!=='ready')stream.addEventListener(name,event=>{
+      if(name==='auth-required'){close();onConnection(false);}handler(event);
+    });
+    stream.onerror=()=>{
+      if(closed)return;stream.close();onConnection(false);cancel(timer);
+      const delay=Math.min(30000,1000*2**Math.min(attempt++,5)*(.85+random()*.3));
+      timer=schedule(connect,delay);
+    };
+  }
+  function close(){closed=true;cancel(timer);stream?.close();}
+  connect();return close;
+}

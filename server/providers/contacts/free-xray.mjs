@@ -1,3 +1,4 @@
+import {withDeadline,boundedFetcher} from '../deadline.mjs';
 import {id,now,text,emailValid,safeUrl,stripHtml} from '../../domain.mjs';
 import {remoteJSON} from '../http.mjs';
 import {publicCompanyPages} from './public-pages.mjs';
@@ -17,7 +18,7 @@ export function searchHTMLResults(html,engine) {
   return results.slice(0,10);
 }
 async function searchText(url,options,fetcher) {
-  const r=await fetcher(url,{...options,headers:{'User-Agent':'OrbitBot/0.8 (+career workspace; public search)','Accept':'text/html','Accept-Language':'en-US,en;q=0.8',...options.headers},redirect:'error',signal:AbortSignal.timeout(4000)});
+  const r=await fetcher(url,{...options,headers:{'User-Agent':'VeloceBot/1.0 (+career workspace; public search)','Accept':'text/html','Accept-Language':'en-US,en;q=0.8',...options.headers},redirect:'error',signal:AbortSignal.timeout(4000)});
   if(!r.ok){await r.body?.cancel();return '';}
   const reader=r.body?.getReader();if(!reader)return (await r.text()).slice(0,350000);
   const chunks=[];let length=0;
@@ -36,11 +37,11 @@ export async function searchCompanyPeople(company,domain,options={}) {
       const people=xrayPeople(results,company,domain);if(people.length)return {people,warnings};
     }catch(error){warnings.push(error.status ? error.message : `${provider} search is unavailable.`);}
   }
-  if(options.freeSearch!==false)for(const [engine,url,init] of [
+  if(options.freeSearch!==false) {const results=await Promise.allSettled([
     ['DuckDuckGo','https://lite.duckduckgo.com/lite/',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({q}).toString()}],
     ['DuckDuckGo',`https://html.duckduckgo.com/html/?${new URLSearchParams({q})}`,{}],
     ['Yahoo',`https://search.yahoo.com/search?${new URLSearchParams({p:q})}`,{}]
-  ])try {const people=xrayPeople(searchHTMLResults(await searchText(url,init,fetcher),engine),company,domain);if(people.length)return {people,warnings};}catch{}
+  ].map(async([engine,url,init])=>xrayPeople(searchHTMLResults(await searchText(url,init,fetcher),engine),company,domain)));const people=results.filter(r=>r.status==='fulfilled').flatMap(r=>r.value);if(people.length)return {people:[...new Map(people.map(p=>[p.linkedinUrl,p])).values()].slice(0,5),warnings};}
   warnings.push('No source-supported people were returned by public search. Browser-assisted import is available on LinkedIn company pages.');
   return {people:[],warnings};
 }
@@ -74,9 +75,12 @@ export function xrayPeople(results,company,domain) {
 // Zero-key fallback reads actual published recruiting addresses. Search snippets
 // require the optional search API; no public, unlimited LinkedIn search API exists.
 export async function findPublicContacts(job,company,options={}) {
-  const pages=await (options.pages || publicCompanyPages)(company.domain);
+  const results=await Promise.allSettled([
+    withDeadline(signal=>(options.pages || publicCompanyPages)(company.domain,{signal}),4000,options.signal),
+    withDeadline(signal=>options.searchPeople ? searchCompanyPeople(job.company,company.domain,{...options,fetcher:boundedFetcher(options.fetcher || fetch,signal)}) : {people:[]},4000,options.signal)
+  ]);
+  const pages=results[0].status==='fulfilled' ? results[0].value : [],searched=results[1].status==='fulfilled' ? results[1].value : {people:[],warnings:['Public people search reached its deadline.']};
   const contacts=[...publishedContacts(job.description,company.domain,job.url,job.company),...pages.flatMap(p=>publishedContacts(p.text,company.domain,p.url,job.company))];
-  const searched=options.searchPeople ? await searchCompanyPeople(job.company,company.domain,options) : {people:[]};
   for(const person of [...publicTeamPeople(pages,job.company,company.domain),...searched.people]) {
     const candidate=permuteEmails({...person,domainPattern:company.pattern})[0];
     if(candidate)contacts.push({...person,...candidate,id:id(),suppressed:false,isDemo:false,createdAt:now(),sources:person.sources || [{url:person.linkedinUrl}],verification:{provider:'Public source + email pattern',status:'unverified',reference:person.linkedinUrl || person.sources?.[0]?.url,result:'Guessed address; verify the mailbox before sending',at:now()}});

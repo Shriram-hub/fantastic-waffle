@@ -11,7 +11,7 @@ export async function extensionPackage(config={}) {
     entries.push({name:'config.json',bytes:Buffer.from(JSON.stringify(config))});
   }
   for(const {name,bytes} of entries) {
-    const path=Buffer.from(`orbit-extension/${name}`),checksum=crc32(bytes);
+    const path=Buffer.from(`veloce-ai-extension/${name}`),checksum=crc32(bytes);
     const header=Buffer.alloc(30);header.writeUInt32LE(0x04034b50);header.writeUInt16LE(20,4);header.writeUInt16LE(0x800,6);header.writeUInt16LE(33,12);header.writeUInt32LE(checksum,14);header.writeUInt32LE(bytes.length,18);header.writeUInt32LE(bytes.length,22);header.writeUInt16LE(path.length,26);
     const entry=Buffer.alloc(46);entry.writeUInt32LE(0x02014b50);entry.writeUInt16LE(20,4);entry.writeUInt16LE(20,6);entry.writeUInt16LE(0x800,8);entry.writeUInt16LE(33,14);entry.writeUInt32LE(checksum,16);entry.writeUInt32LE(bytes.length,20);entry.writeUInt32LE(bytes.length,24);entry.writeUInt16LE(path.length,28);entry.writeUInt32LE(offset,42);
     local.push(header,path,bytes);central.push(entry,path);offset+=header.length+path.length+bytes.length;

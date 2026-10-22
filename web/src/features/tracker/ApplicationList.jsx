@@ -10,7 +10,7 @@ export function ApplicationList({ list }) {
           <tr>
             <th>ROLE & COMPANY</th>
             <th>STAGE</th>
-            <th>UPDATED</th>
+            <th>MATCH</th><th>LAST ACTIVITY</th>
             <th />
           </tr>
         </thead>
@@ -21,7 +21,7 @@ export function ApplicationList({ list }) {
               <tr key={a.id}>
                 <td>
                   <div className="flex">
-                    <Company name={j?.company} />
+                    <Company name={j?.company} jobId={j?.id} logo={j?.companyLogo}/>
                     <div>
                       <strong>{j?.title}</strong>
                       <span className="muted">
@@ -33,7 +33,7 @@ export function ApplicationList({ list }) {
                 <td>
                   <Badge value={a.stage} />
                 </td>
-                <td>{fmt(a.updatedAt)}</td>
+                <td><span className="match-pill">{Number.isFinite(j?.match?.score) ? `${j.match.score}%` : '—'}</span></td><td><time dateTime={a.updatedAt}>{fmt(a.updatedAt)}</time></td>
                 <td>
                   <Button
                     small

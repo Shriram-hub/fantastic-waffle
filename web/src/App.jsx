@@ -12,11 +12,21 @@ import { Automation } from './features/automation/Automation.jsx';
 import { Connections } from './features/connections/Connections.jsx';
 import {CareerWorkspace} from './features/career/CareerWorkspace.jsx';
 import { ModalContent } from './features/modals/ModalContent.jsx';
-import { symbols, names } from './shared/navigation.mjs';
-import {Icon} from './shared/Icon.jsx';
+import {navGroups,names,navigationCount} from './shared/navigation.mjs';
+import {CommandPalette} from './shared/CommandPalette.jsx';
+import {applyTheme,applyBrand,savedPreference,DEFAULT_BRAND} from './shared/theme.mjs';
+import {WorkerStatus} from './shared/QueueNowButton.jsx';
+import {TailoredDocuments} from './features/resume/TailoredDocuments.jsx';
+import {Icon,BrandMark} from './shared/Icon.jsx';
 import {SignIn,WorkspaceError,authMessages} from './features/auth/SignIn.jsx';
-import {workspaceLoader} from './shared/workspace-loader.mjs';
+import {workspaceLoader,connectWorkspaceEvents} from './shared/workspace-loader.mjs';
 export default function App() {
+  const [theme,setTheme]=useState(()=>savedPreference('veloce-theme','dark'));
+  const [collapsed,setCollapsed]=useState(()=>savedPreference('veloce-sidebar','expanded')==='collapsed');
+  const [palette,setPalette]=useState(false),[worker,setWorker]=useState({status:'offline'});
+  const toggleTheme=()=>setTheme(t=>t==='dark' ? 'light' : 'dark');
+  useEffect(()=>applyTheme(theme),[theme]);
+  useEffect(()=>{try{localStorage.setItem('veloce-sidebar',collapsed ? 'collapsed' : 'expanded');}catch{}},[collapsed]);
   const [careerJobId,setCareerJobId]=useState('');
   const [session,setSession]=useState(null),[retrying,setRetrying]=useState(false),[authError,setAuthError]=useState('');
   const [data, setData] = useState(null),
@@ -39,7 +49,7 @@ export default function App() {
   if(!loader.current)loader.current=workspaceLoader(async()=>{
     const s=await api('/bootstrap');
     setData(s.data);setIntegrations(s.integrations);setAccounts(s.accounts);
-    setTasks(s.tasks);setVault(s.vault);setAutopilot(s.autopilot);setSearch(s.search);setSetup(s.setup);
+    setTasks(s.tasks);setWorker(s.worker || {status:'offline'});setVault(s.vault);setAutopilot(s.autopilot);setSearch(s.search);setSetup(s.setup);
     setError(null);
   });
   const reload=options=>loader.current(options);
@@ -83,31 +93,21 @@ export default function App() {
     const listen = () => setRoute(location.hash.slice(1) || "jobs");
     window.addEventListener("hashchange", listen);
     listen(); // Capture a deep link changed while the session was loading.
-    const events = new EventSource('/api/events');
-    events.addEventListener('auth-required',()=>window.dispatchEvent(new Event('orbit:auth-required')));
     let refreshTimer;
-    events.addEventListener('ready', () => {setConnected(true);reloadRef.current().catch(() => {});});
-    events.onerror=()=>setConnected(false);
-    events.addEventListener('task', (event) => {
-      const task = JSON.parse(event.data);
-      if (task.kind==='resume.parse' && task.status==='completed') notify('Résumé ready. Matching jobs are being discovered.');
-      if (['failed','unknown'].includes(task.status)) notify('A background task needs attention. Check Automation.',true);
-      clearTimeout(refreshTimer);
-      refreshTimer = setTimeout(() => reloadRef.current({fresh:true}).catch(() => {}), 150);
-    });
-    events.addEventListener('autopilot', (event) => {
-      const item = JSON.parse(event.data);
-      if(['review','queued','blocked'].includes(item.kind)) notify(item.message,item.kind==='blocked');
-      clearTimeout(refreshTimer);
-      refreshTimer = setTimeout(() => reloadRef.current({fresh:true}).catch(() => {}), 150);
-    });
-    events.addEventListener('search',()=>{
-      clearTimeout(refreshTimer);
-      refreshTimer=setTimeout(()=>reloadRef.current({fresh:true}).catch(()=>{}),350);
-    });
+    const refresh=()=>{clearTimeout(refreshTimer);refreshTimer=setTimeout(()=>reloadRef.current({fresh:true}).catch(()=>{}),200);};
+    const decode=fn=>event=>{try{fn(JSON.parse(event.data));}catch{}};
+    const disconnect=connectWorkspaceEvents({onConnection:setConnected,handlers:{
+      ready:()=>reloadRef.current().catch(()=>{}),
+      'auth-required':()=>window.dispatchEvent(new Event('orbit:auth-required')),
+      worker:decode(value=>{setWorker(value);setConnected(true);}),
+      unavailable:()=>{setConnected(false);setWorker({status:'offline'});},
+      task:decode(task=>{if(task.kind==='resume.parse' && task.status==='completed')notify('Résumé ready. Matching jobs are being discovered.');if(['failed','unknown'].includes(task.status))notify('A background task needs attention. Check Autopilot.',true);refresh();}),
+      autopilot:decode(item=>{if(['review','queued','blocked'].includes(item.kind))notify(item.message,item.kind==='blocked');refresh();}),
+      search:refresh
+    }});
     return () => {
       window.removeEventListener("hashchange", listen);
-      events.close();
+      disconnect();
       clearTimeout(refreshTimer);
     };
   }, [session?.authenticated]);
@@ -116,17 +116,22 @@ export default function App() {
     const timer = setTimeout(() => setNotice(null), 9000);
     return () => clearTimeout(timer);
   }, [notice]);
+  useEffect(()=>{
+    const key=event=>{if(event.repeat)return;if((event.metaKey || event.ctrlKey) && event.key.toLowerCase()==='k'){event.preventDefault();if(session?.authenticated){setModal(null);setPalette(v=>!v);}}if(event.key==='Escape')setMobile(false);};
+    window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);
+  },[session?.authenticated]);
+  useEffect(()=>applyBrand(data?.settings?.brand),[data?.settings?.brand?.name,data?.settings?.brand?.accent]);
   if(session && !session.authenticated)return <SignIn session={session} initialError={authError} onSignedIn={checkSession}/>;
   if (error && !data)return <WorkspaceError message={error.message} reference={error.reference} busy={retrying} onRetry={()=>session ? (setRetrying(true),reload().catch(setError).finally(()=>setRetrying(false))) : checkSession()}/>;
   if (!data)
     return (
       <div className="loading">
-        <span className="logo-word">orbit</span>
+        <BrandMark size={48}/><span className="logo-word">Veloce AI</span>
         <p>Getting your workspace ready…</p>
       </div>
     );
   const app = {
-    careerJobId,setCareerJobId,
+    careerJobId,setCareerJobId,theme,toggleTheme,worker,connected,
     data,
     integrations,
     accounts,
@@ -148,6 +153,7 @@ export default function App() {
       jobs: Jobs,
       applications: Applications,
       profile: Profile,
+      documents:TailoredDocuments,
       contacts: Contacts,
       outreach: Outreach,
       inbox: Inbox,
@@ -155,180 +161,39 @@ export default function App() {
       connections: Connections,
       career:CareerWorkspace,
     }[route] || Overview;
-  return (
-    <Context.Provider value={app}>
-      <a
-        className="skip-link"
-        href="#main"
-        onClick={(e) => {
-          e.preventDefault();
-          document.getElementById("main")?.focus();
-        }}
-      >
-        Skip to content
-      </a>
-      <div className="layout">
-        <aside className={`sidebar${mobile ? " open" : ""}`}>
-          <div className="brand">
-            <span className="logo-mark">◉</span>
-            <span className="logo-word">orbit</span>
-            <small>CAREER WORKSPACE</small>
-          </div>
-          <div className="workspace-switch">
-            <span className="workspace-mark">O</span>
-            <div>
-              Your career, in motion
-              <p className="muted tiny">
-                {data.isDemo ? "Fictional sample data" : "Personal workspace"}
-              </p>
-            </div>
-          </div>
-          <div className="nav-scroll">
-            <p className="nav-label">WORKSPACE</p>
-            <nav className="nav" aria-label="Workspace">
-              {[
-                "jobs",
-                "overview",
-                "applications",
-                "career",
-                "profile",
-                "contacts",
-                "outreach",
-                "inbox",
-                "automation",
-              ].map((key) => (
-                <button
-                  key={key}
-                  className={`nav-item${route === key ? " active" : ""}`}
-                  onClick={() => go(key)}
-                  aria-current={route === key ? "page" : undefined}
-                >
-                  <Icon name={key}/>
-                  {names[key]}
-                  {key === "automation" &&
-                    tasks.tasks.some(
-                      (t) => t.status === "queued" || t.status === "running",
-                    ) && (
-                      <span className="nav-count">
-                        {
-                          tasks.tasks.filter((t) =>
-                            ["queued", "running"].includes(t.status),
-                          ).length
-                        }
-                      </span>
-                    )}
-                </button>
-              ))}
-            </nav>
-            <div className="sidebar-section">
-              <button
-                className={`nav-item${route === "connections" ? " active" : ""}`}
-                onClick={() => go("connections")}
-              >
-                <Icon name="connections"/>Connections & setup
-              </button>
-            </div>
-          </div>
-          <div className="sidebar-spacer" />
-          <div className="help-box">
-            <span className="help-eyebrow"><span className="status-dot"/>AUTOMATIC DISCOVERY</span>
-            <strong>Your search keeps going.</strong>
-            <p>Set your roles once. Orbit checks public feeds and company boards every two hours.</p>
-            <Button small onClick={() => go('jobs')}>
-              Customize your search
-            </Button>
-          </div>
-          <div className="profile-mini">
-            <span className="avatar">
-              {data.profile.name
-                ?.split(" ")
-                .map((x) => x[0])
-                .slice(0, 2)
-                .join("") || "YOU"}
-            </span>
-            <button onClick={() => go("profile")}>
-              <strong>
-                {data.profile.name || "Make this workspace yours"}
-              </strong>
-              <small>
-                {accounts.length ? "Mailbox connected" : "Personal workspace"}
-              </small>
-            </button>
-          </div>
-        </aside>
-        <div className="main-shell">
-          <header className="topbar">
-            <div className="flex">
-              <button
-                className="icon-button mobile-only"
-                onClick={() => setMobile(!mobile)}
-                aria-label="Toggle navigation"
-              >
-                ☰
-              </button>
-              <span className="crumb">
-                Workspace <span>›</span>
-                <strong>{names[route] || "Overview"}</strong>
-              </span>
-            </div>
-            <div className="topbar-actions">
-              {session?.googleConfigured && session.method==='password' && <a className="btn small" href="/api/auth/google/start">{session.googleLinked ? 'Use Google account' : 'Link Google sign-in'}</a>}
-              {session?.required && <Button small onClick={signOut}>Sign out</Button>}
-              <span className={`connection-indicator ${connected ? 'online' : ''}`}><span className="status-dot"/>{connected ? 'Live updates' : 'Connecting…'}</span>
-              <span className="muted">
-                {new Date().toLocaleDateString(undefined, {
-                  month: "short",
-                  day: "numeric",
-                })}
-              </span>
-              <Button small onClick={() => go("connections")}>
-                <Icon name="connections"/>{busy ? "Working…" : "Connection status"}
-              </Button>
-            </div>
-          </header>
-          <main id="main" tabIndex={-1}>
-            {authError && <div className="banner" role="alert">{authError}<button onClick={()=>setAuthError('')}>Dismiss</button></div>}
-            {data.isDemo && (
-              <div className="banner">
-                <span>
-                  <strong>Sample workspace.</strong> Jobs, contacts, and events
-                  are fictional.
-                </span>
-                <button
-                  onClick={() => setModal({ type: "reset", demo: false })}
-                >
-                  Start my workspace →
-                </button>
-              </div>
-            )}
-            <View key={route} />
-            <footer className="page-footer">
-              Orbit v0.5 · Your personal career workspace
-            </footer>
-          </main>
-        </div>
-      </div>
-      {modal && <ModalContent modal={modal} close={() => setModal(null)} />}
-      {notice && (
-        <div
-          className={`notification${notice.error ? " error" : ""}`}
-          role="status"
-        >
-          {notice.message}
-          <button
-            onClick={() => setNotice(null)}
-            aria-label="Dismiss notification"
-          >
-            ×
-          </button>
-        </div>
-      )}
-    </Context.Provider>
-  );
+  const brand={...DEFAULT_BRAND,...data.settings.brand};
+  const mailbox=accounts[0];
+  return <Context.Provider value={app}>
+    <a className="skip-link" href="#main" onClick={e=>{e.preventDefault();document.getElementById('main')?.focus();}}>Skip to content</a>
+    <div className={`layout ${collapsed ? 'is-collapsed' : ''}`}>
+      {mobile && <button className="nav-backdrop" aria-label="Close navigation" onClick={()=>setMobile(false)}/>}
+      <aside className={`sidebar ${mobile ? 'open' : ''}`}>
+        <div className="brand"><BrandMark/><div className="brand-copy"><strong>{brand.name}</strong><small>CAREER & OUTREACH OS</small></div><button className="icon-button collapse-sidebar" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} onClick={()=>setCollapsed(v=>!v)}><Icon name="sidebar"/></button></div>
+        <button className="workspace-switch" onClick={()=>go('connections')} title="Workspace settings"><span className="workspace-mark">{(data.profile.name || 'My').slice(0,1)}</span><span className="workspace-copy"><strong>{data.profile.name ? `${data.profile.name.split(' ')[0]}’s workspace` : 'My workspace'}</strong><small>{data.isDemo ? 'Sample environment' : 'Personal workspace'}</small></span><span className="workspace-arrow">⌄</span></button>
+        <div className="nav-scroll"><nav className="nav" aria-label="Workspace">{navGroups.map(group=><div className="nav-group" key={group.label}><p className="nav-label">{group.label}</p>{group.routes.map(key=>{const count=navigationCount(key,app);return <button key={key} className={`nav-item ${route===key ? 'active' : ''}`} onClick={()=>go(key)} aria-current={route===key ? 'page' : undefined} title={names[key]}><Icon name={key}/><span className="nav-name">{names[key]}</span>{count>0 && <span className="nav-count">{count>999 ? '999+' : count}</span>}</button>;})}</div>)}</nav></div>
+        <button className="sidebar-command" onClick={()=>setPalette(true)} title="Search workspace"><Icon name="command"/><span>Search anything</span><kbd>⌘ K</kbd></button>
+        <div className="profile-mini"><span className="avatar">{data.profile.name?.split(' ').map(x=>x[0]).slice(0,2).join('') || 'ME'}</span><button onClick={()=>go('profile')}><strong>{data.profile.name || 'Complete your profile'}</strong><small>{accounts.length ? 'Mailbox connected' : 'Connect a mailbox'}</small></button><span className={`status-dot ${connected ? '' : 'warning'}`} title={connected ? 'Live updates connected' : 'Live updates reconnecting'}/></div>
+      </aside>
+      <div className="main-shell" inert={mobile ? true : undefined}><header className="topbar">
+        <div className="topbar-location"><button className="icon-button mobile-only" onClick={()=>setMobile(v=>!v)} aria-label="Toggle navigation" aria-expanded={mobile}><Icon name="sidebar"/></button><span className="crumb"><span>Workspace</span><span className="crumb-divider">/</span><strong>{names[route] || 'Overview'}</strong></span></div>
+        <div className="topbar-actions"><WorkerStatus/><button className="command-trigger" onClick={()=>setPalette(true)} aria-label="Open command palette"><Icon name="jobs" size={16}/><span>Search</span><kbd>⌘ K</kbd></button><button className="provider-pill" title={mailbox ? `${mailbox.email} · ${setup.aiConfigured ? setup.geminiConfigured ? 'Gemini configured' : 'AI configured' : 'AI not configured'}` : 'Connect your mailbox and AI provider'} onClick={()=>go('connections')}><span className={`status-dot ${mailbox ? '' : 'warning'}`}/><span>{mailbox ? mailbox.provider==='google' ? 'Gmail' : 'Outlook' : 'No mailbox'}<span className="pill-divider">/</span>{setup.aiConfigured ? setup.geminiConfigured ? 'Gemini' : 'AI ready' : 'No AI'}</span></button><button className="icon-button theme-toggle" aria-label={`Switch to ${theme==='dark' ? 'light' : 'dark'} mode`} title={`Switch to ${theme==='dark' ? 'light' : 'dark'} mode`} onClick={toggleTheme}><Icon name={theme==='dark' ? 'sun' : 'moon'}/></button>{session?.googleConfigured && session.method==='password' && <a className="link-google" href="/api/auth/google/start">{session.googleLinked ? 'Use Google' : 'Link Google'}</a>}{session?.required && <button className="icon-button sign-out" onClick={signOut} title="Sign out" aria-label="Sign out"><Icon name="arrow"/></button>}</div>
+      </header><main id="main" tabIndex={-1}>
+        {authError && <div className="banner" role="alert">{authError}<button onClick={()=>setAuthError('')}>Dismiss</button></div>}
+        {data.isDemo && <div className="banner"><span><strong>Sample workspace.</strong> Jobs, contacts, and events are fictional.</span><button onClick={()=>setModal({type:'reset',demo:false})}>Start my workspace →</button></div>}
+        <View key={route}/><footer className="page-footer"><span>{brand.name} <span className="footer-dot">·</span> Autonomous Career & Cold Outreach OS</span><span><span className={`status-dot ${connected ? '' : 'warning'}`}/>{connected ? 'Workspace synced' : 'Reconnecting live updates'}</span></footer>
+      </main></div>
+    </div>
+    {modal && <ModalContent modal={modal} close={()=>setModal(null)}/>}
+    {palette && <CommandPalette close={()=>setPalette(false)}/>}
+    {notice && <div className={`notification ${notice.error ? 'error' : ''}`} role="status"><span>{notice.message}</span><button onClick={()=>setNotice(null)} aria-label="Dismiss notification">×</button></div>}
+  </Context.Provider>;
 }
+
 export { WorkspaceContext, stages, api } from './shared/workspace.jsx';
 export { Button, Badge, Heading } from './shared/ui.jsx';
 export { Overview, Jobs, Applications, Profile, Contacts, Outreach, Inbox, Automation, Connections, SignIn, WorkspaceError, CareerWorkspace };
 export {CareerPlanner} from './features/career/CareerPlanner.jsx';
 export {CareerPrep} from './features/career/CareerPrep.jsx';
 export {StoryBank} from './features/career/StoryBank.jsx';
+
+export {CommandPalette,TailoredDocuments};

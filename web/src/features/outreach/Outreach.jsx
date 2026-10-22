@@ -163,7 +163,7 @@ export function Outreach() {
               window. These settings do not guarantee inbox placement.
             </p>
             <p className="notice">
-              No real messages leave Orbit until the server enables sending and
+              No real messages leave Veloce AI until the server enables sending and
               you approve the campaign. Unknown provider acceptance is held for
               reconciliation.
             </p>

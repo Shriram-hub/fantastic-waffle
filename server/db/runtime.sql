@@ -74,3 +74,7 @@ END $migration$;
 CREATE TABLE IF NOT EXISTS orbit_runtime.discovered_boards(id TEXT PRIMARY KEY,source TEXT NOT NULL,slug TEXT NOT NULL,status TEXT NOT NULL,body TEXT NOT NULL,checked_at BIGINT NOT NULL);
 CREATE TABLE IF NOT EXISTS orbit_runtime.outreach_company_budget(domain TEXT NOT NULL,email TEXT NOT NULL,task_id TEXT NOT NULL,status TEXT NOT NULL,updated_at BIGINT NOT NULL,PRIMARY KEY(domain,email));
 CREATE INDEX IF NOT EXISTS outreach_company_window ON orbit_runtime.outreach_company_budget(domain,updated_at);
+
+-- Veloce AI: one first-touch reservation per workspace / normalized email / role.
+CREATE TABLE IF NOT EXISTS orbit_runtime.outreach_job_reservations(workspace_id TEXT NOT NULL,contact_email TEXT NOT NULL CHECK(contact_email=lower(trim(contact_email))),job_id TEXT NOT NULL,campaign_id TEXT NOT NULL,task_id TEXT NOT NULL,created_at BIGINT NOT NULL,PRIMARY KEY(workspace_id,contact_email,job_id));
+CREATE TABLE IF NOT EXISTS orbit_runtime.worker_health(id TEXT PRIMARY KEY,status TEXT NOT NULL,heartbeat_at BIGINT NOT NULL);

@@ -5,12 +5,14 @@ export const stages = [
   "Saved",
   "Ready",
   "Applied",
+  "Outreach Sent",
   "Assessment",
   "Interview",
   "Interview scheduled",
   "Offer",
   "Rejected",
   "Withdrawn",
+  "Archived",
 ];
 export const split = (s) =>
     String(s || "")

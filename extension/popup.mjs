@@ -11,13 +11,13 @@ form.addEventListener("submit", async (event) => {
       (u.protocol !== "https:" &&
         !["127.0.0.1", "localhost"].includes(u.hostname))
     )
-      throw Error("Use HTTPS or a loopback Orbit address.");
+      throw Error("Use HTTPS or a loopback Veloce AI address.");
     if (u.protocol === "https:") {
       const granted = await chrome.permissions.request({
         origins: [`${u.origin}/*`],
       });
       if (!granted)
-        throw Error("Access to this Orbit address was not granted.");
+        throw Error("Access to this Veloce AI address was not granted.");
     }
     await chrome.storage.session.set({
       base: u.origin,
@@ -47,7 +47,7 @@ document.querySelector("#forget").addEventListener("click", async () => {
   status.textContent = "Connection forgotten.";
 });
 const saved = await chrome.storage.session.get(["base", "lastResult"]);
-try{const connection=await chrome.runtime.sendMessage({type:'connection-status'});if(connection?.base)form.elements.base.value=connection.base;status.textContent=connection?.paired ? `Connected to ${connection.base}. Review and submit each application yourself.` : 'Open Orbit → Connections → Pair extension with this workspace.';}catch{status.textContent='Open Orbit Connections to pair this extension.';}
+try{const connection=await chrome.runtime.sendMessage({type:'connection-status'});if(connection?.base)form.elements.base.value=connection.base;status.textContent=connection?.paired ? `Connected to ${connection.base}. Review and submit each application yourself.` : 'Open Veloce AI → Connections → Pair extension with this workspace.';}catch{status.textContent='Open Veloce AI Connections to pair this extension.';}
 if(!saved.base)try{const configured=await (await fetch(chrome.runtime.getURL('config.json'))).json();if(configured.serverUrl)form.elements.base.value=configured.serverUrl;}catch{}
 if (saved.base) form.elements.base.value = saved.base;
 if (saved.lastResult)

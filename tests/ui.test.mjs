@@ -25,7 +25,7 @@ test("React views render populated/empty states and escape untrusted profile and
   t.after(() => rm(".test-build", { recursive: true, force: true }));
   const views = await import(`${path.href}?t=${Date.now()}`);
   const signin=renderToStaticMarkup(React.createElement(views.SignIn,{session:{googleConfigured:true,googleLinked:false,passwordEnabled:true},onSignedIn(){}}));
-  assert.match(signin,/Continue with Google/);assert.match(signin,/Workspace password/);assert.match(signin,/first visit|First visit/);
+  assert.match(signin,/Veloce AI/);assert.match(signin,/Autonomous Career &amp; Cold Outreach OS/);assert.ok(!signin.includes('Prototype'));assert.match(signin,/Continue with Google/);assert.match(signin,/Workspace password/);assert.match(signin,/first visit|First visit/);
   const recovery=renderToStaticMarkup(React.createElement(views.WorkspaceError,{message:'Please retry',reference:'safe-id',onRetry(){}}));assert.match(recovery,/Try again/);assert.match(recovery,/safe-id/);
   for (const demo of [true, false]) {
     const data = initialState(demo);
@@ -59,6 +59,8 @@ test("React views render populated/empty states and escape untrusted profile and
       "Inbox",
       "Automation",
       "Connections",
+      "TailoredDocuments",
+      "CommandPalette",
       'CareerWorkspace',
     ]) {
       const html = renderToStaticMarkup(
@@ -70,6 +72,9 @@ test("React views render populated/empty states and escape untrusted profile and
       );
       assert.ok(html.length > 100);
       if(name==='Jobs') {assert.match(html,/Discover your next role/);assert.match(html,/Save &amp; find jobs/);assert.match(html,/Choose discovery sources/);}
+      if(name==='Overview'){assert.match(html,/Your opportunity funnel/);assert.match(html,/Today’s action queue/);assert.match(html,/Auto-Pitch Top 5 Jobs/);}
+      if(name==='Applications'){assert.match(html,/Kanban Board/);assert.match(html,/Compact Table/);assert.match(html,/Outreach Sent/);assert.match(html,/OA \/ Assessment/);assert.match(html,/Archived/);}
+      if(name==='CommandPalette'){assert.match(html,/role="combobox"/);assert.match(html,/Run Job Discovery Now/);assert.match(html,/Test Mailbox Connection/);}
       if(name==='Connections') assert.match(html,/Free job discovery/);
       if(name==='Contacts'){assert.match(html,/Find company contacts/);assert.match(html,/Use Hunter search/);assert.match(html,/Public-only discovery/);}
       if(name==='CareerWorkspace'){assert.match(html,/Interview prep/);assert.match(html,/STAR stories/);assert.match(html,/Search analytics/);}
@@ -83,4 +88,26 @@ test("React views render populated/empty states and escape untrusted profile and
       assert.ok(html.length>200);assert.ok(!html.includes('<script>alert(1)</script>'));
     }
   }
+});
+
+
+test('Command Palette searches workspace entities and executes concrete commands',async()=>{
+  const {commandResults,executeCommand,commandDefinitions}=await import('../web/src/shared/commands.mjs');
+  const data={jobs:[{id:'job',title:'Financial Analyst',company:'Acme'}],contacts:[{id:'person',name:'Acme recruiter',company:'Acme',email:'hr@acme.com'}],applications:[{id:'application',jobId:'job',stage:'Applied'}]};
+  const results=commandResults('Acme',data);assert.ok(['job','contact','application'].every(type=>results.some(r=>r.type===type)));
+  const calls=[],downloads=[],modals=[],routes=[];let toggles=0;const app={data,accounts:[{id:'mail'}],go:r=>routes.push(r),setModal:m=>modals.push(m),toggleTheme:()=>toggles++,perform:fn=>fn(),notify:()=>{}};
+  const dependencies={api:async(path,body)=>{calls.push({path,body});return {message:'Queued'};},download:url=>downloads.push(url)};
+  for(const command of commandDefinitions)await executeCommand({...command,type:'command'},app,dependencies);
+  assert.equal(toggles,1);assert.ok(routes.includes('profile'));assert.deepEqual(downloads,['/api/export/contacts']);assert.deepEqual(calls.map(c=>c.path),['/jobs/discover','/queue/flush','/mail/mail/test-inbox']);assert.ok(!calls.some(c=>c.path.includes('test-send')));
+  for(const result of results.filter(r=>r.type!=='command' && r.type!=='route'))await executeCommand(result,app,dependencies);
+  assert.deepEqual(modals.map(m=>m.type),['job','contact-detail','application']);
+});
+test('Kanban stage grouping preserves detailed states until an explicit valid move',async()=>{
+  const {applicationColumn,applicationTransition}=await import('../web/src/features/tracker/kanban.mjs');
+  assert.equal(applicationColumn({stage:'Ready'}),'Saved');assert.equal(applicationColumn({stage:'Interview scheduled'}),'Interview');assert.equal(applicationColumn({stage:'Rejected'}),'Archived');assert.equal(applicationTransition({stage:'Interview scheduled'},'Interview'),null);assert.deepEqual(applicationTransition({stage:'Applied'},'Assessment'),{stage:'Assessment'});assert.throws(()=>applicationTransition({stage:'Applied'},'Made up'),/valid/);
+});
+test('Live document keyword meter checks exact résumé terms without pretending to predict ATS outcomes',async()=>{
+  const {keywordCoverage}=await import('../web/src/features/resume/document-keywords.mjs');
+  const coverage=keywordCoverage({title:'Financial Analyst',description:'SQL Excel Python Python forecasting',tags:['SQL','Python']},{headline:'Financial Analyst',sections:[{heading:'Skills',lines:['SQL Excel forecasting']}],coverLetter:['Python']});
+  assert.ok(coverage.present.includes('sql'));assert.ok(coverage.missing.includes('python'));assert.ok(!coverage.present.includes('python'));assert.ok(coverage.percent>0 && coverage.percent<100);
 });
