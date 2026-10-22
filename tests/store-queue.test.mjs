@@ -144,3 +144,13 @@ test("cancel and backoff preserve work and expose a bounded activity log", (t) =
   assert.equal(q.get(task.id).status, "cancelled");
   assert.equal(q.logs(task.id)[0].message, "Import started");
 });
+
+test('SQLite detached timers leave the request snapshot without losing request isolation',async t=>{
+  const store=openStore(':memory:');t.after(()=>store.close());const root=store.state;let later;
+  await store.run(async()=>{
+    const request=store.state;request.profile.name='Unsaved request';
+    later=store.detached(()=>new Promise(resolve=>setImmediate(()=>resolve(store.state))));
+    assert.equal(store.state,request);
+  });
+  assert.equal(await later,root);assert.notEqual((await later).profile.name,'Unsaved request');
+});

@@ -217,3 +217,8 @@ test('floating copilot mounts an accessible open Shadow DOM without inserting gl
   const source=await readFile(new URL('../extension/copilot.js',import.meta.url),'utf8'),dom=new JSDOM('<style>button {font-size:80px!important}</style><p>Host application</p>',{url:'https://jobs.lever.co/example/role',runScripts:'outside-only'});
   try{dom.window.eval(source);const host=dom.window.document.getElementById('orbit-career-copilot');assert.ok(host.shadowRoot);assert.equal(host.shadowRoot.mode,'open');assert.match(host.shadowRoot.querySelector('#launch').textContent,/Veloce AI/);assert.match(host.shadowRoot.querySelector('style').textContent,/:host\{all:initial/);assert.equal(dom.window.document.querySelectorAll('style').length,1);assert.equal(host.style.getPropertyPriority('z-index'),'important');}finally{dom.window.close();}
 });
+
+test('authenticated SSE connections create long-lived timers outside the workspace snapshot',async t=>{
+  const store=workspace(t),detach=store.detached;let calls=0;store.detached=fn=>{calls++;return detach(fn);};
+  const w=await apiWorkspace(t,store),res=await w.call('/api/events');assert.equal(res.status,200);assert.match(res.headers.get('content-type'),/text\/event-stream/);assert.equal(calls,1);await res.body.cancel();
+});

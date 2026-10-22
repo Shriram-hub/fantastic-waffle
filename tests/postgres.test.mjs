@@ -142,3 +142,13 @@ test('PostgreSQL reuses a role/email reservation across campaigns and exposes a 
   await assert.rejects(store.db.prepare('INSERT INTO outreach_job_reservations(workspace_id,contact_email,job_id,campaign_id,task_id,created_at) VALUES(?,?,?,?,?,?)').run('local','hr@company.com','job','third','third',Date.now()),/duplicate key|unique constraint/i);
   assert.equal((await workerStatus(store)).status,'offline');await workerHeartbeat(store,'processing');assert.equal((await workerStatus(store)).status,'processing');await store.db.prepare('UPDATE worker_health SET heartbeat_at=?').run(Date.now()-60000);assert.equal((await workerStatus(store)).status,'offline');
 });
+
+test('PostgreSQL detached timers release request snapshots and session context',async t=>{
+  const db=new PGlite();t.after(()=>db.close());const store=await openPostgresStore({},poolFor(db)),root=store.state;let later;
+  await store.run(async()=>{
+    const request=store.state;request.profile.name='Unsaved request';
+    later=store.detached(()=>new Promise(resolve=>setImmediate(()=>resolve(store.state))));
+    assert.equal(store.state,request);
+  });
+  assert.equal(await later,root);assert.notEqual((await later).profile.name,'Unsaved request');
+});

@@ -277,6 +277,8 @@ export function openStore(directory) {
       return (context.getStore() || root).state;
     },
     save,
+    // Long-lived SSE timers must not keep a request's index snapshot alive.
+    detached(fn) {return context.exit(fn);},
     run(fn) {
       return context.run(snapshot(), fn);
     },

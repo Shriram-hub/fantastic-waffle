@@ -188,7 +188,7 @@ export function createApp({
         ok: true,
         version: "0.5.0"
       });
-      if (method === "GET" && path === "/api/events") return events.connect(req,res);
+      if (method === "GET" && path === "/api/events") return store.detached ? store.detached(()=>events.connect(req,res)) : events.connect(req,res);
       if(method==='POST' && path==='/api/queue/flush') {
         await bodyJSON(req);
         const due=await store.db.prepare("SELECT count(*) AS count FROM tasks WHERE status='queued' AND run_at<=?").get(Date.now());

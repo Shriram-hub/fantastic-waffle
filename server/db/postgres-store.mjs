@@ -129,6 +129,7 @@ export async function openPostgresStore(config = process.env, suppliedPool) {
   return {
     kind:'postgres', directory:':postgres:', db,
     get state() { return (context.getStore() || root).state; },
+    detached(fn) {return context.exit(()=>session.exit(fn));},
     async run(fn) { return withSession(async () => context.run(await snapshot(),fn)); },
     async refresh() { const next = await snapshot(), current = context.getStore(); if (current) Object.assign(current,next); else root=next; return next.state; },
     async save(inTransaction=false) {
