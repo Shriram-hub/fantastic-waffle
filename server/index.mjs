@@ -86,9 +86,10 @@ export function createApp({
   const auth=workspaceAuth(store,config,fetcher);
   const syncLocks = new Set();
   let sendLock = false;
-  if (config.GREENHOUSE_BOARDS && !store.state.settings.greenhouseBoards.length) store.state.settings.greenhouseBoards = boardList(config.GREENHOUSE_BOARDS);
-  if (config.LEVER_BOARDS && !store.state.settings.leverBoards.length) store.state.settings.leverBoards = boardList(config.LEVER_BOARDS);
-  const ready = Promise.resolve(store.save());
+  let settingsChanged=false;
+  if (config.GREENHOUSE_BOARDS && !store.state.settings.greenhouseBoards.length) {store.state.settings.greenhouseBoards = boardList(config.GREENHOUSE_BOARDS);settingsChanged=true;}
+  if (config.LEVER_BOARDS && !store.state.settings.leverBoards.length) {store.state.settings.leverBoards = boardList(config.LEVER_BOARDS);settingsChanged=true;}
+  const ready = settingsChanged ? Promise.resolve(store.save()) : Promise.resolve();
   const json = (res, status, data) => {
     let payload=Buffer.from(JSON.stringify(data));
     const gzip=payload.length>12000 && /\bgzip\b/.test(res.req?.headers['accept-encoding'] || '');
@@ -127,7 +128,24 @@ export function createApp({
       vault:{versions:versions.map(v=>({id:v.id,kind:v.kind,title:JSON.parse(v.body).title,createdAt:v.created_at})),links:resumeLinkSummaries(links,store.state)},
       tasks:{tasks,applications:applications.map(a=>({...a,details:JSON.parse(a.body)}))}};
   }
-  const server = createServer((req, res) => ready.then(() => store.run(async () => {
+  async function serveAsset(req,res,path) {
+    const assets={
+      '/':['index.html','text/html; charset=utf-8'],'/index.html':['index.html','text/html; charset=utf-8'],
+      '/styles.css':['styles.css','text/css; charset=utf-8'],'/theme.js':['theme.js','text/javascript; charset=utf-8'],
+      '/favicon.svg':['favicon.svg','image/svg+xml'],'/resume.css':['resume.css','text/css'],'/print.js':['print.js','text/javascript']
+    };
+    const built=existsSync(resolve(buildRoot,'index.html'));
+    if(['/','/index.html'].includes(path) && !built)fail('Build the interface with npm run build, or use npm run dev and open port 5173.',503);
+    let asset=assets[path],root=built && ['/','/index.html'].includes(path) ? buildRoot : publicRoot;
+    if(/^\/assets\/[a-zA-Z0-9_.-]+$/.test(path)) {
+      root=buildRoot;asset=[path.slice(1),path.endsWith('.js')?'text/javascript; charset=utf-8':path.endsWith('.css')?'text/css; charset=utf-8':'application/octet-stream'];
+    }
+    if(!asset)fail('Page not found.',404);
+    let content;
+    try{content=await readFile(resolve(root,asset[0]));}catch(error){if(error.code==='ENOENT')fail('Asset not found.',404);throw error;}
+    res.writeHead(200,{'Content-Type':asset[1]});res.end(req.method==='HEAD' ? undefined : content);
+  }
+  const workspaceRequest=(req,res)=>ready.then(() => store.run(async () => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "no-referrer");
     res.setHeader("X-Frame-Options", "DENY");
@@ -569,28 +587,7 @@ export function createApp({
       }
       if (path.startsWith("/api/")) fail("API endpoint not found.", 404);
       if (!["GET", "HEAD"].includes(method)) fail("Method not allowed.", 405);
-      const assets = {
-        "/": ["index.html", "text/html; charset=utf-8"],
-        "/index.html": ["index.html", "text/html; charset=utf-8"],
-        "/styles.css": ["styles.css", "text/css; charset=utf-8"],
-        "/theme.js": ["theme.js", "text/javascript; charset=utf-8"],
-        "/favicon.svg": ["favicon.svg", "image/svg+xml"]
-      };
-      if (["/", "/index.html"].includes(path) && !existsSync(resolve(buildRoot, "index.html"))) fail("Build the interface with npm run build, or use npm run dev and open port 5173.", 503);
-      let asset = assets[path];
-      let root = publicRoot;
-      if (existsSync(resolve(buildRoot, "index.html")) && ["/", "/index.html"].includes(path)) root = buildRoot;
-      if (/^\/assets\/[a-zA-Z0-9_.-]+$/.test(path)) {
-        root = buildRoot;
-        asset = [path.slice(1), path.endsWith(".js") ? "text/javascript; charset=utf-8" : path.endsWith(".css") ? "text/css; charset=utf-8" : "application/octet-stream"];
-      }
-      if (["/resume.css", "/print.js"].includes(path)) asset = [path.slice(1), path.endsWith(".js") ? "text/javascript" : "text/css"];
-      if (!asset) fail("Page not found.", 404);
-      const content = await readFile(resolve(root, asset[0]));
-      res.writeHead(200, {
-        "Content-Type": asset[1]
-      });
-      res.end(method === "HEAD" ? undefined : content);
+      await serveAsset(req,res,path);
     } catch (e) {
       const reference=e.status ? undefined : randomUUID().slice(0,8);
       if (!res.headersSent) json(res, e.status || 500, {
@@ -598,7 +595,42 @@ export function createApp({
       });else res.end();
       if (!e.status) console.error(JSON.stringify({event:'request-failed',reference,type:e.name,code:/^[A-Z0-9_]{1,40}$/.test(e.code || '') ? e.code : undefined,operation:e.operation,frames:String(e.stack || '').split('\n').filter(line=>/^\s+at /.test(line) && /\/server\//.test(line)).slice(0,5).map(line=>line.trim().replace(/file:\/\/[^ ]*\/server\//g,'server/'))}));
     }
-  })).catch(() => { if (!res.headersSent) json(res,503,{error:"Workspace storage is unavailable. Please retry."}); else res.end(); }));
+  },{readOnlyJobs:req.method==='GET' && (['/api/bootstrap','/api/state','/api/jobs/feed'].includes(new URL(req.url,'http://localhost').pathname) || /^\/api\/jobs\/[^/]+\/logo(?:\?|$)/.test(req.url))}));
+  // Browser asset bursts, health probes, auth and long-lived events need no
+  // workspace snapshot. Bound the remaining requests on the 512 MB free plan.
+  let activeRequests=0;const waiting=[];
+  async function scopedRequest(req,res) {
+    if(activeRequests>=2) {
+      if(waiting.length>=32)fail('The workspace is busy. Please retry in a moment.',503);
+      await new Promise(resolve=>waiting.push(resolve));
+    }else activeRequests++;
+    try{if(!res.destroyed)await workspaceRequest(req,res);}
+    finally{const next=waiting.shift();if(next)next();else activeRequests--;}
+  }
+  const server=createServer((req,res)=>{
+    res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Frame-Options','DENY');res.setHeader('Cache-Control','no-store');
+    res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; object-src 'none'");
+    void (async()=>{
+      const url=new URL(req.url || '/','http://localhost'),path=url.pathname;
+      const hostname=(req.headers.host || '').replace(/:\d+$/,'').replace(/^\[|\]$/g,'').toLowerCase();
+      const allowed=(config.ALLOWED_HOSTS || '').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+      if(!config.WORKSPACE_PASSWORD && !['localhost','127.0.0.1','::1'].includes(hostname))fail('This local workspace only accepts loopback hosts. Set WORKSPACE_PASSWORD for remote hosting.',403);
+      if(allowed.length && !allowed.includes(hostname))fail('Host not allowed.',403);
+      if(extensionCORS(req,res,path))return;
+      if(req.method==='GET' && path==='/api/health')return json(res,200,{ok:true,version:'0.6.0'});
+      if(['GET','HEAD'].includes(req.method) && (['/','/index.html','/favicon.svg','/theme.js'].includes(path) || /^\/assets\/[a-zA-Z0-9_.-]+$/.test(path)))return serveAsset(req,res,path);
+      if(await auth.handle(req,res,url,{json,bodyJSON}))return;
+      if(req.method==='GET' && path==='/api/events') {
+        if(!await auth.authenticated(req))fail('Sign in to open your workspace.',401);
+        return store.detached ? store.detached(()=>events.connect(req,res)) : events.connect(req,res);
+      }
+      await scopedRequest(req,res);
+    })().catch(error=>{
+      const reference=error.status ? undefined : randomUUID().slice(0,8);
+      if(!res.headersSent){if(!error.status)res.setHeader('Retry-After','3');json(res,error.status || 503,{error:error.status ? error.message : 'Workspace storage is temporarily unavailable. Please retry.',reference});}else res.end();
+      if(!error.status)console.error(JSON.stringify({event:'workspace-storage-failed',reference,type:error.name,code:/^[A-Z0-9_]{1,40}$/.test(error.code || '')?error.code:undefined}));
+    });
+  });
   server.requestTimeout = 120000;
   server.headersTimeout = 20000;
   return {
@@ -614,22 +646,39 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   let child;
   const app = createApp({store:await openConfiguredStore(),wakeWorker:()=>{if(child?.connected)child.send({type:'queue-wake'});else void requestQueueDrain(app.store,app.queue,process.env,fetch);}});
   await app.ready;
+  app.store.releaseRoot?.();
   const port = Number(process.env.PORT || 3000);
   app.server.listen(port, host, () => console.log(`Veloce AI is running at http://${host}:${app.server.address().port}`));
-  let stopping = false;
+  let stopping = false,restartTimer,workerFailures=0;
   if (embeddedWorkerEnabled(process.env)) {
+    startEmbeddedWorker();
+  }
+  function startEmbeddedWorker() {
+    if(stopping)return;
     // Leave room for the API, network buffers, and PDF parsing on Render Free.
     const workerArgs=[...(process.env.RENDER_EXTERNAL_URL ? ['--max-old-space-size=160'] : []),fileURLToPath(new URL("./worker.mjs",import.meta.url))];
     child = spawn(process.execPath,workerArgs,{stdio:['inherit','inherit','inherit','ipc'],env:{...process.env,RUN_EMBEDDED_WORKER:"false",ENABLE_EMBEDDED_WORKER:'false'}});
-    child.on("error",() => { console.error("Embedded worker could not start."); shutdown(1); });
-    child.on("exit",() => { if (!stopping) { console.error("Embedded worker exited; restarting the service."); shutdown(1); } });
+    child.once('spawn',()=>console.log(JSON.stringify({event:'embedded-worker-started',pid:child.pid})));
+    const startedAt=Date.now();let handled=false;
+    function restart() {
+      if(stopping || handled)return;handled=true;
+      if(Date.now()-startedAt>300000)workerFailures=0;
+      const delay=Math.min(30000,1000*2**Math.min(workerFailures++,5));
+      console.error(JSON.stringify({event:'embedded-worker-restarting',delayMs:delay,code:child.exitCode,signal:child.signalCode}));
+      // Restart only the worker. Its durable leases recover safely, while a
+      // failed background task no longer takes down the sign-in/API process.
+      restartTimer=setTimeout(startEmbeddedWorker,delay);restartTimer.unref();
+    }
+    child.on('error',restart);child.on('exit',restart);
   }
   function shutdown(code=0) {
     if (stopping) return; stopping=true;
+    clearTimeout(restartTimer);
     eventsStop();
     const deadline=setTimeout(() => process.exit(code || 1),25000);deadline.unref();
-    if (child && child.exitCode === null) child.kill("SIGTERM");
-    const workerDone=child && child.exitCode === null ? new Promise(resolve => child.once("exit",resolve)) : Promise.resolve();
+    const workerRunning=child && child.exitCode===null && child.signalCode===null;
+    if (workerRunning) child.kill("SIGTERM");
+    const workerDone=workerRunning ? new Promise(resolve => child.once("exit",resolve)) : Promise.resolve();
     const serverDone=new Promise(resolve => app.server.close(resolve));
     Promise.all([workerDone,serverDone]).then(() => app.store.close()).finally(() => process.exit(code));
   }

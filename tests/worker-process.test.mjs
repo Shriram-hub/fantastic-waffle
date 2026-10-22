@@ -78,5 +78,14 @@ test('embedded worker starts with the hosted API and shuts down with its parent'
   let current;
   for(let i=0;i<100;i++){const data=await (await fetch(origin+'/api/tasks')).json();current=data.tasks.find(value=>value.id===task.id);if(current?.status==='completed')break;await pause(50);}
   assert.equal(current.status,'completed',output);
+  if(process.platform==='linux') {
+    const workerPid=Number(output.match(/"event":"embedded-worker-started","pid":(\d+)/)?.[1]);assert.ok(workerPid,output);
+    const starts=(output.match(/worker started/g) || []).length;
+    process.kill(workerPid,'SIGKILL');
+    for(let i=0;i<100 && (output.match(/worker started/g) || []).length===starts;i++) {
+      assert.equal((await fetch(origin+'/api/health')).status,200);assert.equal(child.exitCode,null);await pause(50);
+    }
+    assert.equal((output.match(/worker started/g) || []).length,starts+1,output);assert.match(output,/embedded-worker-restarting/);
+  }
   const exited=new Promise(resolve=>child.once('exit',resolve));child.kill('SIGTERM');assert.equal(await exited,0);assert.match(output,/worker started/);
 });

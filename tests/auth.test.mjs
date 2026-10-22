@@ -22,6 +22,20 @@ async function setup(t,{config={},fetcher,store}={}) {
 const cookie=r=>r.headers.getSetCookie().find(c=>c.startsWith('orbit_session='))?.split(';')[0];
 async function unlock(w) {const r=await w.request('/api/auth/password',{body:{password:'test-password'}});assert.equal(r.status,200);return cookie(r);}
 
+test('the sign-in shell, assets, auth, health and SSE survive a failed workspace snapshot',async t=>{
+  const store=openStore(':memory:');t.after(()=>store.close());let snapshots=0,saves=0;
+  const broken={...store,run:async()=>{snapshots++;throw Object.assign(Error('private database connection details'),{code:'ECONNRESET'});},save:()=>{saves++;throw Error('Unnecessary startup write');}};
+  const errors=[];t.mock.method(console,'error',value=>errors.push(value));
+  const w=await setup(t,{store:broken});await w.ready;
+  for(const path of ['/','/favicon.svg','/theme.js','/api/health','/api/auth/session'])assert.equal((await w.request(path)).status,200,path);
+  const shell=await w.request('/'),script=shell.body.match(/src="(\/assets\/[^\"]+\.js)"/)?.[1];assert.ok(script);assert.equal((await w.request(script)).status,200);
+  const token=await unlock(w);assert.equal((await w.request('/api/auth/session',{cookie:token})).body.authenticated,true);
+  const stream=await fetch(`http://127.0.0.1:${w.server.address().port}/api/events`,{headers:{Cookie:token}});assert.equal(stream.status,200);await stream.body.cancel();
+  assert.equal(snapshots,0);assert.equal(saves,0);
+  const unavailable=await w.request('/api/bootstrap',{cookie:token});assert.equal(unavailable.status,503);assert.equal(unavailable.headers.get('retry-after'),'3');assert.ok(unavailable.body.reference);assert.ok(!JSON.stringify(unavailable.body).includes('private database'));
+  assert.equal(snapshots,1);assert.match(errors[0],/workspace-storage-failed/);assert.ok(!errors[0].includes('private database'));
+});
+
 test('public sign-in shell and cookie sessions protect private data, reject CSRF, expire and revoke on logout',async t=>{
   const w=await setup(t);
   assert.equal((await w.request('/')).status,200);

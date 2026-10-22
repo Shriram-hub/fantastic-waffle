@@ -122,7 +122,8 @@ test('Supabase TLS trusts the official CA and keeps certificate/hostname verific
 
 test('PostgreSQL snapshot cache avoids repeated full index reads and observes another worker’s committed revision',async t=>{
   const db=new PGlite();t.after(()=>db.close());const base=poolFor(db);let fullReads=0;
-  const counted={...base,async query(sql,params){if(sql.includes('UNION ALL'))fullReads++;return base.query(sql,params);}};
+  const count=(sql)=>{if(sql.includes('UNION ALL'))fullReads++;};
+  const counted={...base,async query(sql,params){count(sql);return base.query(sql,params);},async connect(){const client=await base.connect();return {...client,async query(sql,params){count(sql);return client.query(sql,params);}};}};
   const a=await openPostgresStore({},counted),b=await openPostgresStore({},base);
   const first=fullReads;await a.refresh();await a.run(async()=>assert.ok(a.state.profile));assert.equal(fullReads,first);
   b.state.profile.name='New profile from worker';await b.save();
@@ -151,4 +152,38 @@ test('PostgreSQL detached timers release request snapshots and session context',
     assert.equal(store.state,request);
   });
   assert.equal(await later,root);assert.notEqual((await later).profile.name,'Unsaved request');
+});
+
+test('PostgreSQL pages large indexes, coalesces refreshes and isolates mutable working records',async t=>{
+  const {initialState}=await import('../server/fixtures.mjs');
+  const db=new PGlite();t.after(()=>db.close());const base=poolFor(db);let loads=0,pages=0,largestPage=0,failNext=false;
+  const counted={...base,async connect(){const client=await base.connect();return {...client,async query(sql,params){
+    if(sql.includes('UNION ALL'))loads++;
+    if(sql.includes('job_listings WHERE row_order>')) {
+      if(failNext){failNext=false;throw Object.assign(Error('Transient read failure'),{code:'ECONNRESET'});}
+      const result=await client.query(sql,params);pages++;largestPage=Math.max(largestPage,result.rows.length);return result;
+    }
+    return client.query(sql,params);
+  }};}};
+  const a=await openPostgresStore({},counted),b=await openPostgresStore({},base),state=initialState(false);
+  state.jobs=Array.from({length:601},(_,i)=>({id:`paged-${i}`,title:'Analyst',company:`Company ${i}`,tags:['SQL'],description:`Role ${i}. `+'Requirements '.repeat(160)}));
+  await b.replace(state);const before=loads,states=[];
+  await Promise.all(Array.from({length:6},()=>a.run(async()=>{states.push(a.state);assert.equal(a.state.jobs.length,601);})));
+  assert.equal(loads,before+1);assert.equal(largestPage,256);assert.ok(pages>=3);
+  states[0].jobs[0].tags.push('Unsaved');assert.deepEqual(states[1].jobs[0].tags,['SQL']);
+  let shared;
+  await a.run(async()=>{
+    shared=a.state.jobs[0];assert.ok(Object.isFrozen(shared));assert.ok(Object.isFrozen(shared.tags));
+    assert.throws(()=>shared.tags.push('Unsafe mutation'),TypeError);a.state.profile.name='Unsaved read';
+    await assert.rejects(a.save(),/read-only/);
+  },{readOnlyJobs:true});
+  await a.run(async()=>{assert.equal(a.state.jobs[0],shared);assert.notEqual(a.state.profile.name,'Unsaved read');},{readOnlyJobs:true});
+  await a.run(async()=>{assert.deepEqual(a.state.jobs[0].tags,['SQL']);a.state.jobs[0].title='Changed safely';await a.save();});
+  await b.refresh();assert.equal(b.state.jobs[0].title,'Changed safely');assert.deepEqual(b.state.jobs[0].tags,['SQL']);
+  b.state.profile.name='Invalidate cache';await b.save();failNext=true;
+  await assert.rejects(a.refresh(),/Transient read failure/);
+  await a.refresh();assert.equal(a.state.profile.name,'Invalidate cache');
+  a.releaseRoot();assert.throws(()=>a.state,/scoped/);
+  await a.run(async()=>{assert.equal(a.state.jobs.length,601);a.state.profile.name='Scoped worker';await a.save();});
+  await b.refresh();assert.equal(b.state.profile.name,'Scoped worker');
 });

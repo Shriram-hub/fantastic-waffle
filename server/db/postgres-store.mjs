@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import {createHash} from 'node:crypto';
 import {cloneJsonState} from '../state-clone.mjs';
 import { readFile } from 'node:fs/promises';
 import pg from 'pg';
@@ -99,18 +100,63 @@ export async function openPostgresStore(config = process.env, suppliedPool) {
       await db.prepare(`UPDATE ${table} SET ${mutable.map(n => `${n}=?`).join(',')} WHERE id=?`).run(...mutable.map(n => columns[n]),id);
     } else await db.prepare(`INSERT INTO ${table}(${names.join(',')}) VALUES(${names.map(() => '?').join(',')})`).run(...Object.values(columns));
   };
-  let cachedSnapshot;
-  const read = async () => {
+  const assemble=groups=>({...groups.workspace_meta[0],profile:groups.user_profiles[0] || {},resume:groups.resumes[0] || null,...Object.fromEntries(Object.entries(collections).map(([key,table])=>[key,groups[table]]))});
+  let cachedSnapshot,loadingSnapshot;
+  async function loadSnapshot(client) {
+    const revision=(await client.query("SELECT value FROM orbit_runtime.workspace_revision WHERE id='local'")).rows[0]?.value;
+    const groups=Object.fromEntries(tables.map(table=>[table,[]])),records=new Map();
+    const accept=(table,row)=>{
+      const key=`${table}:${row.id}`,fingerprint=createHash('sha256').update(row.body).digest('base64');
+      const previous=cachedSnapshot?.records.get(key);
+      // Reuse immutable records across revisions; one small profile edit must
+      // not allocate another 28 MB of unchanged job strings.
+      const value=previous?.fingerprint===fingerprint ? previous.value : JSON.parse(row.body);
+      if(table==='job_listings' && !Object.isFrozen(value))freezeRecord(value);
+      records.set(key,{fingerprint,value});groups[table].push(value);
+    };
+    const otherTables=tables.filter(table=>table!=='job_listings');
+    const other=await client.query(postgresSQL(otherTables.map(table=>`SELECT '${table}' AS collection,id,body,row_order FROM ${table}`).join(' UNION ALL ')+' ORDER BY collection,row_order'));
+    for(const row of other.rows)accept(row.collection,row);
+    // Keep both wire buffers and parsed rows bounded. The old UNION loaded the
+    // entire index as JSON strings beside several complete object snapshots.
+    let cursor=0;
+    for(;;) {
+      const page=await client.query('SELECT id,body,row_order FROM orbit_runtime.job_listings WHERE row_order>$1 ORDER BY row_order LIMIT 256',[cursor]);
+      for(const row of page.rows)accept('job_listings',row);
+      if(page.rows.length<256)break;
+      cursor=Number(page.rows.at(-1).row_order);
+    }
+    Object.freeze(groups.job_listings);
+    return {revision,state:assemble(groups),records};
+  }
+  const read=async()=>{
+    const active=session.getStore()?.client;
+    if(active)return (await loadSnapshot(active)).state;
     const revision=(await pool.query("SELECT value FROM orbit_runtime.workspace_revision WHERE id='local'")).rows[0]?.value;
-    if(!session.getStore()?.client && cachedSnapshot?.revision===revision) return cloneJsonState(cachedSnapshot.state);
-    const result = await query(tables.map(t => `SELECT '${t}' AS collection,body,row_order FROM ${t}`).join(' UNION ALL ') + ' ORDER BY collection,row_order');
-    const groups = Object.fromEntries(tables.map(t => [t, []]));
-    for (const row of result.rows) groups[row.collection].push(JSON.parse(row.body));
-    const state={...(groups.workspace_meta[0] || {}),profile:groups.user_profiles[0] || {},resume:groups.resumes[0] || null,...Object.fromEntries(Object.entries(collections).map(([key, table]) => [key, groups[table]]))};
-    if(!session.getStore()?.client) cachedSnapshot={revision,state:cloneJsonState(state)};
-    return state;
+    if(cachedSnapshot?.revision===revision)return cachedSnapshot.state;
+    if(!loadingSnapshot)loadingSnapshot=(async()=>{
+      const client=await pool.connect();
+      try {
+        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+        const next=await loadSnapshot(client);
+        await client.query('COMMIT');cachedSnapshot=next;
+        return next.state;
+      }catch(error){await client.query('ROLLBACK');throw error;}
+      finally{client.release();}
+    })().finally(()=>{loadingSnapshot=null;});
+    return loadingSnapshot;
   };
-  const snapshot = async () => { const state = await read(); return {state,base:cloneJsonState(state)}; };
+  // The baseline/cache is private and immutable. Only the working state is
+  // copied, so concurrent edits still have independent optimistic baselines.
+  function freezeRecord(value) {
+    if(value && typeof value==='object' && !Object.isFrozen(value)) {for(const item of Object.values(value))freezeRecord(item);Object.freeze(value);}
+    return value;
+  }
+  const snapshot=async({readOnlyJobs=false}={})=>{
+    const base=await read();
+    const state=readOnlyJobs ? {...cloneJsonState({...base,jobs:[]}),jobs:base.jobs} : cloneJsonState(base);
+    return {base,state,readOnlyJobs};
+  };
   const overwrite = async (state) => {
     for (const table of [...new Set(['autopilot_runs', ...[...runtimeTables].reverse().filter(t => !['companies','contacts'].includes(t)), 'contacts', 'companies'])]) if (table !== 'migrations') await db.exec(`DELETE FROM ${table}`);
     for (const [table, values] of Object.entries(entries(state))) for (const row of values) await write(table,row.id,row.value,false);
@@ -128,13 +174,18 @@ export async function openPostgresStore(config = process.env, suppliedPool) {
   let root = await snapshot();
   return {
     kind:'postgres', directory:':postgres:', db,
-    get state() { return (context.getStore() || root).state; },
+    get state() { const local=context.getStore() || root;if(!local)throw Error('Workspace state needs a scoped store.run() call.');return local.state; },
+    // Production API/worker code always uses run(). Drop the otherwise-unused
+    // startup snapshot rather than retaining a second full index indefinitely.
+    releaseRoot() {root=null;},
     detached(fn) {return context.exit(()=>session.exit(fn));},
-    async run(fn) { return withSession(async () => context.run(await snapshot(),fn)); },
+    async run(fn,options) { return withSession(async () => context.run(await snapshot(options),fn)); },
     async refresh() { const next = await snapshot(), current = context.getStore(); if (current) Object.assign(current,next); else root=next; return next.state; },
     async save(inTransaction=false) {
       return withSession(async () => {
         const local=context.getStore() || root, before=entries(local.base), after=entries(local.state);
+        if(local.readOnlyJobs)throw Error('A read-only job feed cannot save workspace changes.');
+        const committed=Object.fromEntries(tables.map(table=>[table,[]]));
         const beforeMaps=Object.fromEntries(Object.entries(before).map(([table,rows])=>[table,new Map(rows.map(v=>[v.id,v]))])),afterIds=Object.fromEntries(Object.entries(after).map(([table,rows])=>[table,new Set(rows.map(v=>v.id))]));
         if (!inTransaction) await db.exec('BEGIN');
         try {
@@ -145,13 +196,14 @@ export async function openPostgresStore(config = process.env, suppliedPool) {
           }
           for (const [table, values] of Object.entries(after)) for (const {id,value} of values) {
             const old=beforeMaps[table].get(id);
-            if (old && JSON.stringify(old.value) === JSON.stringify(value)) continue;
+            if (old && JSON.stringify(old.value) === JSON.stringify(value)) {committed[table].push(old.value);continue;}
             const current=await db.prepare(`SELECT body FROM ${table} WHERE id=?`).get(id);
             if ((current && (!old || current.body !== JSON.stringify(old.value))) || (old && !current)) fail('This record changed. Refresh and retry.',409);
             await write(table,id,value,Boolean(current));
+            committed[table].push(cloneJsonState(value));
           }
           if (!inTransaction) await db.exec('COMMIT');
-          local.base=cloneJsonState(local.state);
+          local.base=assemble(committed);
         } catch(e) { if (!inTransaction) await db.exec('ROLLBACK'); throw e; }
       });
     },

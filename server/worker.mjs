@@ -362,6 +362,7 @@ export async function startWorker(config = process.env) {
   const store = await openConfiguredStore(config),
     queue = taskQueue(store),
     registry = handlers(store, queue, config);
+  store.releaseRoot?.();
   let stopping = false;
   let wake,wakeRequested=false;
   const onWake=message=>{if(message?.type==='queue-wake'){wakeRequested=true;wake?.();}};

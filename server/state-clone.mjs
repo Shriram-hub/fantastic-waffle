@@ -3,6 +3,10 @@
 // again, multiplying the heap required by request/worker/cache snapshots.
 export function cloneJsonState(value) {
   if(Array.isArray(value)) return value.map(cloneJsonState);
-  if(value!==null && typeof value==='object') return Object.fromEntries(Object.entries(value).map(([key,item])=>[key,cloneJsonState(item)]));
+  if(value!==null && typeof value==='object') {
+    const copy={};
+    for(const key of Object.keys(value))Object.defineProperty(copy,key,{value:cloneJsonState(value[key]),enumerable:true,configurable:true,writable:true});
+    return copy;
+  }
   return value;
 }
