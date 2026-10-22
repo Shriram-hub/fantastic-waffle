@@ -878,5 +878,509 @@
     "companyDomain": "incident.io",
     "verifiedAt": "2026-10-19",
     "reference": "https://api.ashbyhq.com/posting-api/job-board/incident"
+  },
+  {
+    "source": "SmartRecruiters",
+    "slug": "Visa",
+    "company": "Visa",
+    "reference": "https://careers.smartrecruiters.com/Visa",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "visa.com"
+  },
+  {
+    "source": "SmartRecruiters",
+    "slug": "RobertBosch",
+    "company": "Bosch Group",
+    "reference": "https://careers.smartrecruiters.com/RobertBosch",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "bosch.com"
+  },
+  {
+    "source": "SmartRecruiters",
+    "slug": "Freshworks",
+    "company": "Freshworks",
+    "reference": "https://careers.smartrecruiters.com/Freshworks",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "freshworks.com"
+  },
+  {
+    "source": "SmartRecruiters",
+    "slug": "nielseniq",
+    "company": "NielsenIQ",
+    "reference": "https://careers.smartrecruiters.com/nielseniq",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "nielseniq.com"
+  },
+  {
+    "source": "SmartRecruiters",
+    "slug": "Experian",
+    "company": "Experian",
+    "reference": "https://careers.smartrecruiters.com/Experian",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "experian.com"
+  },
+  {
+    "source": "SmartRecruiters",
+    "slug": "TurnerTownsend",
+    "company": "Turner & Townsend",
+    "reference": "https://careers.smartrecruiters.com/TurnerTownsend",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "turnerandtownsend.com"
+  },
+  {
+    "source": "SmartRecruiters",
+    "slug": "Deloitte6",
+    "company": "Deloitte",
+    "reference": "https://careers.smartrecruiters.com/Deloitte6",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "deloitte.com"
+  },
+  {
+    "source": "SmartRecruiters",
+    "slug": "SyngentaGroup",
+    "company": "Syngenta Group",
+    "reference": "https://careers.smartrecruiters.com/SyngentaGroup",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "syngenta.com"
+  },
+  {
+    "source": "SmartRecruiters",
+    "slug": "quadient1",
+    "company": "Quadient",
+    "reference": "https://careers.smartrecruiters.com/quadient1",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "quadient.com"
+  },
+  {
+    "source": "SmartRecruiters",
+    "slug": "believe",
+    "company": "Believe",
+    "reference": "https://careers.smartrecruiters.com/believe",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "believe.com"
+  },
+  {
+    "source": "Workable",
+    "slug": "bjak-1",
+    "company": "Bjak",
+    "reference": "https://apply.workable.com/bjak-1",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "bjak.my"
+  },
+  {
+    "source": "Workable",
+    "slug": "c-serv",
+    "company": "C-Serv",
+    "reference": "https://apply.workable.com/c-serv",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep"
+  },
+  {
+    "source": "Workable",
+    "slug": "avacone",
+    "company": "Avacone",
+    "reference": "https://apply.workable.com/avacone",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep"
+  },
+  {
+    "source": "Workable",
+    "slug": "innovatemr",
+    "company": "InnovateMR + Ivy Exec",
+    "reference": "https://apply.workable.com/innovatemr",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "innovatemr.com"
+  },
+  {
+    "source": "Workable",
+    "slug": "pricelabs",
+    "company": "PriceLabs",
+    "reference": "https://apply.workable.com/pricelabs",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "pricelabs.co"
+  },
+  {
+    "source": "Workable",
+    "slug": "packtpublishing",
+    "company": "Packt",
+    "reference": "https://apply.workable.com/packtpublishing",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "packtpub.com"
+  },
+  {
+    "source": "Workable",
+    "slug": "huzzle",
+    "company": "Huzzle",
+    "reference": "https://apply.workable.com/huzzle",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "huzzle.com"
+  },
+  {
+    "source": "Workable",
+    "slug": "mercari-india",
+    "company": "Mercari India",
+    "reference": "https://apply.workable.com/mercari-india",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "mercari.com"
+  },
+  {
+    "source": "Workable",
+    "slug": "lokal-app",
+    "company": "Lokal",
+    "reference": "https://apply.workable.com/lokal-app",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep"
+  },
+  {
+    "source": "Workable",
+    "slug": "navig8",
+    "company": "Navig8",
+    "reference": "https://apply.workable.com/navig8",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep"
+  },
+  {
+    "source": "Workable",
+    "slug": "acoladgroup",
+    "company": "Acolad",
+    "reference": "https://apply.workable.com/acoladgroup",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "acolad.com"
+  },
+  {
+    "source": "Workable",
+    "slug": "oxforddynamics",
+    "company": "Oxford Dynamics",
+    "reference": "https://apply.workable.com/oxforddynamics",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "oxforddynamics.com"
+  },
+  {
+    "source": "Workable",
+    "slug": "prezent-ai",
+    "company": "Prezent AI",
+    "reference": "https://apply.workable.com/prezent-ai",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "prezent.ai"
+  },
+  {
+    "source": "Workday",
+    "slug": "https://statestreet.wd1.myworkdayjobs.com/Global",
+    "company": "State Street",
+    "reference": "https://statestreet.wd1.myworkdayjobs.com/Global",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "statestreet.com"
+  },
+  {
+    "source": "Workday",
+    "slug": "https://barclays.wd3.myworkdayjobs.com/External_Career_Site_Barclays",
+    "company": "Barclays",
+    "reference": "https://barclays.wd3.myworkdayjobs.com/External_Career_Site_Barclays",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "barclays.com"
+  },
+  {
+    "source": "Workday",
+    "slug": "https://db.wd3.myworkdayjobs.com/DBWebsite",
+    "company": "Deutsche Bank",
+    "reference": "https://db.wd3.myworkdayjobs.com/DBWebsite",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "db.com"
+  },
+  {
+    "source": "Workday",
+    "slug": "https://svb.wd5.myworkdayjobs.com/firstcitizensindia",
+    "company": "First Citizens India",
+    "reference": "https://svb.wd5.myworkdayjobs.com/firstcitizensindia",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "firstcitizensbank.com"
+  },
+  {
+    "source": "Workday",
+    "slug": "https://usbank.wd1.myworkdayjobs.com/US_Bank_Careers",
+    "company": "U.S. Bank",
+    "reference": "https://usbank.wd1.myworkdayjobs.com/US_Bank_Careers",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "usbank.com"
+  },
+  {
+    "source": "Workday",
+    "slug": "https://blackrock.wd1.myworkdayjobs.com/BlackRock_Professional",
+    "company": "BlackRock",
+    "reference": "https://blackrock.wd1.myworkdayjobs.com/BlackRock_Professional",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "blackrock.com"
+  },
+  {
+    "source": "Workday",
+    "slug": "https://ms.wd5.myworkdayjobs.com/External",
+    "company": "Morgan Stanley",
+    "reference": "https://ms.wd5.myworkdayjobs.com/External",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "morganstanley.com"
+  },
+  {
+    "source": "Workday",
+    "slug": "https://blackstone.wd1.myworkdayjobs.com/Blackstone_Careers",
+    "company": "Blackstone",
+    "reference": "https://blackstone.wd1.myworkdayjobs.com/Blackstone_Careers",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "blackstone.com"
+  },
+  {
+    "source": "Workday",
+    "slug": "https://fil.wd3.myworkdayjobs.com/001",
+    "company": "Fidelity International",
+    "reference": "https://fil.wd3.myworkdayjobs.com/001",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "fidelityinternational.com"
+  },
+  {
+    "source": "Workday",
+    "slug": "https://ag.wd3.myworkdayjobs.com/Airbus",
+    "company": "Airbus",
+    "reference": "https://ag.wd3.myworkdayjobs.com/Airbus",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "airbus.com"
+  },
+  {
+    "source": "Workday",
+    "slug": "https://ryan.wd1.myworkdayjobs.com/Experienced-Professionals",
+    "company": "Ryan",
+    "reference": "https://ryan.wd1.myworkdayjobs.com/Experienced-Professionals",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "ryan.com"
+  },
+  {
+    "source": "Workday",
+    "slug": "https://morningstar.wd5.myworkdayjobs.com/morningstar",
+    "company": "Morningstar",
+    "reference": "https://morningstar.wd5.myworkdayjobs.com/morningstar",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "morningstar.com"
+  },
+  {
+    "source": "Workday",
+    "slug": "https://agilent.wd5.myworkdayjobs.com/Agilent_Careers",
+    "company": "Agilent",
+    "reference": "https://agilent.wd5.myworkdayjobs.com/Agilent_Careers",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "agilent.com"
+  },
+  {
+    "source": "Workday",
+    "slug": "https://vertexinc.wd1.myworkdayjobs.com/VertexInc",
+    "company": "Vertex",
+    "reference": "https://vertexinc.wd1.myworkdayjobs.com/VertexInc",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "vertexinc.com"
+  },
+  {
+    "source": "Workday",
+    "slug": "https://shell.wd3.myworkdayjobs.com/ShellCareers",
+    "company": "Shell",
+    "reference": "https://shell.wd3.myworkdayjobs.com/ShellCareers",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "shell.com"
+  },
+  {
+    "source": "Workday",
+    "slug": "https://fnz.wd3.myworkdayjobs.com/fnz_careers",
+    "company": "FNZ",
+    "reference": "https://fnz.wd3.myworkdayjobs.com/fnz_careers",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "fnz.com"
+  },
+  {
+    "source": "Workday",
+    "slug": "https://intel.wd1.myworkdayjobs.com/External",
+    "company": "Intel",
+    "reference": "https://intel.wd1.myworkdayjobs.com/External",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "intel.com"
+  },
+  {
+    "source": "Workday",
+    "slug": "https://lummustechnology.wd501.myworkdayjobs.com/LummusTechnology",
+    "company": "Lummus Technology",
+    "reference": "https://lummustechnology.wd501.myworkdayjobs.com/LummusTechnology",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "lummustechnology.com"
+  },
+  {
+    "source": "Lever EU",
+    "slug": "seb",
+    "company": "SEB",
+    "reference": "https://jobs.eu.lever.co/seb",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "sebgroup.com"
+  },
+  {
+    "source": "Lever EU",
+    "slug": "sportalliance",
+    "company": "Sport Alliance",
+    "reference": "https://jobs.eu.lever.co/sportalliance",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "sportalliance.com"
+  },
+  {
+    "source": "Lever EU",
+    "slug": "wypoon",
+    "company": "Wypoon Technologies",
+    "reference": "https://jobs.eu.lever.co/wypoon",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep"
+  },
+  {
+    "source": "Lever EU",
+    "slug": "prima",
+    "company": "Prima",
+    "reference": "https://jobs.eu.lever.co/prima",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep"
+  },
+  {
+    "source": "Lever EU",
+    "slug": "pnlfin",
+    "company": "Finom",
+    "reference": "https://jobs.eu.lever.co/pnlfin",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "finom.co"
+  },
+  {
+    "source": "Lever EU",
+    "slug": "innogames",
+    "company": "InnoGames",
+    "reference": "https://jobs.eu.lever.co/innogames",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "innogames.com"
+  },
+  {
+    "source": "Recruitee",
+    "slug": "erstedigital",
+    "company": "Erste Digital",
+    "reference": "https://erstedigital.recruitee.com/",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "erstedigital.com"
+  },
+  {
+    "source": "Recruitee",
+    "slug": "jeranexbp",
+    "company": "JERA Nex bp",
+    "reference": "https://jeranexbp.recruitee.com/",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "jeranexbp.com"
+  },
+  {
+    "source": "Recruitee",
+    "slug": "pwrpackinternational",
+    "company": "PWR",
+    "reference": "https://pwrpackinternational.recruitee.com/",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep"
+  },
+  {
+    "source": "Recruitee",
+    "slug": "tether",
+    "company": "Tether",
+    "reference": "https://tether.recruitee.com/",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "tether.to"
+  },
+  {
+    "source": "Recruitee",
+    "slug": "quantumsystemsgmbh",
+    "company": "Quantum Systems",
+    "reference": "https://quantumsystemsgmbh.recruitee.com/",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "quantum-systems.com"
+  },
+  {
+    "source": "Recruitee",
+    "slug": "hostholdingbv",
+    "company": "HoSt Group",
+    "reference": "https://hostholdingbv.recruitee.com/",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep"
+  },
+  {
+    "source": "Recruitee",
+    "slug": "techwolf",
+    "company": "TechWolf",
+    "reference": "https://techwolf.recruitee.com/",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "techwolf.ai"
+  },
+  {
+    "source": "Recruitee",
+    "slug": "onemobility",
+    "company": "One Mobility Group",
+    "reference": "https://onemobility.recruitee.com/",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep"
+  },
+  {
+    "source": "Recruitee",
+    "slug": "cortexreply",
+    "company": "Cortex Reply",
+    "reference": "https://cortexreply.recruitee.com/",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "reply.com"
+  },
+  {
+    "source": "Recruitee",
+    "slug": "trackman",
+    "company": "Trackman",
+    "reference": "https://trackman.recruitee.com/",
+    "referenceCheckedAt": "2026-10-22",
+    "referenceType": "Public employer career page; API health checked each sweep",
+    "companyDomain": "trackman.com"
   }
 ]

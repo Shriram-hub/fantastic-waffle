@@ -26,6 +26,7 @@ import { deliverTask } from "./services/outreach.mjs";
 import { scheduleAutopilot, ensureSearchMatrix, discoverJobs, enrichCompany, draftPitches } from "./services/autopilot.mjs";
 import {scheduleDiscovery,discoverBatch} from './services/discovery.mjs';
 import {verifyBoard} from './providers/jobs/registry.mjs';
+import {hydrateJobDetail,semanticJobHash} from './services/job-details.mjs';
 import { fail, hash, now } from "./domain.mjs";
 export function handlers(store, queue, config = {}, fetcher = fetch, dependencies = {}) {
   const find = (values, id) => {
@@ -179,7 +180,9 @@ export function handlers(store, queue, config = {}, fetcher = fetch, dependencie
     async "matching.compute"(task) {
       const s = store.state;
       if (!s.resume?.text) fail("Extract résumé text before semantic matching.");
-      const jobs = task.payload.jobIds.map(id => find(s.jobs, id));
+      const jobs = await Promise.all(task.payload.jobIds.map(id => hydrateJobDetail(find(s.jobs,id),store)));
+      if(jobs.some(j=>j.descriptionUnavailable || j.descriptionTruncated || !j.description))fail('Refresh source descriptions before computing semantic matches. No embedding request was made.');
+      const sourceHashes=jobs.map(semanticJobHash);
       const input = [s.resume.text, ...jobs.map(j => `${j.title}\n${j.description}`)],
         vectors = await embedTexts(input, config, fetcher, store),
         resumeHash = hash(s.resume.text);
@@ -190,12 +193,12 @@ export function handlers(store, queue, config = {}, fetcher = fetch, dependencie
       for (let i = 0; i < input.length; i++) await store.db.prepare("INSERT INTO embeddings(id,model,content_hash,vector) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET model=excluded.model,content_hash=excluded.content_hash,vector=excluded.vector").run(i === 0 ? "resume" : `job-${jobs[i - 1].id}`, config.EMBEDDING_MODEL, hash(input[i]), JSON.stringify(vectors[i]));
       for (let i = 0; i < jobs.length; i++) {
         const j = find(store.state.jobs, jobs[i].id);
-        if (hash(`${j.title}\n${j.description}`) !== hash(input[i + 1])) continue;
+        if (semanticJobHash(j) !== sourceHashes[i]) continue;
         j.semanticMatch = {
           score: Math.round(Math.max(0, Math.min(1, cosineSimilarity(vectors[0], vectors[i + 1]))) * 100),
           model: config.EMBEDDING_MODEL,
           resumeHash,
-          jobHash: hash(input[i + 1]),
+          jobHash: sourceHashes[i],
           at: now()
         };
       }
@@ -207,7 +210,7 @@ export function handlers(store, queue, config = {}, fetcher = fetch, dependencie
     async "resume.tailor"(task) {
       const s = store.state;
       if (!s.resume?.text) fail("Upload and parse a résumé first.");
-      const version = factPreservingTailor(s.resume, find(s.jobs, task.payload.jobId), s.profile);
+      const version = factPreservingTailor(s.resume, await hydrateJobDetail(find(s.jobs,task.payload.jobId),store), s.profile);
       await store.db.prepare("INSERT INTO resume_versions(id,kind,body,created_at) VALUES(?,?,?,?)").run(version.id, version.kind, JSON.stringify(version), Date.now());
       return {
         versionId: version.id

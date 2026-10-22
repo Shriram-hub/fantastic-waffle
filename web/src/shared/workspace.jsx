@@ -32,9 +32,11 @@ export async function api(
   path,
   data,
   method = data === undefined ? "GET" : "POST",
+  {signal} = {},
 ) {
   const r = await fetch(`/api${path}`, {
     method,
+    signal,
     ...(data === undefined
       ? {}
       : {

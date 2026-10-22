@@ -4,6 +4,8 @@ import { fetchPublicFeed } from './public-feeds.mjs';
 import {fetchGoogleJobs} from './google-jobs.mjs';
 import {fetchLinkedInGuest} from './linkedin-guest.mjs';
 import {fetchRegional} from './regional.mjs';
+import {fetchPublicATS} from './public-ats.mjs';
+import {crawlCareerPage} from './career-pages.mjs';
 import { remoteJSON } from "../http.mjs";
 import { fail, hash, now, safeUrl, stripHtml, text } from "../../domain.mjs";
 export const JOB_SOURCES = [
@@ -18,6 +20,7 @@ export const JOB_SOURCES = [
   "Google Jobs",
   "LinkedIn Guest",
   "India & finance boards",
+  'SmartRecruiters','Workable','Recruitee','Lever EU','Workday','The Muse','Career Pages','VC Portfolios',
 ];
 export async function fetchJobs(
   source,
@@ -26,12 +29,14 @@ export async function fetchJobs(
   config = {},
   query = "",
 ) {
+  if(['SmartRecruiters','Workable','Recruitee','Workday'].includes(source))return fetchPublicATS(source,board,config,fetcher,config.SEARCH_QUERY || '');
+  if(['Career Pages','VC Portfolios'].includes(source))return (await crawlCareerPage(board,config.CAREER_PAGE_LOADER ? {load:config.CAREER_PAGE_LOADER}:{})).jobs.map(j=>({...j,source,board}));
   if(source==='India & finance boards')return fetchRegional(query || board,config,fetcher);
   if(source==='Google Jobs') return fetchGoogleJobs(query || board,config,fetcher);
   if(source==='LinkedIn Guest') return fetchLinkedInGuest(query || board,config,fetcher);
   if (source === "Himalayas") return fetchHimalayas(query || board, config, fetcher);
-  if (["Remote OK","Jobicy"].includes(source)) return fetchPublicFeed(source,fetcher);
-  if (["Remotive", "Greenhouse", "Lever"].includes(source))
+  if (["Remote OK","Jobicy","The Muse"].includes(source)) return fetchPublicFeed(source,fetcher,config,query);
+  if (["Remotive", "Greenhouse", "Lever",'Lever EU'].includes(source))
     return fetchCoreJobs(source, board, fetcher);
   let jobs = [];
   if (source === "Ashby") {
@@ -59,7 +64,7 @@ export async function fetchJobs(
       type: j.employmentType || "Not listed",
       url: safeUrl(j.applyUrl || j.jobUrl),
       description: stripHtml(j.descriptionPlain || j.descriptionHtml),
-      publishedAt: j.publishedAt || now(),
+      publishedAt: j.publishedAt || null,
     }));
   } else if (source === "Arbeitnow") {
     const data = await remoteJSON(
@@ -83,22 +88,24 @@ export async function fetchJobs(
       description: stripHtml(j.description),
       publishedAt: j.created_at
         ? new Date(j.created_at * 1000).toISOString()
-        : now(),
+        : null,
     }));
   } else if (source === "Adzuna") {
-    if (!config.ADZUNA_APP_ID || !config.ADZUNA_APP_KEY)
+    if (!config.ADZUNA_APP_ID || !(config.ADZUNA_APP_KEY || config.ADZUNA_API_KEY))
       fail("Configure Adzuna credentials on the server.", 503);
-    const country = config.ADZUNA_COUNTRY || "in";
+    const country = String(config.SEARCH_COUNTRY || config.ADZUNA_COUNTRY || 'in').toLowerCase();
     if (!/^[a-z]{2}$/.test(country))
       fail("Use a two-letter Adzuna country code.");
     const url = new URL(
-      `https://api.adzuna.com/v1/api/jobs/${country}/search/1`,
+      `https://api.adzuna.com/v1/api/jobs/${country}/search/${Math.max(1,Math.min(10,Number(config.ATS_PAGE)||1))}`,
     );
     url.search = new URLSearchParams({
       app_id: config.ADZUNA_APP_ID,
-      app_key: config.ADZUNA_APP_KEY,
+      app_key: config.ADZUNA_APP_KEY || config.ADZUNA_API_KEY,
       what: text(query, 150),
       results_per_page: "50",
+      ...(config.SEARCH_LOCATION ? {where:text(config.SEARCH_LOCATION,150)}:{}),
+      sort_by:'date',
     });
     const data = await remoteJSON(url.href, {}, fetcher);
     if (!Array.isArray(data.results))
@@ -119,7 +126,7 @@ export async function fetchJobs(
       type: j.contract_time || "Not listed",
       url: safeUrl(j.redirect_url),
       description: stripHtml(j.description),
-      publishedAt: j.created || now(),
+      publishedAt: j.created || null,
     }));
   } else fail("Unsupported job source.");
   return jobs

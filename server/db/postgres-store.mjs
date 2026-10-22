@@ -134,15 +134,16 @@ export async function openPostgresStore(config = process.env, suppliedPool) {
     async save(inTransaction=false) {
       return withSession(async () => {
         const local=context.getStore() || root, before=entries(local.base), after=entries(local.state);
+        const beforeMaps=Object.fromEntries(Object.entries(before).map(([table,rows])=>[table,new Map(rows.map(v=>[v.id,v]))])),afterIds=Object.fromEntries(Object.entries(after).map(([table,rows])=>[table,new Set(rows.map(v=>v.id))]));
         if (!inTransaction) await db.exec('BEGIN');
         try {
-          for (const table of Object.keys(before).reverse()) for (const old of before[table]) if (!after[table].some(v => v.id === old.id)) {
+          for (const table of Object.keys(before).reverse()) for (const old of before[table]) if (!afterIds[table].has(old.id)) {
             const current=await db.prepare(`SELECT body FROM ${table} WHERE id=?`).get(old.id);
             if (current?.body !== JSON.stringify(old.value)) fail('This record changed. Refresh and retry.',409);
             await db.prepare(`DELETE FROM ${table} WHERE id=?`).run(old.id);
           }
           for (const [table, values] of Object.entries(after)) for (const {id,value} of values) {
-            const old=before[table].find(v => v.id === id);
+            const old=beforeMaps[table].get(id);
             if (old && JSON.stringify(old.value) === JSON.stringify(value)) continue;
             const current=await db.prepare(`SELECT body FROM ${table} WHERE id=?`).get(id);
             if ((current && (!old || current.body !== JSON.stringify(old.value))) || (old && !current)) fail('This record changed. Refresh and retry.',409);

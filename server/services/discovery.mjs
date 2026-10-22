@@ -1,3 +1,5 @@
+import {compactIndexedJob} from './job-details.mjs';
+import {jobFreshness} from './job-freshness.mjs';
 import {gzipSync,gunzipSync} from 'node:zlib';
 import {hash,id,now,text,fail} from '../domain.mjs';
 import {fetchJobs,canonicalJobKey} from '../providers/jobs/index.mjs';
@@ -6,12 +8,16 @@ import {SEARCH_DEFAULTS,buildSearchPlan,rankOpportunity} from './search-plan.mjs
 import {activity,getPolicy,profileScope} from './autopilot-policy.mjs';
 import {knownBoards,rememberBoards} from '../providers/jobs/registry.mjs';
 import {providerCall} from './provider-budget.mjs';
+import {crawlCareerPage} from '../providers/jobs/career-pages.mjs';
+import {boardURL} from '../providers/jobs/ats-search.mjs';
+import {compactRank,rankedMatch} from './job-feed.mjs';
 
 export const DISCOVERY_INTERVAL=2*3600000;
 // Keep retained provider payloads small enough for Render's shared free instance.
-const BATCH_SIZE=4,MAX_INDEX=1500;
-const sourceKey=d=>hash([d.source,d.board,d.page || 1,d.location || '',d.country || '']);
-export const SOURCE_DEFAULTS=Object.freeze({'Remotive':true,'Arbeitnow':true,'Remote OK':true,'Jobicy':true,'Himalayas':true,'Greenhouse':true,'Lever':true,'Ashby':true,'Google Jobs':false,'LinkedIn Guest':true,'India & finance boards':true});
+const BATCH_SIZE=4;
+export const MAX_INDEX=15000;
+const sourceKey=d=>hash([d.source,d.board,d.page || 1,d.location || '',d.country || '',d.query || '',d.freshness || '7d']);
+export const SOURCE_DEFAULTS=Object.freeze({'Remotive':true,'Arbeitnow':true,'Remote OK':true,'Jobicy':true,'Himalayas':true,'Greenhouse':true,'Lever':true,'Ashby':true,'Google Jobs':false,'LinkedIn Guest':true,'India & finance boards':true,'SmartRecruiters':true,'Workable':true,'Recruitee':true,'Lever EU':true,'Workday':true,'The Muse':true,'Career Pages':true,'VC Portfolios':true,'Adzuna':false});
 export async function getSearchConfig(store) {
   const row=await store.db.prepare("SELECT body FROM job_search_config WHERE id='local'").get();
   const p=store.state.profile;
@@ -22,7 +28,8 @@ export async function saveSearchConfig(data,store,queue,config={}) {
   const old=await getSearchConfig(store);
   const roles=data.roles ?? old.roles;
   if(!Array.isArray(roles) || roles.length>8 || roles.some(r=>typeof r!=='string')) fail('Enter up to eight target roles.');
-  const next={...old,enabled:data.enabled ?? true,roles:[...new Set(roles.map(r=>text(r,100)).filter(Boolean))],location:text(data.location ?? old.location,200),country:text(data.country ?? old.country,2).toUpperCase(),workMode:data.workMode || old.workMode,experience:data.experience || old.experience,updatedAt:now()};
+  const next={...old,enabled:data.enabled ?? true,roles:[...new Set(roles.map(r=>text(r,100)).filter(Boolean))],location:text(data.location ?? old.location,200),country:text(data.country ?? old.country,2).toUpperCase(),freshness:data.freshness || old.freshness || '7d',workMode:data.workMode || old.workMode,experience:data.experience || old.experience,updatedAt:now()};
+  if(!['24h','7d','any'].includes(next.freshness))fail('Choose a valid discovery freshness window.');
   if(typeof next.enabled!=='boolean' || !['Any','Remote','Hybrid','On-site'].includes(next.workMode) || !['Any','Internship','Entry level','Mid level','Senior'].includes(next.experience)) fail('Choose valid search preferences.');
   if(next.country && !/^[A-Z]{2}$/.test(next.country)) fail('Use a country code such as IN, GB, or US.');
   next.sources=Object.fromEntries(Object.keys(SOURCE_DEFAULTS).map(key=>[key,(data.sources?.[key] ?? old.sources[key])===true]));
@@ -74,11 +81,18 @@ export function sourcePlan(plan,settings,prefs,registry=[]) {
   const offset=pairs.length ? Math.floor(Date.now()/86400000)*locations.length%pairs.length : 0;
   const rotating=[...pairs.slice(offset),...pairs.slice(0,offset)];
   const paid=prefs.sources['Google Jobs'] ? rotating.slice(0,24).map(pair=>({source:'Google Jobs',...pair,ttl:6*3600000})) : [];
-  const guest=pairs.slice(0,32).map(pair=>({source:'LinkedIn Guest',...pair,ttl:DISCOVERY_INTERVAL}));
+  const guest=pairs.slice(0,32).map(pair=>({source:'LinkedIn Guest',...pair,freshness:prefs.freshness || '7d',ttl:DISCOVERY_INTERVAL}));
+  const muse=plan.roles.slice(0,3).flatMap(role=>[1,2,3].map(page=>({source:'The Muse',board:role,page,location:locations[0],ttl:6*3600000})));
+  const adzuna=pairs.slice(0,12).map(pair=>({source:'Adzuna',...pair,ttl:6*3600000}));
+  const vc=[{source:'VC Portfolios',board:'https://jobs.accel.com/jobs',ttl:6*3600000},{source:'VC Portfolios',board:'https://careers.peakxv.com/jobs',ttl:6*3600000},{source:'VC Portfolios',board:'https://www.ycombinator.com/jobs',ttl:6*3600000}];
+  const catalog=[...new Map([...custom,...boards,...registry].map(b=>[`${b.source}:${b.slug}`,b])).values()].flatMap(b=>{
+      const roles=['Workday','SmartRecruiters'].includes(b.source) ? plan.roles.slice(0,3) : [''];
+    return (roles.length ? roles : ['']).flatMap(query=>(['Workday','SmartRecruiters'].includes(b.source)?[1,2,3]:[1]).map(page=>({source:b.source,board:b.slug,page,query,ttl:DISCOVERY_INTERVAL,company:b.company,companyDomain:b.companyDomain})));
+  });
   const regional=plan.country==='IN' && prefs.sources['India & finance boards'] ? locations.slice(0,3).map(location=>({source:'India & finance boards',board:`(${plan.roles.slice(0,4).map(role=>`"${role.replaceAll('"','')}"`).join(' OR ')})${plan.experience==='Internship' ? ' (intern OR internship OR trainee)' : ''}`,location,country:'IN',ttl:24*3600000})) : [];
-  return [...paid.slice(0,2),...regional,...paid.slice(2),...guest,...publicSources,...[...new Map([...custom,...boards,...registry].map(b=>[`${b.source}:${b.slug}`,b])).values()].map(b=>({source:b.source,board:b.slug,ttl:DISCOVERY_INTERVAL,company:b.company,companyDomain:b.companyDomain}))].filter(d=>prefs.sources[d.source]);
+  return [...paid.slice(0,2),...regional,...paid.slice(2),...guest,...publicSources,...muse,...adzuna,...vc,...catalog].filter(d=>prefs.sources[d.source]);
 }
-async function fetchSource(descriptor,store,config,fetcher,plan) {
+async function fetchSource(descriptor,store,config,fetcher,plan,queue) {
   const {source,board,ttl,page}=descriptor,key=sourceKey(descriptor);
   let jobs,cached=false;
   const cache=await store.db.prepare('SELECT body,expires_at FROM job_source_cache WHERE id=?').get(key);
@@ -92,8 +106,13 @@ async function fetchSource(descriptor,store,config,fetcher,plan) {
     }
   }
   if(!jobs) {
-    const fetchSourceJobs=(extra={})=>fetchJobs(source,board,fetcher,{...config,...extra,HIMALAYAS_PAGE:page || 1,SEARCH_LOCATION:descriptor.location,SEARCH_COUNTRY:descriptor.country},board);
-    if(source==='India & finance boards') {
+    const fetchSourceJobs=(extra={})=>fetchJobs(source,board,fetcher,{...config,...extra,HIMALAYAS_PAGE:page || 1,ATS_PAGE:page || 1,SEARCH_QUERY:descriptor.query,LINKEDIN_FRESHNESS:descriptor.freshness,SEARCH_LOCATION:descriptor.location,SEARCH_COUNTRY:descriptor.country},board);
+    if(['Career Pages','VC Portfolios'].includes(source)) {
+      const found=await crawlCareerPage(board,config.CAREER_PAGE_LOADER?{load:config.CAREER_PAGE_LOADER}:{});
+      await rememberBoards(found.boards.map(b=>({url:boardURL(b)})),store,queue);
+      jobs=found.jobs.map(j=>({...j,source,board}));
+      if(!jobs.length && !found.boards.length)fail('Public page has no readable JobPosting data or supported ATS links. Other sources continue.',422);
+    } else if(source==='India & finance boards') {
       if(!config.SERPAPI_API_KEY)fail('Configure SERPAPI_API_KEY for indexed regional-board discovery. Free feeds continue.',503);
       jobs=await providerCall(store,`regional:${key}:${Math.floor(Date.now()/86400000)}`,'SerpApi',Math.max(1,Math.min(30,Number(config.JOB_SEARCH_API_DAILY_LIMIT)||6)),()=>fetchSourceJobs());
     } else if(source==='Google Jobs') {
@@ -105,20 +124,20 @@ async function fetchSource(descriptor,store,config,fetcher,plan) {
       }
       if(!jobs) throw lastError;
     } else jobs=await fetchSourceJobs();
-    jobs=jobs.map(j=>({...j,description:text(j.description,6500),...(descriptor.company ? {company:descriptor.company,companyDomain:descriptor.companyDomain,companyDomainSource:'provider'} : {})}));
+    jobs=jobs.map(j=>({...j,description:text(j.description,10000),descriptionSourceTruncated:(j.description?.length || 0)>10000,...(descriptor.company ? {company:descriptor.company,companyDomain:descriptor.companyDomain,companyDomainSource:'provider'} : {})}));
     await store.db.prepare('INSERT INTO job_source_cache(id,expires_at,body) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET expires_at=excluded.expires_at,body=excluded.body')
       .run(key,Date.now()+ttl,gzipSync(JSON.stringify(jobs)).toString('base64'));
   }
   const matched=jobs.filter(j=>rankOpportunity(j,plan).recommendable).length;
   await store.db.prepare("INSERT INTO job_source_health(id,source,board,checked_at,status,scanned,matched,message) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET checked_at=excluded.checked_at,status=excluded.status,scanned=excluded.scanned,matched=excluded.matched,message=excluded.message")
     .run(key,source,board,Date.now(),cached ? 'cached' : 'healthy',jobs.length,matched,null);
-  return {descriptor,jobs,cached,key};
+  return {descriptor,jobs:jobs.map(j=>compactIndexedJob(j,plan,key)),cached,key};
 }
 export function mergeDiscoveryResults(state,results,plan) {
   const map=new Map(state.jobs.filter(j=>!j.isDemo).map(j=>[canonicalJobKey(j),j]));
   const before=new Set(map.keys());
   for(const {descriptor,jobs,cached} of results) {
-    if(!cached && ['Greenhouse','Lever','Ashby'].includes(descriptor.source)) for(const old of map.values()) {
+    if(!cached && ['Greenhouse','Lever','Ashby','Lever EU','Workable','Recruitee'].includes(descriptor.source)) for(const old of map.values()) {
       old.sources ||= [{id:old.id,source:old.source,board:old.board || '',url:old.url,active:!old.archived}];
       for(const origin of old.sources) if(origin.source===descriptor.source && origin.board===descriptor.board) origin.active=false;
     }
@@ -130,7 +149,10 @@ export function mergeDiscoveryResults(state,results,plan) {
         const prior=old.sources.find(s=>s.id===job.id && s.source===origin.source && s.board===origin.board);
         if(prior) Object.assign(prior,origin);else old.sources.push(origin);
         old.archived=false;old.fetchedAt=job.fetchedAt;
-        if((old.description?.length || 0)<job.description.length) old.description=job.description;
+        const sameSource=old.source===job.source && (old.board || '')===(job.board || '');
+        if(job.description && (sameSource || (job.descriptionLength || job.description.length)>(old.descriptionLength || old.description?.length || 0)))Object.assign(old,{description:job.description,descriptionLength:job.descriptionLength,descriptionHash:job.descriptionHash,descriptionTruncated:job.descriptionTruncated,indexSkills:job.indexSkills,detailCacheKey:job.detailCacheKey,detailSourceId:job.detailSourceId});
+        if(sameSource || !old.publishedAt && job.publishedAt){old.publishedAt=job.publishedAt;old.publishedAtSource=job.publishedAtSource;}
+        if(job.postedBy)old.postedBy=job.postedBy;
         if(job.companyDomain) {old.companyDomain=job.companyDomain;old.companyDomainSource=job.companyDomainSource;}
       } else map.set(key,{...job,canonicalKey:key,sources:[origin],discoveredAutomatically:true});
     }
@@ -141,7 +163,8 @@ export function mergeDiscoveryResults(state,results,plan) {
       j.archived=!j.sources.some(s=>s.active);
       if(!j.sources.some(s=>s.active && s.url===j.url)) j.url=j.sources.find(s=>s.active)?.url || j.url;
     }
-    j.discoveryMatch=rankOpportunity(j,plan);return j;
+    if(j.expiresAt && (typeof j.expiresAt==='number'?j.expiresAt*1000:Date.parse(j.expiresAt))<Date.now())j.archived=true;
+    Object.assign(j,jobFreshness(j));j.discoveryMatch=compactRank(rankOpportunity(j,plan));return j;
   });
   all.sort((a,b)=>(Number(pinned.has(b.id))-Number(pinned.has(a.id))) || Number(b.discoveryMatch.recommendable)-Number(a.discoveryMatch.recommendable) || Number(b.discoveryMatch.eligible)-Number(a.discoveryMatch.eligible) || (b.discoveryMatch.score || 0)-(a.discoveryMatch.score || 0) || (Date.parse(b.publishedAt)||0)-(Date.parse(a.publishedAt)||0));
   const kept=all.filter((j,i)=>pinned.has(j.id) || i<MAX_INDEX);
@@ -161,12 +184,20 @@ export async function discoverBatch(task,store,queue,config={},fetcher=fetch) {
   const descriptors=progress.descriptors || sourcePlan(plan,store.state.settings,prefs,await knownBoards(store)),offset=task.payload.offset || 0,batch=descriptors.slice(offset,offset+BATCH_SIZE);
   progress.descriptors=descriptors;
   await store.db.prepare("UPDATE job_search_runs SET status='running',updated_at=? WHERE id=?").run(Date.now(),row.id);
-  const results=[];let next=0,failed=0;
+  const results=[];let next=0,failed=0,activeFetches=0;const waiting=[];
+  // Fan-out adapters (including three LinkedIn pages) share the worker's two
+  // network slots instead of multiplying global concurrency per source.
+  const limitedFetch=async(url,options={})=>{
+    if(activeFetches>=2)await new Promise(resolve=>waiting.push(resolve));
+    else activeFetches++;
+    try{options.signal?.throwIfAborted();return await fetcher(url,options);}
+    finally{const nextFetch=waiting.shift();if(nextFetch)nextFetch();else activeFetches--;}
+  };
   await Promise.all(Array.from({length:Math.min(2,batch.length)},async()=>{
     for(;;) {
       const index=next++;if(index>=batch.length) break;
       const descriptor=batch[index];
-      try {results.push(await fetchSource(descriptor,store,config,fetcher,plan));}
+      try {results.push(await fetchSource(descriptor,store,config,limitedFetch,plan,queue));}
       catch(e) {
         failed++;
         await store.db.prepare("INSERT INTO job_source_health(id,source,board,checked_at,status,scanned,matched,message) VALUES(?,?,?,?,'unavailable',0,0,?) ON CONFLICT(id) DO UPDATE SET checked_at=excluded.checked_at,status='unavailable',message=excluded.message")
@@ -207,8 +238,9 @@ export async function searchStatus(store) {
   const run=await store.db.prepare('SELECT * FROM job_search_runs ORDER BY created_at DESC LIMIT 1').get();
   const health=await store.db.prepare('SELECT * FROM job_source_health ORDER BY checked_at DESC').all();
   const details=run ? JSON.parse(run.body) : null;if(details) delete details.descriptors;
-  return {preferences,plan,run:run ? {...run,details,body:undefined} : null,sources:health,schedule:await store.db.prepare("SELECT next_run FROM autopilot_schedule WHERE id='jobs'").get() || null,
-    indexed:store.state.jobs.filter(j=>!j.archived && !j.isDemo).length,matches:plan.personalized ? store.state.jobs.filter(j=>!j.archived && rankOpportunity(j,plan).recommendable).length : null,
-    strongMatches:store.state.jobs.filter(j=>!j.archived && rankOpportunity(j,plan).tier==='strong').length,
-    adjacentMatches:store.state.jobs.filter(j=>!j.archived && rankOpportunity(j,plan).tier==='adjacent').length};
+  const matches=store.state.jobs.filter(j=>!j.archived && !j.isDemo).map(j=>rankedMatch(j,plan));
+  return {preferences,plan,indexCapacity:MAX_INDEX,curatedEmployers:boards.length,firstMover:store.state.jobs.filter(j=>!j.archived && jobFreshness(j).firstMover).length,run:run ? {...run,details,body:undefined} : null,sources:health,schedule:await store.db.prepare("SELECT next_run FROM autopilot_schedule WHERE id='jobs'").get() || null,
+    indexed:store.state.jobs.filter(j=>!j.archived && !j.isDemo).length,matches:plan.personalized ? matches.filter(m=>m.recommendable).length : null,
+    strongMatches:matches.filter(m=>m.tier==='strong').length,
+    adjacentMatches:matches.filter(m=>m.tier==='adjacent').length};
 }

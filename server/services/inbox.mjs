@@ -1,3 +1,5 @@
+import {companyDomain} from '../providers/contacts/company.mjs';
+import {observeCompanyEmails} from './company-patterns.mjs';
 import {stopFollowups} from './sequences.mjs';
 import { id, now, suggestStage, safeUrl } from "../domain.mjs";
 export const INBOX_SYNC_INTERVAL=15*60000;
@@ -74,7 +76,8 @@ export async function ingestMessage(message, store) {
   if (message.outbound) return {
     ignored: true
   };
-  const sender=address(message.from);
+  const sender=address(message.from),domain=companyDomain(sender.split('@')[1]),senderName=String(message.from || '').match(/^\s*"?([^"<>]+?)"?\s*</)?.[1]?.trim();
+  if(domain && senderName && senderName.split(/\s+/).length>=2 && s.jobs.some(j=>j.companyDomain===domain) && !/no.?reply|notification|automated/i.test(sender))await observeCompanyEmails(store,{domain},[{name:senderName,email:sender,emailStatus:'observed',source:'Incoming email',verification:{reference:`mail:${message.id}`}}]);
   const latest=String(message.body || '').split(/\nOn .+wrote:|\n_{5,}|\nFrom:/i)[0];
   if (/\bunsubscribe\b|\bremove me\b|\bstop (?:emailing|contacting) me\b/i.test(latest))
     for (const contact of s.contacts) if (contact.email?.toLowerCase() === sender) {contact.suppressed=true;contact.suppressedAt=now();}

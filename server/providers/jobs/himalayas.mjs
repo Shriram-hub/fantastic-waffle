@@ -16,7 +16,7 @@ export async function fetchHimalayas(query, config = {}, fetcher = fetch) {
     tags: j.categories || [], category: j.parentCategories?.[0] || "Other", type: j.employmentType || "Not listed",
     // Provider attribution and original link are retained in the private job feed.
     url: safeUrl(j.applicationLink), attribution: "Himalayas", description: text(stripHtml(j.description || j.excerpt), 30000),
-    publishedAt: typeof j.pubDate === "number" ? new Date(j.pubDate * 1000).toISOString() : j.pubDate || now(),
+    publishedAt: typeof j.pubDate === "number" ? new Date(j.pubDate * 1000).toISOString() : j.pubDate || null,
     expiresAt: j.expiryDate || null, source: "Himalayas", board: text(query, 150), isDemo: false, archived: false, fetchedAt: now(),
   }));
 }

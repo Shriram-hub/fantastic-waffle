@@ -13,10 +13,87 @@ import {fetchGoogleJobs} from '../server/providers/jobs/google-jobs.mjs';
 import {knownBoards,rememberBoards} from '../server/providers/jobs/registry.mjs';
 import {providerCall} from '../server/services/provider-budget.mjs';
 import {parseResumeAsync} from '../server/resume.mjs';
+import {fetchJobs} from '../server/providers/jobs/index.mjs';
+import {normalizePublicATS} from '../server/providers/jobs/public-ats.mjs';
+import {extractSchemaOrgJobPostings} from '../server/providers/jobs/core.mjs';
+import {boardFromURL} from '../server/providers/jobs/ats-search.mjs';
+import {crawlCareerPage,careerURL} from '../server/providers/jobs/career-pages.mjs';
+import {addCareerURL} from '../server/providers/jobs/registry.mjs';
+import {compactIndexedJob,hydrateJobDetail} from '../server/services/job-details.mjs';
+import {jobFreshness} from '../server/services/job-freshness.mjs';
+import {MAX_INDEX,mergeDiscoveryResults} from '../server/services/discovery.mjs';
+import {gzipSync} from 'node:zlib';
+import catalog from '../server/providers/jobs/boards.json' with {type:'json'};
 
 const json=x=>new Response(JSON.stringify(x));
 const sources=(...names)=>Object.fromEntries(Object.keys(SOURCE_DEFAULTS).map(k=>[k,names.includes(k)]));
 const job=(title='Frontend Engineer',extra={})=>({id:'job-1',company:'Stripe',title,location:'Remote',workMode:'Remote',description:'React TypeScript interfaces',tags:['React'],url:'https://boards.greenhouse.io/stripe/jobs/1',source:'Greenhouse',board:'stripe',fetchedAt:new Date().toISOString(),...extra});
+test('public ATS adapters normalize SmartRecruiters, Workable, Recruitee, Ashby and EU Lever; partial lists never invent dates',async()=>{
+  const fixtures=[
+    ['SmartRecruiters','Visa',{content:[{id:'sr1',name:'Financial Analyst',company:{name:'Visa'},location:{city:'Bengaluru',country:'India'},ref:'https://api.smartrecruiters.com/v1/companies/Visa/postings/sr1',releasedDate:'2026-10-22T08:00:00Z',department:{label:'Finance'}}]}],
+    ['Workable','exampleco',{name:'Company',jobs:[{shortcode:'abc',title:'Analyst',location:{city:'Mumbai',country:'India'},description:'Build financial models',url:'https://apply.workable.com/exampleco/j/abc/'}]}],
+    ['Recruitee','exampleco',{offers:[{id:2,slug:'analyst',title:'Analyst',city:'London',country:'UK',careers_url:'https://exampleco.recruitee.com/o/analyst',description:'Financial analysis'}]}],
+    ['Ashby','exampleco',{jobs:[{id:'a1',title:'Data Analyst',jobUrl:'https://jobs.ashbyhq.com/exampleco/a1',department:'Data',descriptionPlain:'Analyze SQL data'}]}],
+    ['Lever EU','exampleco',[{id:'e1',text:'Analyst',categories:{location:'Paris'},hostedUrl:'https://jobs.eu.lever.co/exampleco/e1'}]],
+  ];
+  for(const [source,board,payload] of fixtures){const requests=[];const [result]=await fetchJobs(source,board,async input=>{requests.push(String(input));return json(payload);});assert.ok(result.id,source);assert.equal(result.source,source);assert.equal(result.isDemo,false);if(source==='SmartRecruiters'){assert.equal(result.company,'Visa');assert.match(result.url,/jobs.smartrecruiters.com/);assert.ok(!result.url.includes('api.smartrecruiters'));}else assert.equal(result.publishedAt,null,source);if(source==='Lever EU')assert.match(requests[0],/api.eu.lever.co/);}
+  assert.throws(()=>normalizePublicATS('Workable','x',{error:'No account'}),/unexpected/);
+});
+test('Workday tenant URLs auto-detect and search bounded public CXS pages without relying on relative posting labels for freshness',async()=>{
+  const board='https://statestreet.wd1.myworkdayjobs.com/Global';
+  assert.deepEqual(boardFromURL(board+'/job/Mumbai/Analyst_R1'),{source:'Workday',slug:board});
+  assert.deepEqual(boardFromURL('https://jobs.eu.lever.co/seb/123'),{source:'Lever EU',slug:'seb'});
+  assert.equal(boardFromURL('https://evil.example/myworkdayjobs.com/Global'),null);
+  const [result]=await fetchJobs('Workday',board,async(input,options)=>{assert.equal(input,board.replace('/Global','/wday/cxs/statestreet/Global/jobs'));assert.deepEqual(JSON.parse(options.body),{limit:20,offset:20,searchText:'Financial Analyst',appliedFacets:{}});return json({jobPostings:[{title:'Financial Analyst',externalPath:'/job/Mumbai/Analyst_R1',locationsText:'Mumbai, India',postedOn:'Posted Today'}]});},{ATS_PAGE:2,SEARCH_QUERY:'Financial Analyst'});
+  assert.equal(result.url,board+'/job/Mumbai/Analyst_R1');assert.equal(result.publishedAt,null);assert.equal(jobFreshness(result).firstMover,false);
+});
+test('The Muse and optional Adzuna aliases produce category/location and country-specific public queries',async()=>{
+  const [muse]=await fetchJobs('The Muse','Financial Analyst',async input=>{const u=new URL(input);assert.equal(u.searchParams.get('category'),'Accounting and Finance');assert.equal(u.searchParams.get('location'),'Mumbai');assert.equal(u.searchParams.get('page'),'1');return json({results:[{id:5,name:'Financial Analyst',company:{name:'Company'},locations:[{name:'Mumbai'}],refs:{landing_page:'https://themuse.com/jobs/company/analyst'},contents:'<p>Build models</p>',publication_date:'2026-10-21T20:00:00Z'}]});},{ATS_PAGE:2,SEARCH_LOCATION:'Mumbai'},'Financial Analyst');
+  assert.equal(muse.description,'Build models');assert.equal(muse.source,'The Muse');
+  for(const country of ['IN','US','GB','SG'])await fetchJobs('Adzuna','',async input=>{const u=new URL(input);assert.match(u.pathname,new RegExp(`/jobs/${country.toLowerCase()}/search/1$`));assert.equal(u.searchParams.get('app_key'),'fake-key');return json({results:[]});},{ADZUNA_APP_ID:'fake',ADZUNA_API_KEY:'fake-key',SEARCH_COUNTRY:country},'Analyst');
+});
+test('universal JobPosting extraction supports arrays and graphs, deadlines and country restrictions while ignoring malformed JSON and unsafe links',async()=>{
+  const posting={'@type':['Thing','JobPosting'],title:'Analyst',hiringOrganization:{name:'Company'},description:'<p>Build &amp; review models</p>',url:'/careers/analyst',jobLocation:{address:{addressLocality:'Mumbai',addressCountry:'India'}},datePosted:'2026-10-22',validThrough:'2026-11-22'};
+  const html=`<script type="application/ld+json">bad</script><script type="application/ld+json">${JSON.stringify({'@graph':[posting]})}</script><script type="application/ld+json">${JSON.stringify([posting,{'@type':'Person',name:'Not a job'},{...posting,title:'Unsafe',url:'javascript:alert(1)'}])}</script>`;
+  const results=extractSchemaOrgJobPostings(html,'https://company.com/careers');assert.equal(results.length,1);assert.equal(results[0].location,'Mumbai, India');assert.equal(results[0].expiresAt,'2026-11-22T00:00:00.000Z');assert.equal(results[0].url,'https://company.com/careers/analyst');
+  const remote=extractSchemaOrgJobPostings(`<script type="application/ld+json">${JSON.stringify({...posting,jobLocation:null,jobLocationType:'TELECOMMUTE',applicantLocationRequirements:{name:'India'}})}</script>`,'https://company.com/careers');assert.deepEqual(remote[0].locationRestrictions,['India']);
+  let calls=0;const crawl=await crawlCareerPage('https://company.com/careers',{load:async url=>{calls++;if(url.endsWith('/robots.txt'))return {text:'User-agent: *\nAllow: /',url};return {text:html,url};}});assert.equal(crawl.jobs.length,1);assert.equal(calls,2);
+  await assert.rejects(crawlCareerPage('https://company.com/careers',{load:async url=>({text:'User-agent: *\nDisallow: /careers',url})}),/does not allow/);
+  for(const url of ['http://company.com/jobs','https://localhost/jobs','https://127.0.0.1/jobs','https://user:secret@company.com/jobs','https://company.com:123/jobs'])assert.equal(careerURL(url),'');
+});
+test('career URL registrations persist, dedupe, require validation, and keep unsupported pages out of the active registry',async t=>{
+  const store=clean(t),queue=taskQueue(store),first=await addCareerURL('https://apply.workable.com/new-employer/',store,queue);
+  assert.equal(first.board.source,'Workable');assert.equal((await knownBoards(store)).length,0);
+  assert.equal((await addCareerURL('https://apply.workable.com/new-employer/j/abc',store,queue)).existing,true);
+  await drain(store,queue,async()=>json({jobs:[]}));assert.equal((await knownBoards(store))[0].source,'Workable');
+  await assert.rejects(addCareerURL('https://user:secret@company.com/careers',store,queue),/public HTTPS/);
+});
+test('expanded index retains ten times as many roles with compact descriptions and restores full text for per-job workflows',async t=>{
+  assert.equal(MAX_INDEX,15000);assert.ok(catalog.length>=150);assert.equal(new Set(catalog.map(b=>`${b.source}:${b.slug}`)).size,catalog.length);assert.ok(catalog.every(b=>b.reference));
+  const store=clean(t),plan=buildSearchPlan(store.state,{roles:['Frontend Engineer']}),full=job('Frontend Engineer',{description:'Intro. '+ 'React data '.repeat(1000)+' Reporting to the Director of Engineering.'}),indexed=compactIndexedJob(full,plan,'detail-fixture');
+  assert.equal(indexed.description.length,280);assert.equal(indexed.descriptionTruncated,true);
+  await store.db.prepare('INSERT INTO job_source_cache(id,expires_at,body) VALUES(?,?,?)').run('detail-fixture',Date.now()+1000,gzipSync(JSON.stringify([full])).toString('base64'));
+  assert.equal((await hydrateJobDetail(indexed,store)).description,full.description);
+  const many=Array.from({length:15020},(_,i)=>({...indexed,id:`many-${i}`,company:`Company ${i}`,description:'React',url:`https://company.com/jobs/${i}`}));
+  assert.equal(mergeDiscoveryResults(store.state,[{descriptor:{source:'Fixture',board:''},jobs:many}],plan).jobs.length,15000);
+});
+test('snippet sources cannot replace a complete cached description or its observed posting date',()=>{
+  const state=initialState(false),plan=buildSearchPlan(state,{roles:['Frontend Engineer'],workMode:'Any'}),date=new Date(Date.now()-3600000).toISOString();
+  const complete=compactIndexedJob(job('Frontend Engineer',{source:'Lever',board:'stripe',publishedAt:date,description:'React '.repeat(500)+' Reporting to the Director of Engineering.'}),plan,'full');
+  state.jobs=[complete];const snippet=compactIndexedJob({...complete,id:'google-copy',source:'Google Jobs',board:'Frontend Engineer',description:'Short search snippet',publishedAt:null},plan,'snippet');
+  const merged=mergeDiscoveryResults(state,[{descriptor:{source:'Google Jobs',board:'Frontend Engineer'},jobs:[snippet]}],plan).jobs[0];
+  assert.equal(merged.detailCacheKey,'full');assert.equal(merged.publishedAt,date);assert.equal(merged.descriptionHash,complete.descriptionHash);
+  const expired={...complete,id:'expired',company:'Expired Co',expiresAt:'2025-01-01T00:00:00Z'};
+  assert.equal(mergeDiscoveryResults(initialState(false),[{descriptor:{source:'Lever',board:'stripe'},jobs:[expired]}],plan).jobs[0].archived,true);
+});
+test('LinkedIn fetches three pages concurrently with freshness parameters, deduplicates, and retains partial successful pages',async()=>{
+  const starts=[];let active=0,peak=0;
+  const jobs=await fetchLinkedInGuest('Analyst',{freshness:'24h'},async input=>{const u=new URL(input),start=u.searchParams.get('start');starts.push(start);assert.equal(u.searchParams.get('f_TPR'),'r86400');active++;peak=Math.max(peak,active);await new Promise(r=>setTimeout(r,10));active--;if(start==='50')return new Response('blocked',{status:403});return new Response(`<li><a class="base-card__full-link" href="https://www.linkedin.com/jobs/view/analyst-${start}"></a><h3 class="base-search-card__title">Analyst</h3><h4 class="base-search-card__subtitle">Company</h4></li>`);});
+  assert.deepEqual(starts,['0','25','50']);assert.equal(jobs.length,2);assert.equal(peak,3);
+  const clock=Date.parse('2026-10-22T12:00:00Z');
+  assert.equal(jobFreshness({publishedAt:'2026-10-22T10:00:00Z'},clock).firstMover,true);
+  for(const fixture of [{fetchedAt:'2026-10-22T11:00:00Z'},{publishedAt:'2026-10-20T10:00:00Z'},{publishedAt:'2026-10-23T10:00:00Z'},{source:'Greenhouse',publishedAt:'2026-10-22T10:00:00Z'}])assert.equal(jobFreshness(fixture,clock).firstMover,false);
+});
 test('finance searches expand metro alternatives and separate adjacent roles without recommending unrelated tech',()=>{
   const state=initialState(false),prefs={roles:['Financial Analyst','Accountant','Investment Banking'],location:'Mumbai or Bengaluru or Delhi',country:'IN',sources:{'Google Jobs':true,'LinkedIn Guest':true}};
   const plan=buildSearchPlan(state,prefs);

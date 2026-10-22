@@ -9,7 +9,7 @@ export function publicIPv4(value) {
 }
 // Pin a validated public IPv4 address into the TLS request. DNS validation
 // followed by an ordinary fetch would leave a DNS-rebinding window.
-async function page(url,domain,redirects=0,signal) {
+export async function page(url,domain,redirects=0,signal) {
   signal?.throwIfAborted();
   const u=new URL(url);
   if(u.protocol!=='https:' || u.port && u.port!=='443' || ![domain,`www.${domain}`].includes(u.hostname) || u.username || u.password) throw Error('Unsupported company URL');

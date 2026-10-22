@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { WorkspaceContext as Context, api } from './shared/workspace.jsx';
 import { Button } from './shared/ui.jsx';
 import { Overview } from './features/overview/Overview.jsx';
@@ -48,10 +48,11 @@ export default function App() {
   const loader=useRef(null);
   if(!loader.current)loader.current=workspaceLoader(async()=>{
     const s=await api('/bootstrap');
-    setData(s.data);setIntegrations(s.integrations);setAccounts(s.accounts);
+    setData(previous=>s.data.jobFeed?.truncated && previous ? mergeFeedCache(s.data,previous.jobs) : s.data);setIntegrations(s.integrations);setAccounts(s.accounts);
     setTasks(s.tasks);setWorker(s.worker || {status:'offline'});setVault(s.vault);setAutopilot(s.autopilot);setSearch(s.search);setSetup(s.setup);
     setError(null);
   });
+  const cacheJobs=useCallback(jobs=>setData(previous=>previous ? mergeFeedCache(previous,jobs,true) : previous),[]);
   const reload=options=>loader.current(options);
   async function checkSession() {
     setRetrying(true);setError(null);
@@ -131,7 +132,7 @@ export default function App() {
       </div>
     );
   const app = {
-    careerJobId,setCareerJobId,theme,toggleTheme,worker,connected,
+    cacheJobs,careerJobId,setCareerJobId,theme,toggleTheme,worker,connected,
     data,
     integrations,
     accounts,
@@ -197,3 +198,9 @@ export {CareerPrep} from './features/career/CareerPrep.jsx';
 export {StoryBank} from './features/career/StoryBank.jsx';
 
 export {CommandPalette,TailoredDocuments};
+
+function mergeFeedCache(state,jobs,newFirst=false) {
+  const pinned=new Set([...state.applications,...state.contacts,...state.campaigns].map(item=>item.jobId));
+  const seen=new Set(),merged=(newFirst?[...jobs,...state.jobs]:[...state.jobs,...jobs]).filter(job=>{if(seen.has(job.id))return false;seen.add(job.id);return true;});
+  return {...state,jobs:merged.filter((job,index)=>index<1000 || pinned.has(job.id))};
+}

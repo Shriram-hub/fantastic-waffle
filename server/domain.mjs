@@ -66,14 +66,14 @@ const tokens = (value) => [
       .filter((t) => t.length > 1),
   ),
 ];
-const containsTerm = (value, term) =>
+export const containsTerm = (value, term) =>
   new RegExp(
     `(^|[^a-z0-9])${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9]|$)`,
     "i",
   ).test(value);
 export function scoreJob(job, profile) {
   const haystack =
-    `${job.title} ${job.description} ${(job.tags || []).join(" ")}`.toLowerCase();
+    `${job.title} ${job.description} ${(job.indexSkills || []).join(' ')} ${(job.tags || []).join(" ")}`.toLowerCase();
   const skills = (profile.skills || []).filter(Boolean);
   const matched = skills.filter((s) => containsTerm(haystack, s));
   const missing = skills.filter((s) => !matched.includes(s));

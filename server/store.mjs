@@ -206,11 +206,12 @@ export function openStore(directory) {
     const local = context.getStore() || root,
       before = entries(local.base),
       after = entries(local.state);
+    const beforeMaps=Object.fromEntries(Object.entries(before).map(([table,rows])=>[table,new Map(rows.map(v=>[v.id,v]))])),afterIds=Object.fromEntries(Object.entries(after).map(([table,rows])=>[table,new Set(rows.map(v=>v.id))]));
     if (!inTransaction) db.exec("BEGIN IMMEDIATE");
     try {
       for (const table of Object.keys(before).reverse())
         for (const old of before[table])
-          if (!after[table].some((v) => v.id === old.id)) {
+          if (!afterIds[table].has(old.id)) {
             const row = db
               .prepare(`SELECT body FROM ${table} WHERE id=?`)
               .get(old.id);
@@ -220,7 +221,7 @@ export function openStore(directory) {
           }
       for (const [table, values] of Object.entries(after))
         for (const { id, value } of values) {
-          const old = before[table].find((v) => v.id === id);
+          const old = beforeMaps[table].get(id);
           if (old && JSON.stringify(old.value) === JSON.stringify(value))
             continue;
           const current = db

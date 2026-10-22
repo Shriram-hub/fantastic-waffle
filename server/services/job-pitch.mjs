@@ -1,3 +1,5 @@
+import {contactTargeting,prioritizeContact,pitchAngle,PERSONA_FILTERS,PITCH_ANGLES} from './contact-personas.mjs';
+import {hydrateJobDetail} from './job-details.mjs';
 import {id,hash,now,fail,emailValid} from '../domain.mjs';
 import {companyDomain,resolveCompany} from '../providers/contacts/company.mjs';
 import {findCompanyContacts} from './contact-discovery.mjs';
@@ -5,19 +7,21 @@ import {ensureJobDocuments,documentSummary,documentFingerprint} from './job-docu
 import {draftAutopilotPitch} from './ai.mjs';
 import {activity} from './autopilot-policy.mjs';
 
-const sourceHash=(s,j)=>hash({profile:s.profile,resume:s.resume?.contentHash || s.resume?.base64,text:s.resume?.text,job:{id:j.id,title:j.title,company:j.company,description:j.description,url:j.url,archived:j.archived}});
+const sourceHash=(s,j)=>hash({profile:s.profile,resume:s.resume?.contentHash || s.resume?.base64,text:s.resume?.text,job:{id:j.id,title:j.title,company:j.company,description:j.descriptionHash || j.description,url:j.url,archived:j.archived}});
 // Bound UTF-16 length as well as Unicode code points for clipboard consumers.
-export function linkedInDrafts(job,contact,profile={}) {
+export function linkedInDrafts(job,contact,profile={},requestedAngle='auto') {
   const bound=(value,max)=>{let result=value.slice(0,max);if(/[\uD800-\uDBFF]$/.test(result))result=result.slice(0,-1);return result;};
   const compact=(value,max)=>bound(String(value || '').replace(/\s+/g,' ').trim(),max);
   const first=compact(contact.firstName || contact.name?.split(' ')[0] || 'there',24);
   const role=compact(job.title,72),company=compact(job.company,44);
 
-  return {connectionNote:bound(`Hi ${first}, I’m interested in the ${role} role at ${company}. I’d love to connect and learn about the team.`,199),followUpDM:bound(`Thanks for connecting, ${first}. I’m exploring the ${role} opening at ${company}. ${compact(profile.name,50) ? `I’m ${compact(profile.name,50)}. ` : ''}Would you be the right person to ask about the role, or could you point me to the hiring team? Happy to share my tailored résumé.`,449)};
+  const angle=pitchAngle(contact,requestedAngle);
+  const note=angle==='value' ? `Hi ${first}, I’m exploring ${role} at ${company}. May I share relevant work from my résumé with your team?` : angle==='referral' ? `Hi ${first}, I’m exploring ${role} at ${company}. Could I ask for 10 minutes of advice on your team?` : `Hi ${first}, I’m interested in ${role} at ${company}. May I share a concise role-fit summary?`;
+  return {angle,connectionNote:bound(note,199),followUpDM:bound(angle==='referral' ? `Thanks for connecting, ${first}. I’m considering ${role} at ${company}. Would you have 10 minutes to share advice about the team, or suggest the right person for a referral if you think my background fits?` : angle==='value' ? `Thanks for connecting, ${first}. I’m exploring ${role} at ${company}. May I share a relevant example from my résumé and discuss how it relates to your team’s priorities?` : `Thanks for connecting, ${first}. I’m interested in ${role} at ${company}. May I send a concise summary of my relevant experience and tailored résumé for your review?`,449)};
 }
 export function pitchSummary(run,store) {
   const document=(store.state.jobDocuments || []).find(d=>d.id===run.documentSetId);
-  return {...run,contacts:(run.contactIds || []).map(id=>store.state.contacts.find(c=>c.id===id)).filter(Boolean).map(contact=>({...contact,linkedIn:linkedInDrafts(store.state.jobs.find(j=>j.id===run.jobId) || {title:'open',company:contact.company},contact,store.state.profile)})),documents:document ? documentSummary(document) : null};
+  return {...run,contacts:(run.contactIds || []).map(id=>store.state.contacts.find(c=>c.id===id)).filter(Boolean).map(contact=>({...contact,linkedIn:linkedInDrafts(store.state.jobs.find(j=>j.id===run.jobId) || {title:'open',company:contact.company},contact,store.state.profile,run.options?.pitchAngle || 'auto')})),documents:document ? documentSummary(document) : null};
 }
 const pitchRequests=new WeakMap();
 export async function startJobPitch(jobId,data,store,queue,config={}) {
@@ -40,12 +44,14 @@ async function reserveJobPitch(jobId,data,store,queue,config) {
   if(!s.profile.name || !emailValid(s.profile.email || '') || !s.resume?.text)fail('Save your name, email and readable résumé first.');
   if(data.allowCredits===true && !config.HUNTER_API_KEY)fail('Hunter is not configured. Use free discovery.',503);
   if(data.useAI===true && (!config.LLM_API_KEY || !config.LLM_MODEL))fail('Configure Gemini or use factual templates.',503);
+  const targetPersona=data.targetPersona || 'all',angle=data.pitchAngle || 'auto';
+  if(!PERSONA_FILTERS.includes(targetPersona) || !PITCH_ANGLES.includes(angle))fail('Choose a valid persona and pitch angle.');
   const domain=data.companyDomain ? companyDomain(data.companyDomain) : '';
   if(data.companyDomain && (!domain || data.confirmedDomain!==true))fail('Confirm a corporate domain, without a URL or job-board host.');
-  const scope=sourceHash(s,j),signature=hash({jobId,scope,domain,allowCredits:data.allowCredits===true,allowSearch:data.allowSearch===true,useAI:data.useAI===true});
+  const scope=sourceHash(s,j),signature=hash({jobId,scope,domain,targetPersona,pitchAngle:angle,allowCredits:data.allowCredits===true,allowSearch:data.allowSearch===true,useAI:data.useAI===true});
   const previous=(s.jobPitches || []).find(r=>r.signature===signature && !['failed','needs-domain'].includes(r.status));
   if(previous)return {pitch:pitchSummary(previous,store),existing:true};
-  const run={id:id(),jobId,signature,sourceHash:scope,status:'queued',createdAt:now(),contactIds:[],options:{domain,allowCredits:data.allowCredits===true,allowSearch:data.allowSearch===true,useAI:data.useAI===true}};
+  const run={id:id(),jobId,signature,sourceHash:scope,status:'queued',createdAt:now(),contactIds:[],options:{domain,targetPersona,pitchAngle:angle,allowCredits:data.allowCredits===true,allowSearch:data.allowSearch===true,useAI:data.useAI===true}};
   if(!s.applications.some(a=>a.jobId===jobId))s.applications.push({id:id(),jobId,stage:'Saved',notes:'Company pitch prepared from job feed',createdAt:now(),updatedAt:now(),isDemo:false,history:[{stage:'Saved',at:now(),source:'Company pitch preparation'}]});
   s.jobPitches=[run,...(s.jobPitches || []).slice(0,49)];
   const task=await queue.enqueue('job.auto-pitch',{pitchId:run.id},{dedupeKey:`job-pitch:${run.id}`,maxAttempts:1});run.taskId=task.id;await store.save(true);
@@ -54,23 +60,23 @@ async function reserveJobPitch(jobId,data,store,queue,config) {
 export async function buildJobPitch(task,store,queue,config,fetcher=fetch,dependencies={}) {
   let run=(store.state.jobPitches || []).find(r=>r.id===task.payload.pitchId),job=store.state.jobs.find(j=>j.id===run?.jobId);
   if(!run || !job)return {status:'cancelled'};
-  const fresh=async()=>{await store.refresh();run=(store.state.jobPitches || []).find(r=>r.id===task.payload.pitchId);job=store.state.jobs.find(j=>j.id===run?.jobId);if(!run || !job || run.sourceHash!==sourceHash(store.state,job))fail('Your profile or this role changed. Prepare the pitch again.',409);};
+  const fresh=async()=>{await store.refresh();run=(store.state.jobPitches || []).find(r=>r.id===task.payload.pitchId);job=store.state.jobs.find(j=>j.id===run?.jobId);if(!run || !job || run.sourceHash!==sourceHash(store.state,job))fail('Your profile or this role changed. Prepare the pitch again.',409);job=await hydrateJobDetail(job,store);};
   const stage=async(status)=>{run.status=status;run.updatedAt=now();await store.save();await activity(store,'pitch',`${job.company}: ${status.replaceAll('-',' ')}.`,1);};
   try {
     await fresh();await stage('finding-contacts');
     const company=run.options.domain ? {name:job.company,domain:run.options.domain,source:'User-confirmed corporate domain'} : await resolveCompany(job,fetcher,store);
     if(!company || company.requiresDomainReview){run.company=company;run.status='needs-domain';run.warning='Confirm the company’s official domain to continue. DNS alone cannot identify the employer.';await store.save();return {status:'Needs domain review'};}
-    const found=await findCompanyContacts(job,company,{store,config,fetcher,lookupMx:dependencies.lookupMx,pages:dependencies.contactPages,allowCredits:run.options.allowCredits,allowWarmSearch:run.options.allowSearch,limit:5,dailyLimit:Math.min(100,Number(config.CONTACT_API_DAILY_LIMIT) || 20)});
+    const found=await findCompanyContacts(job,company,{store,config,fetcher,lookupMx:dependencies.lookupMx,pages:dependencies.contactPages,allowCredits:run.options.allowCredits,allowWarmSearch:run.options.allowSearch,limit:5,dailyLimit:Math.min(100,Number(config.CONTACT_API_DAILY_LIMIT) || 20),targetPersona:run.options.targetPersona || 'all'});
     await fresh();
-    job.companyDomain=company.domain;job.companyDomainSource='confirmed-pitch-resolution';
+    Object.assign(store.state.jobs.find(j=>j.id===job.id),{companyDomain:company.domain,companyDomainSource:'confirmed-pitch-resolution'});
     await store.db.prepare('INSERT INTO companies(domain,name,body) VALUES(?,?,?) ON CONFLICT(domain) DO UPDATE SET body=excluded.body').run(company.domain,job.company,JSON.stringify(company));
     const contacts=[];
-    for(const incoming of found.contacts){let contact=store.state.contacts.find(c=>c.email && c.email.toLowerCase()===incoming.email?.toLowerCase());if(contact?.suppressed || contact?.isDemo)continue;if(!contact){contact={...incoming,id:id(),company:job.company,companyDomain:company.domain,jobId:job.id,jobTitle:job.title,jobUrl:job.url};store.state.contacts.push(contact);}else if(contact.emailStatus!=='verified')Object.assign(contact,incoming,{id:contact.id,jobId:contact.jobId || job.id});contacts.push(contact);}
+    for(const incoming of found.contacts){let contact=store.state.contacts.find(c=>c.email && c.email.toLowerCase()===incoming.email?.toLowerCase());if(contact?.suppressed || contact?.isDemo)continue;if(!contact){contact={...incoming,id:id(),company:job.company,companyDomain:company.domain,jobId:job.id,jobTitle:job.title,jobUrl:job.url};store.state.contacts.push(contact);}else {const oldId=contact.id,status=contact.emailStatus,verification=contact.verification;Object.assign(contact,incoming,{id:oldId,jobId:contact.jobId || job.id});if(status==='verified'){contact.emailStatus=status;contact.verification=verification;}}contacts.push(contact);}
     run.company=company;run.contactIds=contacts.map(c=>c.id);run.warnings=found.warnings;await store.save();await stage('tailoring-documents');
     const document=await ensureJobDocuments(job,store,queue,config,fetcher,run.options.useAI);if(!document)fail('The résumé changed during document preparation. Retry.',409);
     await fresh();run.documentSetId=document.id;await store.save();await stage('drafting-pitch');
     const personalizedMessages={};
-    for(const contact of contacts)personalizedMessages[contact.id]=await draftAutopilotPitch(store.state,job,contact,'',{useAI:run.options.useAI},config,fetcher,store);
+    for(const contact of contacts)personalizedMessages[contact.id]=await draftAutopilotPitch(store.state,job,contact,'',{useAI:run.options.useAI,pitchAngle:run.options.pitchAngle},config,fetcher,store);
     await fresh();
     if(document.fingerprint!==documentFingerprint(store.state,job,document.useAI))fail('Generate a new document snapshot for the updated profile.',409);
     const accounts=await store.db.prepare('SELECT id FROM mail_accounts').all(),campaignId=id();

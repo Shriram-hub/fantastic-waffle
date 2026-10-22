@@ -12,10 +12,61 @@ import {createApp} from '../server/index.mjs';
 import {publicCompanyPages} from '../server/providers/contacts/public-pages.mjs';
 import {parseCSV,normalizeContact} from '../server/domain.mjs';
 import {checkContactProviders} from '../server/services/contact-provider-checks.mjs';
+import {contactTargeting,reportingTargets,prioritizeContact,classifyJobField} from '../server/services/contact-personas.mjs';
+import {activeHiringPeople,searchCompanyPeople,findPublicContacts} from '../server/providers/contacts/free-xray.mjs';
+import {learnEmailPattern,permuteEmails} from '../server/providers/contacts/permutator.mjs';
+import {observeCompanyEmails,companyPattern} from '../server/services/company-patterns.mjs';
+import {searchHunterDomain} from '../server/providers/contacts/hunter.mjs';
+import {ingestMessage} from '../server/services/inbox.mjs';
 
 const response=data=>new Response(JSON.stringify(data)),mx=async()=>[{exchange:'mx.company.test'}];
 async function personal(t){const store=openStore(':memory:');t.after(()=>store.close());await store.replace(initialState(false));return store;}
 const publicPages=async domain=>[{url:`https://${domain}/careers`,text:`Apply to hr&#64;${domain} or jobs@${domain}. Do not use jobs@elsewhere.com.`}];
+
+test('field personas weight functional leaders first, preserve specialist recruiters and peers, and prefer the actual role over preferences',()=>{
+  for(const title of ['Financial Analyst','Investment Banking Analyst','Accountant']) {
+    const target=contactTargeting({title},{roles:['Software Engineer']});assert.equal(target.field,'finance');assert.deepEqual(target.personas.map(p=>p.weight),[60,25,15]);
+    for(const term of ['VP Finance','Head of FP&A','Managing Director'])assert.ok(target.personas[0].titles.includes(term));
+    assert.ok(target.personas[1].titles.includes('Finance Recruiter'));
+    assert.ok(prioritizeContact({title:'VP Finance'},target).priorityScore>prioritizeContact({title:'Recruiter'},target).priorityScore);
+  }
+  for(const [title,field] of [['AI Engineer','software'],['Head of Product Design','product'],['Growth Marketing Analyst','marketing'],['Strategy Consultant','consulting']])assert.equal(classifyJobField({title}),field);
+  assert.equal(classifyJobField({title:'Associate',department:'Corporate Finance'}),'finance');
+});
+test('reporting lines and source-supplied posting authors lead public people queries without inventing identities',async()=>{
+  const job={title:'Financial Analyst',company:'Company',url:'https://company.com/jobs/1',description:'Reporting to the Director of Corporate Development. You will build models. Work closely with our CFO on the budget.',postedBy:{name:'Riley Patel',url:'https://linkedin.com/in/riley-patel'}};
+  const targeting=contactTargeting(job);assert.deepEqual(reportingTargets(job).map(r=>r.value),['Riley Patel','Director of Corporate Development','CFO']);
+  assert.deepEqual(reportingTargets({description:'You will report to a supportive team.'}),[]);
+  const queries=[];
+  await searchCompanyPeople('Company','company.com',{job,targeting,allowSearch:true,freeSearch:false,config:{SERPAPI_API_KEY:'fake'},call:async(_provider,fn)=>fn(),fetcher:async input=>{queries.push(new URL(input).searchParams.get('q'));return response({organic_results:[]});}});
+  assert.ok(queries.some(q=>q.includes('"Director of Corporate Development"') && q.indexOf('"Riley Patel"')<q.indexOf('"VP Finance"')));
+  assert.ok(queries.some(q=>q.includes('site:linkedin.com/posts') && q.includes('Financial Analyst')));
+});
+test('hiring-post authors have an evidenced +25 signal; posting about a company never establishes employment or a guessed mailbox',async()=>{
+  const result={link:'https://www.linkedin.com/posts/riley_hiring-activity-1',title:'Riley Patel on LinkedIn: We are hiring a Financial Analyst at Company',snippet:'Join my team at Company'};
+  const [poster]=activeHiringPeople([result],'Company','company.com',contactTargeting({title:'Financial Analyst'}));
+  assert.equal(poster.activeHiringPoster,true);assert.equal(poster.email,'');assert.equal(poster.employerSupported,false);assert.ok(poster.hiringPost.quote.includes('hiring'));
+  assert.equal(poster.priorityScore,40);assert.equal(activeHiringPeople([{...result,title:'Company is hiring'}],'Company','company.com').length,0);
+  const contacts=await findPublicContacts({title:'Financial Analyst',company:'Company',description:'',url:'https://company.com/jobs/1'},{domain:'company.com'},{pages:async()=>[],searchPeople:true,freeSearch:false,allowSearch:true,config:{SERPAPI_API_KEY:'fake'},call:async(_provider,fn)=>fn(),fetcher:async input=>response({organic_results:new URL(input).searchParams.get('q').includes('linkedin.com/posts')?[result]:[]})});
+  assert.equal(contacts[0].email,'');assert.equal(contacts[0].activeHiringPoster,true);
+});
+test('named public or verified observations learn patterns across searches while guesses and conflicts stay unverified',async t=>{
+  const store=await personal(t),contact={name:'Rahul Sharma',email:'rahul.sharma@company.com',source:'Public company team',emailStatus:'unverified',sources:[{url:'https://company.com/team'}]};
+  const learned=learnEmailPattern([contact],'company.com');assert.equal(learned.pattern,'{first}.{last}');assert.equal(learned.status,'observed');assert.equal(learned.mailboxVerified,false);
+  const next=learnEmailPattern([{...contact,name:'Asha Verma',email:'asha.verma@company.com'}],'company.com',learned);assert.equal(next.status,'corroborated');assert.equal(next.sampleCount,2);
+  const mixed=learnEmailPattern([{...contact,name:'Jamie Jones',email:'jjones@company.com'}],'company.com',next);assert.equal(mixed.status,'mixed');
+  assert.equal(learnEmailPattern([{...contact,source:'Unverified name pattern',emailInferred:true}],'company.com'),null);
+  const [guess]=permuteEmails({firstName:'Maya',lastName:'Singh',companyDomain:'company.com',domainPattern:next.pattern});assert.equal(guess.email,'maya.singh@company.com');assert.equal(guess.emailStatus,'unverified');assert.equal(guess.confidence,undefined);
+  await observeCompanyEmails(store,{domain:'company.com',name:'Company'},[contact]);await store.refresh();assert.equal((await companyPattern(store,'company.com')).learnedPattern.sampleCount,1);
+  store.state.jobs=[{id:'pattern-job',company:'Company',companyDomain:'company.com',title:'Analyst',description:'',url:'https://company.com/jobs/1'}];await store.save();
+  await ingestMessage({id:'pattern-mail',from:'"Asha Verma" <asha.verma@company.com>',subject:'Hello',body:'Thank you',receivedAt:new Date().toISOString()},store);
+  assert.equal((await companyPattern(store,'company.com')).learnedPattern.status,'corroborated');
+});
+test('Hunter sends field-specific department filters and ranks finance leadership instead of discarding non-HR people',async()=>{
+  const targeting=contactTargeting({title:'Investment Banking Analyst'});
+  const result=await searchHunterDomain('company.com','fake',10,async input=>{assert.match(new URL(input).searchParams.get('department'),/^finance,/);return response({data:{domain:'company.com',organization:'Company',emails:[{first_name:'Riley',last_name:'Patel',position:'Recruiter',department:'hr',value:'riley@company.com'},{first_name:'Maya',last_name:'Singh',position:'Head of FP&A',department:'finance',value:'maya@company.com'}]}});},targeting);
+  assert.equal(result.contacts[0].name,'Maya Singh');assert.equal(result.contacts[0].persona,'manager');assert.equal(result.contacts[0].emailStatus,'unverified');
+});
 
 test('Hunter filters at the provider, preserves sources and recent verification, and rejects mismatched company domains',async()=>{
   const fetcher=async url=>{const u=new URL(url);assert.equal(u.searchParams.get('department'),'hr,executive');assert.equal(u.searchParams.get('limit'),'10');return response({data:{domain:'company.com',organization:'Company',accept_all:false,emails:[{value:'riley@company.com',first_name:'Riley',position:'Recruiter',department:'hr',verification:{status:'valid',date:new Date().toISOString()},sources:[{uri:'https://company.com/team',last_seen_on:'2026-10-20'}]},{value:'ceo@company.com',position:'CEO',department:'executive',verification:{status:'accept_all',date:new Date().toISOString()}},{value:'bad@elsewhere.com',department:'hr',verification:{status:'valid',date:new Date().toISOString()}}]}});};

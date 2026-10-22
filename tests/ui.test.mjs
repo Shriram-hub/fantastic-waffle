@@ -71,14 +71,14 @@ test("React views render populated/empty states and escape untrusted profile and
         ),
       );
       assert.ok(html.length > 100);
-      if(name==='Jobs') {assert.match(html,/Discover your next role/);assert.match(html,/Save &amp; find jobs/);assert.match(html,/Choose discovery sources/);}
+      if(name==='Jobs') {assert.match(html,/Discover your next role/);assert.match(html,/Save &amp; find jobs/);assert.match(html,/Choose discovery sources/);assert.match(html,/First-Mover/);assert.match(html,/LinkedIn discovery window/);}
       if(name==='Overview'){assert.match(html,/Your opportunity funnel/);assert.match(html,/Today’s action queue/);assert.match(html,/Auto-Pitch Top 5 Jobs/);}
       if(name==='Applications'){assert.match(html,/Kanban Board/);assert.match(html,/Compact Table/);assert.match(html,/Outreach Sent/);assert.match(html,/OA \/ Assessment/);assert.match(html,/Archived/);}
       if(name==='CommandPalette'){assert.match(html,/role="combobox"/);assert.match(html,/Run Job Discovery Now/);assert.match(html,/Test Mailbox Connection/);}
       if(name==='Connections') assert.match(html,/Free job discovery/);
-      if(name==='Contacts'){assert.match(html,/Find company contacts/);assert.match(html,/Use Hunter search/);assert.match(html,/Public-only discovery/);}
+      if(name==='Contacts'){assert.match(html,/Find company contacts/);assert.match(html,/Use Hunter search/);assert.match(html,/Public-only discovery/);assert.match(html,/Target persona/);assert.match(html,/Functional Hiring Managers/);}
       if(name==='CareerWorkspace'){assert.match(html,/Interview prep/);assert.match(html,/STAR stories/);assert.match(html,/Search analytics/);}
-      if(name === "Automation") {assert.match(html,/Autopilot Mode/);assert.match(html,/Enable Autopilot/);assert.match(html,/Approve|review queue/);}
+      if(name === "Automation") {assert.match(html,/Autopilot Mode/);assert.match(html,/Enable Autopilot/);assert.match(html,/Approve|review queue/);assert.match(html,/Add Any Company Career URL/);}
       assert.ok(!html.includes("<script>alert(1)</script>"));
       assert.ok(!html.includes("<img src=x"));
     }

@@ -1,3 +1,7 @@
+import {contactTargeting} from './contact-personas.mjs';
+import {jobFreshness} from './job-freshness.mjs';
+import {hydrateJobDetail} from './job-details.mjs';
+import {companyPattern} from './company-patterns.mjs';
 import {getSearchConfig} from './discovery.mjs';
 import {buildSearchPlan,rankOpportunity} from './search-plan.mjs';
 import {prioritizeWarmContacts} from './warm-connections.mjs';
@@ -152,13 +156,14 @@ export async function discoverJobs(task, store, queue, config = {}, fetcher = fe
   if (!await activePolicy(store,p.id)) return {status:"cancelled"};
   await store.db.prepare("INSERT INTO autopilot_schedule(id,next_run,cursor) VALUES('local',?,?) ON CONFLICT(id) DO UPDATE SET cursor=excluded.cursor").run(Date.now()+SWEEP_INTERVAL,(cursor+10)%Math.max(boards.length,1));
   let queued = 0;
-  for (const j of [...eligible.values()].sort((a,b)=>scoreDiscoveredJob(b,store.state,matrix,p).score-scoreDiscoveredJob(a,store.state,matrix,p).score).slice(0,30)) {
+  const ordered=[...eligible.values()].sort((a,b)=>jobFreshness(b).firstMoverScore-jobFreshness(a).firstMoverScore || scoreDiscoveredJob(b,store.state,matrix,p).score-scoreDiscoveredJob(a,store.state,matrix,p).score).slice(0,30);
+  for (const j of ordered) {
     const latest=store.state.jobs.find(job=>job.id===j.id);
     if(latest) latest.autopilotMatch=scoreDiscoveredJob(latest,store.state,matrix,p);
     if (!store.state.applications.some(a=>a.jobId===j.id)) store.state.applications.push({id:id(),jobId:j.id,stage:"Saved",notes:"Discovered by Autopilot",createdAt:now(),updatedAt:now(),isDemo:false,history:[{stage:"Saved",at:now(),source:"Autopilot discovery"}]});
   }
   await store.save();
-  for (const j of [...eligible.values()].slice(0,30)) {
+  for (const j of ordered) {
     const runId = hash(["autopilot-job-v1",canonicalJobKey(j)]);
     let run = decodeRun(await store.db.prepare("SELECT * FROM autopilot_runs WHERE id=?").get(runId));
     if (run && (["queued","completed"].includes(run.status) || run.policyId===p.id && (run.status==="review" || run.body.retryAfter>Date.now()))) continue;
@@ -177,7 +182,7 @@ async function contactCoolingDown(store,email,campaignId="") {
 export async function enrichCompany(task,store,queue,config = {},fetcher = fetch,lookupMx,contactPages) {
   const p=await activePolicy(store,task.payload.policyId),run=decodeRun(await store.db.prepare("SELECT * FROM autopilot_runs WHERE id=?").get(task.payload.runId));
   if (!p || !run || run.policyId!==p.id || ["review","queued","completed"].includes(run.status)) return {status:"cancelled"};
-  const j=store.state.jobs.find(j=>j.id===run.jobId);
+  const j=await hydrateJobDetail(store.state.jobs.find(j=>j.id===run.jobId),store);
   if (!j || j.archived) return {status:"cancelled"};
   try {
     const blockers=await pipelineBlockers(store,config,p);
@@ -186,12 +191,12 @@ export async function enrichCompany(task,store,queue,config = {},fetcher = fetch
     if (!company || company.requiresDomainReview) fail(`Company domain for ${j.company} is ambiguous or unavailable. No contact lookup was made.`,409);
     const otherRuns=await store.db.prepare("SELECT id,body FROM autopilot_runs WHERE status IN ('review','queued','completed') AND updated_at>?").all(Date.now()-7*86400000);
     if(otherRuns.some(r=>r.id!==run.id && JSON.parse(r.body).domain===company.domain)) fail(`Another ${j.company} role already has outreach in this week's pipeline.`,409);
-    await store.db.prepare("INSERT INTO companies(domain,name,body) VALUES(?,?,?) ON CONFLICT(domain) DO UPDATE SET body=excluded.body").run(company.domain,j.company,JSON.stringify(company));
+    await store.db.prepare("INSERT INTO companies(domain,name,body) VALUES(?,?,?) ON CONFLICT(domain) DO UPDATE SET body=excluded.body").run(company.domain,j.company,JSON.stringify({...await companyPattern(store,company.domain),...company}));
     const period=Math.floor(Date.now()/(7*86400000)), call=(key,provider,fn)=>providerCall(store,`${period}:${key}`,provider,p.maxContactLookupsPerDay,fn);
     let candidates=store.state.contacts.filter(c=>!c.isDemo && !c.suppressed && c.emailStatus==='verified' && (c.companyDomain===company.domain || c.email?.split('@')[1]===company.domain)).slice(0,p.contactsPerCompany), warnings=[];
     if(candidates.length<p.contactsPerCompany && p.allowContactCredits && config.APOLLO_API_KEY && !config.HUNTER_API_KEY) {
       try {
-        const titles=[...targetTitles(j.employeeCount),"CTO","Founder","Head of People"].slice(0,6).join(",");
+        const titles=contactTargeting(j,store.state.profile).titles.slice(0,6).join(',');
         const people=await call(`search:${company.domain}`,"Apollo",()=>searchApollo({domain:company.domain,titles,limit:p.contactsPerCompany},config.APOLLO_API_KEY,fetcher));
         for(const person of people.slice(0,p.contactsPerCompany)) {
           try {candidates.push({...person,...await call(`enrich:${person.apolloId}`,"Apollo",()=>enrichApollo(person,config.APOLLO_API_KEY,fetcher))});}
@@ -234,7 +239,7 @@ export async function enrichCompany(task,store,queue,config = {},fetcher = fetch
 export async function draftPitches(task,store,queue,config = {},fetcher = fetch) {
   const p=await activePolicy(store,task.payload.policyId),run=decodeRun(await store.db.prepare("SELECT * FROM autopilot_runs WHERE id=?").get(task.payload.runId));
   if(!p || !run || run.policyId!==p.id || !["enriched","drafting"].includes(run.status)) return {status:"cancelled"};
-  const job=store.state.jobs.find(j=>j.id===run.jobId);
+  const job=await hydrateJobDetail(store.state.jobs.find(j=>j.id===run.jobId),store);
   if(!job || job.archived) return {status:"cancelled"};
   const campaignIds=[];
   for(const contactId of run.body.contactIds) {

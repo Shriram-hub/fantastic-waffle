@@ -1,6 +1,6 @@
 import {hash} from '../domain.mjs';
 
-export const SEARCH_DEFAULTS={enabled:true,roles:[],location:'',country:'',workMode:'Any',experience:'Any'};
+export const SEARCH_DEFAULTS={enabled:true,roles:[],location:'',country:'',workMode:'Any',experience:'Any',freshness:'7d'};
 export const normalizeSearch=s=>String(s || '').toLowerCase().replace(/front[ -]?end/g,'frontend').replace(/back[ -]?end/g,'backend').replace(/full[ -]?stack/g,'fullstack').replace(/\bdevelopers?\b/g,'engineer').replace(/\bfinancial\b/g,'finance').replace(/\b(bangalore)\b/g,'bengaluru').replace(/\bgurgaon\b/g,'gurugram').replace(/[^a-z0-9+#]+/g,' ').trim();
 export const searchLocations=value=>[...new Set((Array.isArray(value) ? value : String(value || '').split(/\s+(?:or|and)\s+|[,;|\n·]/i)).map(s=>String(s).trim()).filter(Boolean))].slice(0,8);
 const metros=[
@@ -39,14 +39,14 @@ export function buildSearchPlan(state,settings={}) {
   const derived=explicit.length ? [] : roleRules.filter(([pattern])=>pattern.test(`${p.headline || ''}\n${r?.text || ''}\n${skills.join(' ')}`)).map(([,role])=>role).slice(0,6);
   const location=settings.location || p.location || '',locations=searchLocations(location);
   const inferred=[...new Set(locations.map(l=>metroFor(l)?.country).filter(Boolean))];
-  const plan={roles:explicit.length ? explicit : derived,skills,location,locations,country:settings.country || (inferred.length===1 ? inferred[0] : ''),workMode:settings.workMode || p.workMode || 'Any',experience:settings.experience || 'Any',derived:!explicit.length && !!derived.length};
-  return {...plan,personalized:!!plan.roles.length,scope:hash({...plan,matcherVersion:3,sources:settings.sources})};
+  const plan={roles:explicit.length ? explicit : derived,skills,location,locations,country:settings.country || (inferred.length===1 ? inferred[0] : ''),workMode:settings.workMode || p.workMode || 'Any',experience:settings.experience || 'Any',freshness:settings.freshness || '7d',derived:!explicit.length && !!derived.length};
+  return {...plan,personalized:!!plan.roles.length,scope:hash({...plan,matcherVersion:4,sources:settings.sources})};
 }
 const senior=/\b(senior|sr|staff|principal|lead|manager|director|head|vp)\b/i;
 const regionNames=new Intl.DisplayNames(['en'],{type:'region'});
 const countryAliases={US:['united states','usa','u s','us only','us remote'],GB:['united kingdom','uk','great britain'],IN:['india'],CA:['canada'],AU:['australia'],DE:['germany'],FR:['france'],SG:['singapore']};
 export function rankOpportunity(job,plan) {
-  const title=normalizeSearch(job.title),body=normalizeSearch(`${job.title} ${job.description || ''} ${(job.tags || []).join(' ')}`);
+  const title=normalizeSearch(job.title),body=normalizeSearch(`${job.title} ${job.description || ''} ${(job.indexSkills || []).join(' ')} ${(job.tags || []).join(' ')}`);
   const matched=plan.skills.filter(s=>body.includes(normalizeSearch(s))),missing=plan.skills.filter(s=>!matched.includes(s));
   const reasons=[],gaps=[];
   let eligible=true,hardBlocked=false,roleFit=0;

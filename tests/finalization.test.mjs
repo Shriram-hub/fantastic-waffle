@@ -121,6 +121,34 @@ test('Veloce LinkedIn drafts stay below clipboard limits without invented backgr
   for(const size of [1,100,2000]){const drafts=linkedInDrafts({title:'Finance '.repeat(size),company:'Company '.repeat(size)},{name:'😀'.repeat(size)},{name:'Casey '.repeat(size)});assert.ok(drafts.connectionNote.length<200);assert.ok(drafts.followUpDM.length<450);assert.ok(!/[\uD800-\uDBFF]$/.test(drafts.connectionNote));}
   assert.ok(!normal.connectionNote.includes('years'));
 });
+test('manager, recruiter and peer drafts use distinct factual angles and bounded LinkedIn notes',async()=>{
+  const {draftAutopilotPitch}=await import('../server/services/ai.mjs'),{linkedInDrafts}=await import('../server/services/job-pitch.mjs');
+  const state=initialState(false);Object.assign(state.profile,{name:'Casey Quinn',skills:['Excel','Valuation']});state.resume={text:'Built Excel forecasts for a student project.\nReviewed valuation models.'};
+  const job={title:'Financial Analyst',company:'Company',description:'Excel and valuation modeling',url:'https://company.com/jobs/1'},drafts={};
+  for(const persona of ['manager','peer','recruiter']){
+    const contact={name:'Riley Patel',company:'Company',persona},draft=await draftAutopilotPitch(state,job,contact,'https://candidate.com/resume',{useAI:false},{},()=>assert.fail('Templates do not call AI'));
+    drafts[persona]=draft;assert.ok(draft.evidence.every(e=>state.resume.text.includes(e)));assert.ok(!/five years|increased revenue|saved \$|built a DCF/i.test(draft.body));
+    const note=linkedInDrafts(job,contact,state.profile);assert.ok(note.connectionNote.length<200);assert.ok(note.followUpDM.length<450);assert.equal(note.angle,draft.angle);assert.match(note.connectionNote,/Financial Analyst/);
+  }
+  assert.match(drafts.manager.body,/relevant example from my résumé/);assert.match(drafts.manager.body,/Built Excel forecasts/);assert.match(drafts.peer.body,/10 minutes/);assert.match(drafts.peer.body,/internal referral/);assert.match(drafts.recruiter.body,/role-fit summary/);assert.match(drafts.recruiter.body,/•/);
+  const overridden=await draftAutopilotPitch(state,job,{name:'Riley',persona:'manager'},'',{useAI:false,pitchAngle:'referral'},{});assert.equal(overridden.angle,'referral');
+});
+test('career-page imports are owner-only, asynchronous and persist the detected ATS without a provider call on the request',async t=>{
+  const store=workspace(t),w=await apiWorkspace(t,store);
+  const unauth=await fetch(w.base+'/api/search/career-pages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:'https://company.com/careers'})});assert.equal(unauth.status,401);
+  const result=await w.call('/api/search/career-pages',{url:'https://jobs.eu.lever.co/new-employer/'});assert.equal(result.status,202);const body=await result.json();assert.equal(body.board.source,'Lever EU');assert.equal(body.status,'pending');
+  const boards=await w.call('/api/search/career-pages');assert.equal((await boards.json()).boards[0].status,'pending');
+});
+test('bounded bootstrap keeps tracked jobs while paginated search and freshness filters cover the whole index',async t=>{
+  const store=workspace(t),template=store.state.jobs[0];
+  store.state.jobs=Array.from({length:650},(_,i)=>({...template,id:`pool-${i}`,company:i===648?'Rare Company':`Company ${i}`,url:`https://company.com/jobs/${i}`,source:'Company',publishedAt:i===648?new Date().toISOString():'2025-01-01T00:00:00Z'}));
+  store.state.applications=[{id:'tracked-tail',jobId:'pool-649',stage:'Saved'}];await store.save();
+  const w=await apiWorkspace(t,store),response=await w.call('/api/bootstrap'),bootstrap=await response.json();
+  assert.equal(bootstrap.data.jobFeed.total,650);assert.equal(bootstrap.data.jobFeed.truncated,true);assert.ok(bootstrap.data.jobs.length<=501);assert.ok(bootstrap.data.jobs.some(j=>j.id==='pool-649'));
+  const page=await (await w.call('/api/jobs/feed?view=all&offset=600&limit=20')).json();assert.equal(page.total,650);assert.equal(page.jobs.length,20);
+  const rare=await (await w.call('/api/jobs/feed?q=Rare%20Company&view=all')).json();assert.equal(rare.jobs[0].id,'pool-648');
+  const fresh=await (await w.call('/api/jobs/feed?firstMover=true&view=all')).json();assert.equal(fresh.total,1);assert.equal(fresh.jobs[0].firstMover,true);assert.ok(!JSON.stringify(fresh).includes('detailCacheKey'));
+});
 test('simultaneous auto-pitch requests reuse one durable preparation without waiting for external APIs',async t=>{
   const store=workspace(t),w=await apiWorkspace(t,store),started=Date.now();
   const results=await Promise.all(Array.from({length:4},()=>w.call('/api/jobs/job/auto-pitch',{})));

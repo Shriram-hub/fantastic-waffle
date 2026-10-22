@@ -1,3 +1,5 @@
+import {bootstrapJobs} from './services/job-feed.mjs';
+import {jobFreshness} from './services/job-freshness.mjs';
 import {companyLogos} from './services/company-logos.mjs';
 import {workerStatus} from './services/worker-health.mjs';
 import {resumeLinkSummaries} from './services/engagement.mjs';
@@ -40,7 +42,7 @@ const JSON_LIMIT = 8_000_000;
 const csvCell = v => `"${String(v ?? "").replace(/^[=+@\-\t\r]/, "'$&").replaceAll('"', '""')}"`;
 const filename = s => s.replace(/[^a-z0-9._-]/gi, "_").slice(0, 130);
 function publicState(s,preferences) {
-  const plan=buildSearchPlan(s,preferences);
+  const plan=buildSearchPlan(s,preferences),feed=bootstrapJobs(s,plan);
   const {
     previews,
     apolloResults,
@@ -50,13 +52,8 @@ function publicState(s,preferences) {
   return {
     ...rest,
     careerSummary:careerOverview(s),
-    jobs: s.jobs.map(j => ({
-      ...j,
-      description: j.description?.slice(0,280) || '',
-      descriptionTruncated: (j.description?.length || 0)>280,
-      semanticMatch: j.semanticMatch?.resumeHash === hash(s.resume?.text) && j.semanticMatch?.jobHash === hash(`${j.title}\n${j.description}`) ? j.semanticMatch : null,
-      match: s.isDemo ? scoreJob(j,s.profile) : j.discoveryMatch?.scope===plan.scope ? j.discoveryMatch : rankOpportunity(j,plan)
-    })),
+    ...feed,
+    jobs: s.isDemo ? feed.jobs.map(j=>({...j,match:scoreJob(j,s.profile)})) : feed.jobs,
     resume: s.resume ? Object.fromEntries(Object.entries(s.resume).filter(([key]) => key !== "base64")) : null
   };
 }
@@ -126,7 +123,7 @@ export function createApp({
     ]);
     const setup=setupReadiness(store,config);
     return {data:publicState(store.state,preferences),search,autopilot,accounts,setup,worker:await workerStatus(store),
-      integrations:{remotive:true,greenhouse:true,lever:true,ashby:true,arbeitnow:true,himalayas:true,apollo:setup.apolloConfigured,hunter:setup.hunterConfigured,googleOAuth:setup.googleConfigured,microsoftOAuth:setup.microsoftConfigured,gmail:accounts.some(a=>a.provider==='google'),outlook:accounts.some(a=>a.provider==='microsoft'),resend:setup.resendConfigured,liveSendEnabled:setup.liveSendEnabled,ai:setup.aiConfigured,embeddings:!!(config.LLM_API_KEY && config.EMBEDDING_MODEL),adzuna:!!(config.ADZUNA_APP_ID && config.ADZUNA_APP_KEY),queueDriver:config.REDIS_URL ? 'BullMQ + Redis' : store.kind==='postgres' ? 'PostgreSQL' : 'SQLite',autoApply:'assisted'},
+      integrations:{remotive:true,greenhouse:true,lever:true,ashby:true,arbeitnow:true,himalayas:true,apollo:setup.apolloConfigured,hunter:setup.hunterConfigured,googleOAuth:setup.googleConfigured,microsoftOAuth:setup.microsoftConfigured,gmail:accounts.some(a=>a.provider==='google'),outlook:accounts.some(a=>a.provider==='microsoft'),resend:setup.resendConfigured,liveSendEnabled:setup.liveSendEnabled,ai:setup.aiConfigured,embeddings:!!(config.LLM_API_KEY && config.EMBEDDING_MODEL),adzuna:!!(config.ADZUNA_APP_ID && (config.ADZUNA_APP_KEY || config.ADZUNA_API_KEY)),queueDriver:config.REDIS_URL ? 'BullMQ + Redis' : store.kind==='postgres' ? 'PostgreSQL' : 'SQLite',autoApply:'assisted'},
       vault:{versions:versions.map(v=>({id:v.id,kind:v.kind,title:JSON.parse(v.body).title,createdAt:v.created_at})),links:resumeLinkSummaries(links,store.state)},
       tasks:{tasks,applications:applications.map(a=>({...a,details:JSON.parse(a.body)}))}};
   }
@@ -158,7 +155,7 @@ export function createApp({
           documentCheck=document ? {ok:true,documentId:document.id,resumeBytes:document.resume.size,coverLetterBytes:document.coverLetter.size,coverLetterWords:document.wordCount,storage:document.resume.storage?.kind || 'memory'} : {ok:false,reason:'No active role or the source profile changed.'};
         }
         return json(res,200,{ok:true,indexed:result.search.indexed,matches:result.search.matches,storage:store.kind || 'sqlite',googleConfigured:result.setup.googleConfigured,
-          contactDiscovery:{hunterConfigured:contacts.hunterConfigured,dailyLimit:contacts.dailyLimit,usedToday:contacts.usedToday},career:{available:true,openTasks:result.data.careerSummary.stats.openTasks},features:{regionalBoards:true,documents:true,sequenceSteps:3,copilotVersion:"0.9.0",phoneAlerts:true,automaticInterviewPrep:true,veloceUI:true,kanban:true,commandPalette:true,documentEditor:true,linkedInDrafts:true,companyPitch:true,mailboxSelfTests:true,extensionAutoPair:true},documentCheck,contactFallbackCheck,mail:{connectedAccounts:result.accounts.length,liveSending:result.setup.liveSendEnabled},providerChecks:publicUrl.searchParams.get('checkContacts')==='true' ? await checkContactProviders(store,config,fetcher) : undefined});
+          contactDiscovery:{hunterConfigured:contacts.hunterConfigured,dailyLimit:contacts.dailyLimit,usedToday:contacts.usedToday},career:{available:true,openTasks:result.data.careerSummary.stats.openTasks},features:{regionalBoards:true,documents:true,sequenceSteps:3,copilotVersion:"0.9.0",phoneAlerts:true,automaticInterviewPrep:true,veloceUI:true,kanban:true,commandPalette:true,documentEditor:true,linkedInDrafts:true,companyPitch:true,mailboxSelfTests:true,extensionAutoPair:true,fieldPersonas:true,hiringPostSignals:true,emailPatternLearning:true,careerPageImport:true,firstMover:true,paginatedJobFeed:true,indexCapacity:15000,curatedEmployers:result.search.curatedEmployers},documentCheck,contactFallbackCheck,mail:{connectedAccounts:result.accounts.length,liveSending:result.setup.liveSendEnabled},providerChecks:publicUrl.searchParams.get('checkContacts')==='true' ? await checkContactProviders(store,config,fetcher) : undefined});
       }
       if(await auth.handle(req,res,publicUrl,{json,bodyJSON}))return;
       if (await upgrade.publicRoute(req, res, publicUrl, {

@@ -1,11 +1,12 @@
 import { remoteJSON } from "../http.mjs";
 import { id, now, text, emailValid,fail,safeUrl } from "../../domain.mjs";
 import {companyDomain,cleanCompanyName} from './company.mjs';
+import {prioritizeContact} from '../../services/contact-personas.mjs';
 import {contactProviderError} from './errors.mjs';
 
 export const searchHunter=async(domain,key,limit=3,fetcher=fetch)=>(await hunterSearch({domain},key,limit,fetcher)).contacts;
-export const searchHunterCompany=(company,key,limit=3,fetcher=fetch)=>hunterSearch({company},key,limit,fetcher);
-export const searchHunterDomain=(domain,key,limit=3,fetcher=fetch)=>hunterSearch({domain},key,limit,fetcher);
+export const searchHunterCompany=(company,key,limit=3,fetcher=fetch,targeting)=>hunterSearch({company,targeting},key,limit,fetcher);
+export const searchHunterDomain=(domain,key,limit=3,fetcher=fetch,targeting)=>hunterSearch({domain,targeting},key,limit,fetcher);
 const normalizedName=value=>cleanCompanyName(value).toLowerCase().replace(/[^a-z0-9]/g,'');
 export async function findHunterEmail(person,domain,key,fetcher=fetch) {
   const parts=person.name.trim().split(/\s+/),url=new URL('https://api.hunter.io/v2/email-finder');
@@ -24,14 +25,14 @@ async function hunterSearch(query, key, limit = 3, fetcher = fetch) {
   const url = new URL("https://api.hunter.io/v2/domain-search");
   // Filter at the provider, before limiting: an arbitrary first few people
   // often contain no recruiters. Ten results also fit Hunter Free pagination.
-  url.search = new URLSearchParams({...domain ? {domain} : {company:text(query.company,150)},api_key:key,limit:'10',department:'hr,executive'});
+  url.search = new URLSearchParams({...domain ? {domain} : {company:text(query.company,150)},api_key:key,limit:'10',department:query.targeting ? [...new Set(`${query.targeting.department},hr,executive`.split(','))].join(',') : 'hr,executive'});
   let result;try{result=await remoteJSON(url.href,{},fetcher,30000);}catch(error){throw contactProviderError('Hunter',error);}
   if(!Array.isArray(result.data?.emails))fail('Hunter returned an unexpected contact response.',502);
   if(!domain){
     domain=companyDomain(result.data.domain);
     if(!domain || !normalizedName(query.company) || normalizedName(query.company)!==normalizedName(result.data.organization))return {company:null,contacts:[]};
   } else if(result.data.domain && companyDomain(result.data.domain)!==domain)fail('Hunter returned a different company domain; no contacts were saved.',502);
-  const contacts=result.data.emails.filter(p=>emailValid(p.value || '') && p.value.split('@')[1]?.toLowerCase()===domain && (/recruit|talent|people|human resources|founder|chief|\b[cfth]eo\b|\bcto\b|engineering manager|head of engineering/i.test(p.position || '') || ['hr','executive'].includes(p.department) || /^(hr|careers?|jobs|recruiting|recruitment|talent|hiring)([._-]|@)/i.test(p.value)))
+  const contacts=result.data.emails.filter(p=>emailValid(p.value || '') && p.value.split('@')[1]?.toLowerCase()===domain && (query.targeting || /recruit|talent|people|human resources|founder|chief|\b[cfth]eo\b|\bcto\b|engineering manager|head of engineering/i.test(p.position || '') || ['hr','executive'].includes(p.department) || /^(hr|careers?|jobs|recruiting|recruitment|talent|hiring)([._-]|@)/i.test(p.value)))
     .sort((a,b)=>Number(b.verification?.status==='valid')-Number(a.verification?.status==='valid'))
     .slice(0,limit).map(p=>{
       const at=p.verification?.date && Date.parse(p.verification.date),recent=Number.isFinite(at) && at<=Date.now()+86400000 && Date.now()-at<=30*86400000;
@@ -40,5 +41,6 @@ async function hunterSearch(query, key, limit = 3, fetcher = fetch) {
       return {id:id(),name:text([p.first_name,p.last_name].filter(Boolean).join(' '),150) || 'Hiring team',email:p.value.toLowerCase(),company:text(result.data.organization,150),title:text(p.position || p.position_raw,150) || (p.department==='hr' ? 'Human resources' : 'Company contact'),emailStatus:status,source:'Hunter',sources,linkedinUrl:safeUrl(p.linkedin),companyDomain:domain,suppressed:false,isDemo:false,createdAt:now(),verification:{provider:'Hunter',status,at:at ? new Date(at).toISOString() : now(),reference:sources[0]?.url || '',result:status==='verified' ? 'Recently verified by Hunter' : status==='catch-all' ? 'Catch-all domain; blocked from sending' : 'Needs mailbox verification'}};
     });
   const pattern=/^(?:[._-]|\{(?:first|last|f|l)\})+$/.test(result.data.pattern || '') ? result.data.pattern : '';
-  return {company:{domain,name:text(result.data.organization,150) || domain,source:'Hunter company search',reference:'https://hunter.io/',pattern},pattern,contacts};
+  const ranked=query.targeting ? contacts.map(c=>prioritizeContact(c,query.targeting)).sort((a,b)=>b.priorityScore-a.priorityScore) : contacts;
+  return {company:{domain,name:text(result.data.organization,150) || domain,source:'Hunter company search',reference:'https://hunter.io/',pattern},pattern,contacts:ranked};
 }

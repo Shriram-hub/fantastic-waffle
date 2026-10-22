@@ -6,6 +6,7 @@ import {
   stripHtml,
   text,
   emailValid,
+  hash,
 } from "../../domain.mjs";
 import { remoteJSON } from "../http.mjs";
 const mode = (s) =>
@@ -21,7 +22,7 @@ export function boardList(value) {
   return unique;
 }
 export async function fetchCoreJobs(source, board = "", fetcher = fetch) {
-  if (!["Remotive", "Greenhouse", "Lever"].includes(source))
+  if (!["Remotive", "Greenhouse", "Lever", "Lever EU"].includes(source))
     fail("Unsupported job source.");
   if (source !== "Remotive" && !slugValid(board))
     fail("Enter a valid company job-board slug.");
@@ -47,7 +48,7 @@ export async function fetchCoreJobs(source, board = "", fetcher = fetch) {
       type: j.job_type?.replaceAll("_", " ") || "Not listed",
       url: safeUrl(j.url),
       description: stripHtml(j.description),
-      publishedAt: j.publication_date || now(),
+      publishedAt: j.publication_date || null,
     }));
   }
   if (source === "Greenhouse") {
@@ -70,12 +71,14 @@ export async function fetchCoreJobs(source, board = "", fetcher = fetch) {
       type: "Not listed",
       url: safeUrl(j.absolute_url),
       description: stripHtml(j.content),
-      publishedAt: j.updated_at || now(),
+      publishedAt: j.first_published || null,
+      publishedAtSource: 'first_published',
+      updatedAt: j.updated_at || null,
     }));
   }
-  if (source === "Lever") {
+  if (source === "Lever" || source === 'Lever EU') {
     const data = await remoteJSON(
-      `https://api.lever.co/v0/postings/${encodeURIComponent(board)}?mode=json`,
+      `https://${source==='Lever EU'?'api.eu.lever.co':'api.lever.co'}/v0/postings/${encodeURIComponent(board)}?mode=json`,
       {},
       fetcher,
     );
@@ -102,7 +105,7 @@ export async function fetchCoreJobs(source, board = "", fetcher = fetch) {
           ...(j.lists || []).map((l) => `${l.text} ${l.content}`),
         ].join(" "),
       ),
-      publishedAt: j.createdAt ? new Date(j.createdAt).toISOString() : now(),
+      publishedAt: j.createdAt ? new Date(j.createdAt).toISOString() : null,
     }));
   }
   return jobs
@@ -120,4 +123,25 @@ export async function fetchCoreJobs(source, board = "", fetcher = fetch) {
       archived: false,
       fetchedAt: now(),
     }));
+}
+
+export function extractSchemaOrgJobPostings(html,baseUrl) {
+  const jobs=[],seen=new Set(),date=v=>Number.isFinite(Date.parse(v))?new Date(v).toISOString():null;
+  let visited=0;
+  const visit=(node,depth=0)=>{
+    if(!node || typeof node!=='object' || depth>12 || ++visited>6000)return;
+    if(Array.isArray(node)){node.slice(0,500).forEach(n=>visit(n,depth+1));return;}
+    if([].concat(node['@type'] || []).some(t=>/(?:^|[\/#])JobPosting$/.test(t))) {
+      let url;try{url=safeUrl(new URL(node.url || node['@id'] || baseUrl,baseUrl).href);}catch{}
+      const title=text(node.title,200),company=text(node.hiringOrganization?.name,150);
+      if(url && title) {
+        const locations=[].concat(node.jobLocation || []).map(l=>typeof l==='string'?l:[l.address?.addressLocality,l.address?.addressRegion,typeof l.address?.addressCountry==='string'?l.address.addressCountry:l.address?.addressCountry?.name].filter(Boolean).join(', ')).filter(Boolean);
+        const remote=[].concat(node.jobLocationType || []).includes('TELECOMMUTE'),restrictions=[].concat(node.applicantLocationRequirements || []).map(l=>typeof l==='string'?l:l.name).filter(Boolean),key=hash([url,title,locations]);
+        if(!seen.has(key)){seen.add(key);jobs.push({id:`schema-${key.slice(0,32)}`,company:company || 'Company not listed',title,location:locations.join(' · ') || (remote?(restrictions.join(', ') || 'Remote'):'Not listed'),workMode:remote?'Remote':mode(locations.join(' ')),description:text(stripHtml(node.description),30000),url,publishedAt:date(node.datePosted),expiresAt:date(node.validThrough),type:[].concat(node.employmentType || []).join(', ') || 'Not listed',salary:'Not listed',tags:[].concat(node.skills || []).filter(s=>typeof s==='string').slice(0,30),category:text(node.occupationalCategory,150) || 'Other',source:'Career Pages',board:baseUrl,companyLogo:safeUrl(node.hiringOrganization?.logo),locationRestrictions:restrictions,requiresSourceReview:!company,isDemo:false,archived:false,fetchedAt:now()});}
+      }
+    }
+    Object.values(node).filter(v=>v && typeof v==='object').slice(0,500).forEach(n=>visit(n,depth+1));
+  };
+  for(const block of String(html).slice(0,1500000).matchAll(/<script\b[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi))try{visit(JSON.parse(block[1]));}catch{}
+  return jobs.slice(0,500);
 }

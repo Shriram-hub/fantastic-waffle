@@ -1,3 +1,4 @@
+import {hydrateJobDetail} from './job-details.mjs';
 import {createRequire} from 'node:module';
 import {z} from 'zod';
 import {hash,id,now,fail,text} from '../domain.mjs';
@@ -12,7 +13,7 @@ const excerpt=(value,limit)=>{
   const prefix=source.slice(0,limit),boundary=Math.max(prefix.lastIndexOf('. '),prefix.lastIndexOf('; '));
   return boundary>limit/2 ? prefix.slice(0,boundary+1) : `${prefix.slice(0,prefix.lastIndexOf(' '))}…`;
 };
-export const documentFingerprint=(state,job,useAI=false)=>hash(['job-documents-v2',job.id,job.title,job.company,job.description,candidateProfile(state.profile),state.resume?.text,(state.career?.stories || []).filter(s=>!s.archived),useAI]);
+export const documentFingerprint=(state,job,useAI=false)=>hash(['job-documents-v2',job.id,job.title,job.company,job.descriptionHash || job.description,candidateProfile(state.profile),state.resume?.text,(state.career?.stories || []).filter(s=>!s.archived),useAI]);
 export function documentEvidence(state) {
   const m=candidateProfile(state.profile),items=[];
   const add=(kind,label,value)=>{if(value?.trim())items.push({id:`e${items.length}`,kind,label,text:text(value.trim(),1800)});};
@@ -107,7 +108,7 @@ export function documentModel(state,job,selected) {
   return {name:m.personal.fullName || state.profile.name || 'Candidate',headline:m.summary.headline || '',contact:[m.personal.email,m.personal.phoneFormatted || m.personal.phoneNumber,m.links.linkedinUrl,m.links.portfolioUrl].filter(Boolean).join(' | '),sections:resumeSections(state,job,selected),coverLetter:coverLetterText(state,job,selected)};
 }
 export async function documentEditor(item,store) {
-  const job=store.state.jobs.find(j=>j.id===item.jobId);
+  const job=await hydrateJobDetail(store.state.jobs.find(j=>j.id===item.jobId),store);
   if(!job || item.fingerprint!==documentFingerprint(store.state,job,item.useAI))fail('Your profile or the role changed. Generate current documents before editing.',409);
   return {model:item.model || documentModel(store.state,job,item.evidence || []),job:{id:job.id,title:job.title,company:job.company,description:job.description,tags:job.tags || []}};
 }
@@ -119,8 +120,9 @@ export async function buildJobDocuments(task,store,queue,config={},fetcher=fetch
   if(!store.state.resume?.text && !documentEvidence(store.state).length)fail('Parse a résumé or fill your candidate vault first.');
   const snapshot=store.state,base=task.payload.editedFrom && (snapshot.jobDocuments || []).find(d=>d.id===task.payload.editedFrom);
   if(task.payload.model && (!base || base.fingerprint!==task.payload.fingerprint))fail('The document revision source is unavailable.',409);
-  const selected=base?.evidence || await selectDocumentEvidence(snapshot,job,useAI,config,fetcher,store);
-  const model=task.payload.model ? editorSchema.parse(task.payload.model) : documentModel(snapshot,job,selected);
+  const detailedJob=await hydrateJobDetail(job,store);
+  const selected=base?.evidence || await selectDocumentEvidence(snapshot,detailedJob,useAI,config,fetcher,store);
+  const model=task.payload.model ? editorSchema.parse(task.payload.model) : documentModel(snapshot,detailedJob,selected);
   const {name,headline,contact}=model;
   const resume=await renderTextPDF({title:name,subtitle:headline,contact,sections:model.sections});
   const letter=model.coverLetter,cover=await renderTextPDF({title:name,subtitle:`Application: ${job.title} | ${job.company}`,contact,sections:[{lines:letter}]});

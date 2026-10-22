@@ -2,6 +2,8 @@
 
 [Latest Veloce AI release and deployment guide](docs/VELOCE_AI.md)
 
+[Field-aware targeting, expanded sources and optional API keys](docs/TARGETING_AND_DISCOVERY.md)
+
 A working personal workspace for job discovery, résumé preparation, application tracking, browser-assisted filling, inbox updates, company contacts, and reviewed outreach.
 
 The main contact finder supports Hunter and published company careers pages,

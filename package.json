@@ -1,6 +1,6 @@
 {
   "name": "veloce-ai-workspace",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "description": "A career workspace with relational persistence, background workers, mailbox sync, and reviewed outreach.",

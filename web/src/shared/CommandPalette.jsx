@@ -4,7 +4,9 @@ import {commandResults,executeCommand} from './commands.mjs';
 import {Modal} from './ui.jsx';
 import {Icon} from './Icon.jsx';
 export function CommandPalette({close}) {
-  const app=useApp(),[query,setQuery]=useState(''),[active,setActive]=useState(0),listId=useId(),results=commandResults(query,app.data),ref=useRef(null);
+  const app=useApp(),[query,setQuery]=useState(''),[active,setActive]=useState(0),listId=useId(),baseResults=commandResults(query,app.data),[remoteJobs,setRemoteJobs]=useState([]),ref=useRef(null);
+  const results=[...baseResults,...remoteJobs.filter(job=>!baseResults.some(item=>item.type==='job' && item.id===job.id)).map(job=>({type:'job',id:job.id,label:job.title,hint:job.company,icon:'jobs'}))].slice(0,30);
+  useEffect(()=>{if(!app.data.jobFeed?.truncated || query.trim().length<2){setRemoteJobs([]);return;}const controller=new AbortController(),timer=setTimeout(async()=>{try{const params=new URLSearchParams({q:query,view:'all',limit:'10'}),result=await api(`/jobs/feed?${params}`,undefined,'GET',{signal:controller.signal});if(!controller.signal.aborted){setRemoteJobs(result.jobs);app.cacheJobs?.(result.jobs);}}catch{}},200);return()=>{clearTimeout(timer);controller.abort();};},[query,app.data.jobFeed?.truncated,app.cacheJobs]);
   useEffect(()=>{ref.current?.focus();},[]);
   useEffect(()=>{document.getElementById(`${listId}-${active}`)?.scrollIntoView({block:'nearest'});},[active]);
   function run(item){if(!item)return;close();Promise.resolve(executeCommand(item,app,{api})).catch(e=>app.notify(e.message,true));}
