@@ -60,3 +60,8 @@ test('credit reservations permit distinct network requests concurrently, coalesc
   await assert.rejects(providerCall(store,'uncertain','Hunter',3,async()=>{throw Error('network lost');}),/network lost/);
   await assert.rejects(providerCall(store,'uncertain','Hunter',3,()=>assert.fail('Must not spend again')),/held/);
 });
+
+test('Serper live verification checks the required targeted-search capability and reports a free-account restriction accurately',async t=>{
+  const store=clean(t),check=await verifyProvider('serper',store,{...encryption,SERPER_API_KEY:'restricted-test'},async(_u,options)=>{assert.match(JSON.parse(options.body).q,/site:linkedin.com\/in/);return new Response(JSON.stringify({message:'Query pattern not allowed for free accounts.'}),{status:400});},{confirmMetered:true});
+  assert.equal(check.ok,false);assert.equal(check.capabilityRestricted,true);assert.equal(check.httpStatus,400);assert.match(check.message,/public sources remain available/);assert.ok(!check.message.includes('restricted-test'));
+});

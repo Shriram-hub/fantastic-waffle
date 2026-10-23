@@ -28,14 +28,14 @@ export async function verifyProvider(provider,store,base={},fetcher=fetch,{confi
       const data=await request('https://api.tavily.com/usage',{headers:{Authorization:`Bearer ${key}`}}),stats=data.key || {};
       usage={searches:{total:number(stats.limit),used:number(stats.usage),remaining:number(stats.limit)===null || number(stats.usage)===null?null:Math.max(0,Number(stats.limit)-Number(stats.usage))}};
     }else if(provider==='serper') {
-      const data=await serperSearch('Serper search API documentation',key,{fetcher,limit:1});creditsUsed=data.creditsUsed;message='Search endpoint accepted this key. Account balance is available in your Serper dashboard.';
+      const data=await serperSearch('site:linkedin.com/in "Technical Recruiter" "Microsoft"',key,{fetcher,limit:1});creditsUsed=data.creditsUsed;message='Targeted people-search query accepted. Account balance is available in your Serper dashboard.';
     }else if(provider==='minelead') {
       await searchMineleadDomain('minelead.io',key,1,fetcher);creditsUsed=null;message='Search endpoint accepted this key. Check your dashboard for its current credit balance.';
     }else if(provider==='gemini') {
       await request(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.LLM_MODEL || 'gemini-flash-latest')}`,{headers:{'x-goog-api-key':key}});message='Key and configured model accepted. No generation was requested.';
     }else {message='Use the existing Apollo connection check for endpoint access.';}
     result={provider:p.name,configured:true,ok:true,message,usage,creditsUsed,checkedAt:now()};
-  }catch(error){result={provider:p.name,configured:true,ok:false,httpStatus:error.providerStatus || null,message:error.status?error.message:`${p.name} could not be reached.`,checkedAt:now()};}
+  }catch(error){const restricted=provider==='serper' && /query pattern not allowed for free accounts/i.test(error.message);result={provider:p.name,configured:true,ok:false,httpStatus:error.providerStatus || null,capabilityRestricted:restricted,message:restricted?`${error.message} This account cannot run the targeted people/ATS queries used here. Use a search provider or plan with that capability; public sources remain available.`:error.status?error.message:`${p.name} could not be reached.`,checkedAt:now()};}
   await store.refresh();const previousChecks=store.state.contactProviderChecks?.checks || [];
   store.state.contactProviderChecks={checkedAt:now(),checks:[...previousChecks.filter(c=>c.provider!==p.name),result]};await store.save();return result;
 }

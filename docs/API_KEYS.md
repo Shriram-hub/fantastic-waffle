@@ -24,6 +24,14 @@ minute. Provider plans, credits and sign-up eligibility apply. Any one supported
 search provider plus an email finder is enough to start; all providers are optional.
 There is no guaranteed free batch of 500 verified addresses.
 
+Serper verification tests a targeted LinkedIn query, rather than a generic query
+that can pass while the required capability is unavailable. Some free accounts
+reject `site:`/X-ray patterns with HTTP 400, "Query pattern not allowed for free
+accounts." The UI reports that account restriction. It is not an invalid-key or
+Render error. Use an eligible search provider/plan for those queries; public ATS
+feeds and email-provider searches remain independent. Held failed queries are
+not automatically charged again.
+
 **Contact Discovery → Bulk Contact Harvester** accepts matching companies, a sector
 preset or up to 50 company names/domains. It queues up to 100 matching companies and
 15 candidate contacts per company. Separate `CONTACT_SEARCH_DAILY_LIMIT` (100 by
