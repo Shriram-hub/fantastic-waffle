@@ -28,7 +28,7 @@ export async function verifyProvider(provider,store,base={},fetcher=fetch,{confi
       const data=await request('https://api.tavily.com/usage',{headers:{Authorization:`Bearer ${key}`}}),stats=data.key || {};
       usage={searches:{total:number(stats.limit),used:number(stats.usage),remaining:number(stats.limit)===null || number(stats.usage)===null?null:Math.max(0,Number(stats.limit)-Number(stats.usage))}};
     }else if(provider==='serper') {
-      const data=await serperSearch('site:linkedin.com/in "Technical Recruiter" "Microsoft"',key,{fetcher,limit:1});creditsUsed=data.creditsUsed;message='Targeted people-search query accepted. Account balance is available in your Serper dashboard.';
+      const data=await serperSearch('site:linkedin.com/in ("Engineering Manager" OR "Head of Engineering" OR "Technical Recruiter") "Microsoft"',key,{fetcher,limit:20,timeout:10000});creditsUsed=data.creditsUsed;message='Targeted people-search query accepted. Account balance is available in your Serper dashboard.';
     }else if(provider==='minelead') {
       await searchMineleadDomain('minelead.io',key,1,fetcher);creditsUsed=null;message='Search endpoint accepted this key. Check your dashboard for its current credit balance.';
     }else if(provider==='gemini') {
