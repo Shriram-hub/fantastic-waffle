@@ -1,5 +1,5 @@
 import {gzipSync,gunzipSync} from 'node:zlib';
-import {hash,fail} from '../domain.mjs';
+import {hash,fail,id} from '../domain.mjs';
 import {canonicalJobKey} from '../providers/jobs/index.mjs';
 import {serializeFeedJob} from './job-feed.mjs';
 import {rankOpportunity,buildSearchPlan} from './search-plan.mjs';
@@ -10,9 +10,9 @@ export async function catalogReady(store){return (await store.db.prepare("SELECT
 export async function catalogStats(store,plan) {
   if(!await catalogReady(store))return null;
   const cached=snapshots.get(store);if(cached?.scope===plan.scope && cached.until>Date.now())return cached.value;
-  const row=await store.db.prepare("SELECT count(*) AS total,SUM(CASE WHEN archived=0 THEN 1 ELSE 0 END) AS active,SUM(CASE WHEN archived=0 AND scope=? AND recommendable=1 THEN 1 ELSE 0 END) AS matches,SUM(CASE WHEN archived=0 AND scope=? AND tier='strong' THEN 1 ELSE 0 END) AS strong,SUM(CASE WHEN archived=0 AND scope=? AND tier='adjacent' THEN 1 ELSE 0 END) AS adjacent,SUM(CASE WHEN archived=0 AND published_at>? THEN 1 ELSE 0 END) AS fresh FROM job_catalog").get(plan.scope,plan.scope,plan.scope,Date.now()-86400000);
+  const row=await store.db.prepare("SELECT count(*) AS total,SUM(CASE WHEN archived=0 THEN 1 ELSE 0 END) AS active,SUM(CASE WHEN archived=0 AND scope=? AND recommendable=1 THEN 1 ELSE 0 END) AS matches,SUM(CASE WHEN archived=0 AND scope=? AND tier='strong' THEN 1 ELSE 0 END) AS strong,SUM(CASE WHEN archived=0 AND scope=? AND tier='adjacent' THEN 1 ELSE 0 END) AS adjacent,SUM(CASE WHEN archived=0 AND scope<>? THEN 1 ELSE 0 END) AS ranking_pending,SUM(CASE WHEN archived=0 AND published_at>? THEN 1 ELSE 0 END) AS fresh FROM job_catalog").get(plan.scope,plan.scope,plan.scope,plan.scope,Date.now()-86400000);
   const sources=(await store.db.prepare('SELECT DISTINCT source FROM job_catalog WHERE archived=0 ORDER BY source').all()).map(r=>r.source);
-  const value={total:Number(row.total)||0,active:Number(row.active)||0,matches:Number(row.matches)||0,strong:Number(row.strong)||0,adjacent:Number(row.adjacent)||0,firstMover:Number(row.fresh)||0,capacity:CATALOG_CAPACITY,sources};snapshots.set(store,{scope:plan.scope,until:Date.now()+15000,value});return value;
+  const value={total:Number(row.total)||0,active:Number(row.active)||0,matches:Number(row.matches)||0,strong:Number(row.strong)||0,adjacent:Number(row.adjacent)||0,firstMover:Number(row.fresh)||0,capacity:CATALOG_CAPACITY,rankingPending:Number(row.ranking_pending)||0,sources};snapshots.set(store,{scope:plan.scope,until:Date.now()+15000,value});return value;
 }
 function compact(job) {
   const fields=['id','title','company','location','workMode','url','source','board','companyDomain','companyDomainSource','publishedAt','publishedAtSource','publishedAtIsUpdate','postedAt','fetchedAt','tags','type','salary','isDemo','archived','detailCacheKey','detailSourceId','descriptionHash','descriptionLength','descriptionTruncated','indexSkills','descriptionUnavailable','requiresSourceReview','indexedSnippet','postedBy','expiresAt','publicHiringEmails'];
@@ -96,16 +96,21 @@ export async function importWorkspaceCatalog(store,plan,config={}) {
 }
 export async function rescoreCatalog(task,store,queue,plan) {
   if(task.payload.scope!==plan.scope)return {status:'cancelled'};
-  const rows=await store.db.prepare('SELECT id,canonical_key,body FROM job_catalog WHERE scope<>? ORDER BY id LIMIT 250').all(plan.scope);
+  const rows=await store.db.prepare('SELECT id,canonical_key,body FROM job_catalog WHERE scope<>? ORDER BY recommendable DESC,score DESC,id LIMIT 250').all(plan.scope);
   const result=await putCatalogJobs(rows.map(decode),plan,store);if(result.paused)return {status:'paused',rescored:0};
-  if(rows.length===250)await queue.enqueue('catalog.rescore',{scope:plan.scope,part:(task.payload.part || 0)+1},{dedupeKey:`catalog-rescore:${plan.scope}:${(task.payload.part || 0)+1}`,runAt:1});
+  if(rows.length===250){const part=(task.payload.part || 0)+1,cycle=task.payload.cycle || 'legacy';await queue.enqueue('catalog.rescore',{scope:plan.scope,part,cycle},{dedupeKey:`catalog-rescore:${plan.scope}:${cycle}:${part}`,runAt:Date.now()+1000});}
   return {rescored:rows.length};
 }
 export async function scheduleCatalog(store,queue,config={},plan=buildSearchPlan(store.state)) {
   if(config.JOB_CATALOG_ENABLED!=='true' || store.state.isDemo)return;
   const row=await store.db.prepare("SELECT status,body FROM directory_sync WHERE id='catalog'").get();
   if(row?.status!=='completed')await queue.enqueue('catalog.import',{}, {dedupeKey:'catalog-import-v1',runAt:0,maxAttempts:3});
-  else {if(JSON.parse(row.body).scope!==plan.scope){await queue.enqueue('catalog.rescore',{scope:plan.scope,part:0},{dedupeKey:`catalog-rescore:${plan.scope}:0`});await store.db.prepare("UPDATE directory_sync SET body=?,updated_at=? WHERE id='catalog'").run(JSON.stringify({...JSON.parse(row.body),scope:plan.scope}),Date.now());}}
+  else {
+    const stale=await store.db.prepare('SELECT id FROM job_catalog WHERE scope<>? LIMIT 1').get(plan.scope);
+    const active=stale && await store.db.prepare("SELECT id FROM tasks WHERE kind='catalog.rescore' AND status IN ('queued','running') AND json_extract(payload,'$.scope')=? LIMIT 1").get(plan.scope);
+    if(stale && !active){const cycle=id();await queue.enqueue('catalog.rescore',{scope:plan.scope,part:0,cycle},{dedupeKey:`catalog-rescore:${plan.scope}:${cycle}:0`,runAt:1});}
+    if(JSON.parse(row.body).scope!==plan.scope)await store.db.prepare("UPDATE directory_sync SET body=?,updated_at=? WHERE id='catalog'").run(JSON.stringify({...JSON.parse(row.body),scope:plan.scope}),Date.now());
+  }
   const directory=await store.db.prepare("SELECT updated_at FROM directory_sync WHERE id='directories'").get();
   if(!directory || Number(directory.updated_at)<Date.now()-7*86400000)await queue.enqueue('directory.sync',{}, {dedupeKey:`directory-sync:${Math.floor(Date.now()/(7*86400000))}`,runAt:1,maxAttempts:2});
 }

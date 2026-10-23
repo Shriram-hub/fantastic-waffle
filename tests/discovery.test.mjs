@@ -149,6 +149,11 @@ test('public LinkedIn cards preserve source URLs and dates; blocks fail visibly 
   assert.equal(parseLinkedInCards(html.replace('https://www.linkedin.com/jobs/view/finance-123','https://malicious.example/jobs/view/123')).length,0);
 });
 function clean(t) {const store=openStore(':memory:');t.after(()=>store.close());store.replace(initialState(false));return store;}
+test('a cancelled discovery sweep recovers before its two-hour cooldown rather than leaving an empty feed',async t=>{
+  const store=clean(t),queue=taskQueue(store);store.state.profile.interests=['Financial Analyst'];await store.save();
+  const first=await scheduleDiscovery(store,queue,{},true);await store.db.prepare("UPDATE job_search_runs SET status='cancelled' WHERE id=?").run(first.payload.runId);await queue.cancel(first.id);
+  const resumed=await scheduleDiscovery(store,queue,{},false);assert.ok(resumed);assert.notEqual(resumed.payload.runId,first.payload.runId);const again=await scheduleDiscovery(store,queue,{},false);assert.equal(again.existing,true);assert.equal(again.id,resumed.id);
+});
 async function drain(store,queue,fetcher,config={}) {
   const registry=handlers(store,queue,config,fetcher);
   for(let i=0;i<180;i++) {const result=await runOne(store,queue,registry);if(!result) break;assert.equal(result.status,'completed',JSON.stringify(result));}

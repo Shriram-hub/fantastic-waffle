@@ -417,7 +417,9 @@ export async function startWorker(config = process.env) {
         const due=await store.db.prepare("SELECT id FROM autopilot_schedule WHERE next_run<=? LIMIT 1").get(Date.now());
         const search=await store.db.prepare("SELECT id FROM job_search_config WHERE id='local'").get();
         const mailboxDue=await store.db.prepare("SELECT id FROM mail_accounts a WHERE NOT EXISTS (SELECT 1 FROM autopilot_schedule s WHERE s.id='mailbox:' || a.id AND s.next_run>?) LIMIT 1").get(Date.now());
-        if(due || !search || mailboxDue) await store.run(async()=>{
+        const stoppedSearch=await store.db.prepare('SELECT status FROM job_search_runs ORDER BY created_at DESC LIMIT 1').get(),stoppedRanking=await store.db.prepare("SELECT status FROM tasks WHERE kind='catalog.rescore' ORDER BY created_at DESC LIMIT 1").get();
+        const interrupted=[stoppedSearch?.status,stoppedRanking?.status].some(status=>['failed','cancelled'].includes(status));
+        if(due || !search || mailboxDue || interrupted) await store.run(async()=>{
           await scheduleDiscovery(store,queue,config);
           await scheduleAutopilot(store,queue,config);
           await scheduleMailboxSync(store,queue);

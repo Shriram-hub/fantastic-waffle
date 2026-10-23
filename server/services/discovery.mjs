@@ -70,8 +70,8 @@ export async function scheduleDiscovery(store,queue,config={},force=false,clock=
       await store.db.prepare("UPDATE job_search_runs SET status='failed',updated_at=? WHERE id=?").run(clock,active.id);
     }
     const schedule=await store.db.prepare("SELECT next_run FROM autopilot_schedule WHERE id='jobs'").get();
-    const previous=await store.db.prepare('SELECT body FROM job_search_runs ORDER BY created_at DESC LIMIT 1').get();
-    if(!force && schedule?.next_run>clock && previous && JSON.parse(previous.body).scope===plan.scope) {await store.db.exec('COMMIT');return null;}
+    const previous=await store.db.prepare('SELECT status,body FROM job_search_runs ORDER BY created_at DESC LIMIT 1').get();
+    if(!force && schedule?.next_run>clock && previous?.status==='completed' && JSON.parse(previous.body).scope===plan.scope) {await store.db.exec('COMMIT');return null;}
     const runId=id(),body={scope:plan.scope,roles:plan.roles,personalized:plan.personalized,scanned:0,sourcesChecked:0,sourcesTotal:0,failed:0,cached:0,added:0,matched:0};
     await store.db.prepare("INSERT INTO job_search_runs(id,status,body,created_at,updated_at) VALUES(?,'queued',?,?,?)").run(runId,JSON.stringify(body),clock,clock);
     const task=await queue.enqueue('jobs.discover',{runId,scope:plan.scope,offset:0},{dedupeKey:`job-search-${runId}-0`});

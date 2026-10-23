@@ -8,7 +8,15 @@ import {gzipSync} from 'node:zlib';
 import {openStore} from '../server/store.mjs';
 import {initialState} from '../server/fixtures.mjs';
 import {buildSearchPlan} from '../server/services/search-plan.mjs';
-import {putCatalogJobs,catalogJob,queryCatalog,importWorkspaceCatalog,compactWorkspace,retainCatalogJob,archiveMissingCatalogJobs,CATALOG_CAPACITY,WORKSPACE_JOB_LIMIT} from '../server/services/job-catalog.mjs';
+import {putCatalogJobs,catalogJob,queryCatalog,importWorkspaceCatalog,compactWorkspace,retainCatalogJob,archiveMissingCatalogJobs,CATALOG_CAPACITY,WORKSPACE_JOB_LIMIT,scheduleCatalog,rescoreCatalog,catalogStats} from '../server/services/job-catalog.mjs';
+test('catalogue re-ranking recovers cancelled release work with a new cycle and restores relevant roles first',async t=>{
+  const store=clean(t),queue=taskQueue(store),old=planFor(store),next={...old,scope:'new-source-settings'};
+  await putCatalogJobs(Array.from({length:300},(_,i)=>job(`r-${i}`,{title:i<10?'Financial Analyst':'Software Engineer'})),old,store);await importWorkspaceCatalog(store,old);
+  await scheduleCatalog(store,queue,{JOB_CATALOG_ENABLED:'true'},next);let ranking=(await queue.list()).find(t=>t.kind==='catalog.rescore');const cancelled=await queue.claim(ranking.id);await queue.finish(cancelled,{status:'cancelled'});
+  await scheduleCatalog(store,queue,{JOB_CATALOG_ENABLED:'true'},next);const recovery=(await queue.list()).find(t=>t.kind==='catalog.rescore' && t.status==='queued');assert.notEqual(recovery.id,ranking.id);assert.equal((await catalogStats(store,next)).rankingPending,300);
+  const active=await queue.claim(recovery.id);const result=await rescoreCatalog(active,store,queue,next);await queue.finish(active,result);assert.equal(result.rescored,250);const stats=await catalogStats(store,next);assert.equal(stats.rankingPending,50);assert.equal(stats.matches,10);
+  const child=(await queue.list()).find(t=>t.kind==='catalog.rescore' && t.status==='queued'),payload=(await queue.get(child.id)).payload;assert.equal(payload.cycle,active.payload.cycle);await scheduleCatalog(store,queue,{JOB_CATALOG_ENABLED:'true'},next);assert.equal((await queue.list()).filter(t=>t.kind==='catalog.rescore' && t.status==='queued').length,1);
+});
 const job=(id,fields={})=>({id,title:'Financial Analyst',company:`Company ${id}`,url:`https://company.com/jobs/${id}`,description:'Excel forecasting and financial reporting',source:'Greenhouse',board:'company',location:'Mumbai, India',workMode:'On-site',tags:['Excel'],isDemo:false,archived:false,...fields});
 function clean(t){const store=openStore(':memory:');store.replace(initialState(false));t.after(()=>store.close());return store;}
 const planFor=store=>buildSearchPlan(store.state,{roles:['Financial Analyst'],location:'Mumbai',country:'IN',workMode:'Any'});
