@@ -1,0 +1,5 @@
+import React from 'react';
+import {CONTACT_DEPTHS,CONTACT_CLUSTERS} from '../../../../shared/contact-discovery.mjs';
+import {Button} from '../../shared/ui.jsx';
+export function DepthControl({value,onChange}){return <fieldset className="discovery-depth"><legend>Discovery depth · target profiles per company</legend><div role="group" aria-label="Target contact volume">{CONTACT_DEPTHS.map(d=><button type="button" key={d.count} aria-pressed={value===d.count} className={value===d.count?'active':''} onClick={()=>onChange(d.count)}>{d.label}<span>{d.count} contacts</span></button>)}</div></fieldset>;}
+export function ClusterButtons({onChoose,disabled}){return <div className="cluster-presets"><span className="eyebrow">Industry clusters</span><p className="hint">One click queues ten firms with a combined target of 100 profiles, using the credit options selected below.</p><div>{Object.entries(CONTACT_CLUSTERS).map(([id,c])=><Button small key={id} type="button" disabled={disabled} onClick={()=>onChoose(id)}>{c.name}</Button>)}</div></div>;}

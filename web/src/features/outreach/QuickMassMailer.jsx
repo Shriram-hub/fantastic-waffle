@@ -5,12 +5,13 @@ import {Icon} from '../../shared/Icon.jsx';
 import {MAIL_PRESETS,MERGE_TAGS,mergeMail} from '../../../../shared/mail-merge.mjs';
 const activeStatuses=new Set(['queued','sending','accepted','unknown']);
 export function QuickMassMailer() {
-  const {data,accounts,tasks,perform,notify,go,busy,mailerCompany}=useApp();
+  const {data,accounts,tasks,perform,notify,go,busy,mailerCompany,mailerSelection}=useApp();
   const [company,setCompany]=useState(mailerCompany || ''),[persona,setPersona]=useState(''),[verification,setVerification]=useState('verified'),[uncontacted,setUncontacted]=useState(true),[selected,setSelected]=useState(new Set()),[paste,setPaste]=useState(''),[credits,setCredits]=useState(false),[peopleSearch,setPeopleSearch]=useState(false),[status,setStatus]=useState(null),[studio,setStudio]=useState(null),[loadError,setLoadError]=useState(''),[review,setReview]=useState(null),[index,setIndex]=useState(0),[campaignId,setCampaignId]=useState(''),[clock,setClock]=useState(Date.now()),[preset,setPreset]=useState(MAIL_PRESETS[0].id),[draftId,setDraftId]=useState(''),[documents,setDocuments]=useState([]);
   const [draft,setDraft]=useState({name:'',subject:MAIL_PRESETS[0].subject,body:MAIL_PRESETS[0].body,accountId:accounts[0]?.id || '',attachResume:false,trackResume:!!data.resume,followup:false,deliveryMode:'paced',jobId:'',documentSetId:''});
   const editor=useRef(null),sequenceSignature=JSON.stringify(tasks.tasks.filter(t=>/campaign\.|contacts\.|contact.verify/.test(t.kind)).map(t=>[t.id,t.status,t.updated_at])),campaignSignature=JSON.stringify(data.campaigns.map(c=>[c.id,c.status,c.deliveries.map(d=>[d.status,d.followupStatus])]));
   const update=(key,value)=>{setDraft(d=>({...d,[key]:value}));setReview(null);};
   useEffect(()=>{if(mailerCompany){setCompany(mailerCompany);setSelected(new Set());setReview(null);}},[mailerCompany]);
+  useEffect(()=>{if(mailerSelection?.ids?.length){setCompany('');setPersona('');setVerification('');setUncontacted(false);setSelected(new Set(mailerSelection.ids.slice(0,100)));setReview(null);setIndex(0);}},[mailerSelection]);
   useEffect(()=>{if(!draft.accountId && accounts.length===1)update('accountId',accounts[0].id);},[accounts]);
   useEffect(()=>{const timer=setInterval(()=>setClock(Date.now()),1000);return()=>clearInterval(timer);},[]);
   useEffect(()=>{

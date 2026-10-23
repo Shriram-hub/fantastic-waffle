@@ -691,3 +691,18 @@ test('outreach sends opt-out headers, GET cannot unsubscribe, and one-click POST
   assert.equal(ledger.status,'accepted');
   assert.throws(()=>w.store.db.prepare("INSERT INTO outreach_send_log(user_id,contact_email,campaign_id,sequence_step,task_id,status,updated_at) VALUES(?,?,?,?,?,'queued',?)").run('local',ledger.contact_email,ledger.campaign_id,0,'duplicate',Date.now()),/UNIQUE/);
 });
+
+test('browser contact import accepts 100 profiles behind owner or extension auth, binds results to the importing token and rejects mismatched profile pages',async t=>{
+  const w=await workspace(t,{WORKSPACE_PASSWORD:'owner'}),owner={Authorization:'Basic '+Buffer.from('orbit:owner').toString('base64')};await w.store.replace(initialState(false));
+  const profiles=Array.from({length:60},(_,i)=>({fullName:`Maya Person${String.fromCharCode(65+Math.floor(i/26))}${String.fromCharCode(65+i%26)}`,profileUrl:`https://www.linkedin.com/in/person-${i}`,title:'Director of Finance'})),data={company:'Company',domain:'company.com',domainConfirmed:true,sourceUrl:'https://www.linkedin.com/company/company/people/',profiles};
+  assert.equal((await w.call('/api/contacts/import-browser-profiles',data)).status,401);
+  const token=(await w.call('/api/extension/token',{},'POST',owner)).json.token,headers={Authorization:`Bearer ${token}`};
+  const imported=await w.call('/api/contacts/import-browser-profiles',data,'POST',headers);assert.equal(imported.status,202);assert.equal(imported.json.count,60);
+  const repeat=await w.call('/api/contacts/import-browser-profiles',data,'POST',headers);assert.equal(repeat.json.taskId,imported.json.taskId);
+  const status=await w.call('/api/extension/contact-result',{taskId:imported.json.taskId},'POST',headers);assert.equal(status.status,200);assert.equal(status.json.status,'queued');
+  const other=(await w.call('/api/extension/token',{},'POST',owner)).json.token;assert.equal((await w.call('/api/extension/contact-result',{taskId:imported.json.taskId},'POST',{Authorization:`Bearer ${other}`})).status,404);
+  assert.equal((await w.call('/api/contacts/import-browser-profiles',{...data,profiles:Array(101).fill(profiles[0])},'POST',owner)).status,400);
+  assert.equal((await w.call('/api/contacts/import-browser-profiles',{...data,sourceUrl:'https://www.linkedin.com/in/someone-else',profiles:[profiles[0]]},'POST',owner)).status,400);
+  assert.equal((await w.call('/api/contacts/import-browser-profiles',{...data,sourceUrl:'https://evil.test/people'},'POST',owner)).status,400);
+  assert.equal(w.store.state.campaigns.length,0);
+});

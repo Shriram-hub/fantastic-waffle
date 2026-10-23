@@ -211,3 +211,13 @@ test('PostgreSQL pages large indexes, coalesces refreshes and isolates mutable w
   await a.run(async()=>{assert.equal(a.state.jobs.length,601);a.state.profile.name='Scoped worker';await a.save();});
   await b.refresh();assert.equal(b.state.profile.name,'Scoped worker');
 });
+
+test('a 60-profile browser POST persists inferred corporate emails and domain health in PostgreSQL across worker reconnects',async t=>{
+  const {initialState}=await import('../server/fixtures.mjs'),db=new PGlite(),pool=poolFor(db),store=await openPostgresStore({},pool);await store.replace(initialState(false));let dns=0;
+  const config={WORKSPACE_PASSWORD:'pg-browser-test',ENABLE_JOB_DISCOVERY:'false'},fetcher=async input=>{assert.equal(new URL(input).hostname,'dns.google');dns++;return new Response(JSON.stringify({Status:0,Answer:[{type:15,data:'10 mx.company.com.'}]}));},app=createApp({store,config,fetcher});await app.ready;
+  await new Promise(r=>app.server.listen(0,'127.0.0.1',r));t.after(async()=>{app.events.close();app.server.closeAllConnections();await new Promise(r=>app.server.close(r));await store.close();await db.close();});
+  const profiles=Array.from({length:60},(_,i)=>({fullName:`Maya Person${String.fromCharCode(65+Math.floor(i/26))}${String.fromCharCode(65+i%26)}`,profileUrl:`https://www.linkedin.com/in/person-${i}`,title:'Senior Analyst',location:'Mumbai'}));
+  const response=await fetch(`http://127.0.0.1:${app.server.address().port}/api/contacts/import-browser-profiles`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Basic '+Buffer.from('orbit:pg-browser-test').toString('base64')},body:JSON.stringify({company:'Company',domain:'company.com',domainConfirmed:true,profiles,sourceUrl:'https://www.linkedin.com/company/company/people/'})});assert.equal(response.status,202);const queued=await response.json();
+  const worker=await openPostgresStore({},pool),queue=taskQueue(worker),result=await runOne(worker,queue,handlers(worker,queue,config,fetcher),queued.taskId);assert.equal(result.status,'completed');assert.equal(dns,1);
+  const reopened=await openPostgresStore({},pool);assert.equal(reopened.state.contacts.length,60);assert.ok(reopened.state.contacts.every(c=>c.email.endsWith('@company.com') && c.emailInferred && c.emailStatus==='unverified' && c.domainVerification.hasMx && c.location==='Mumbai'));assert.equal(Number((await reopened.db.prepare('SELECT count(*) AS count FROM contacts').get()).count),60);assert.equal(reopened.state.campaigns.length,0);
+});

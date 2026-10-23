@@ -1,6 +1,6 @@
 import {sameApplicationLocation,sameApplicationHost} from './location.mjs';
 import {buildAnswers,fillApplication,fieldKey} from './autofill.mjs';
-import {extractLinkedInProfile,extractLinkedInCompanyPeople} from './linkedin.mjs';
+import {extractLinkedInProfile,extractLinkedInCompanyPeople,extractLinkedInProspect} from './linkedin.mjs';
 let installation;
 async function installationConfig() {
   if(installation!==undefined)return installation;
@@ -113,7 +113,7 @@ async function startBatch(taskIds) {
   await chrome.storage.session.set({batch:{ids:[...new Set(taskIds)],completed:0,total:taskIds.length,paused:false,startedAt:Date.now()}});return advanceBatch();
 }
 chrome.runtime.onMessage.addListener((message,sender,respond)=>{
-  if(!['connection-status','pull-company-recruiters','workspace-pair','workspace-batch','copilot-context','copilot-fill','batch-pause','batch-resume','batch-skip','register-workspace'].includes(message.type))return;
+  if(!['connection-status','pull-company-recruiters','linkedin-get-email','browser-import-status','workspace-pair','workspace-batch','copilot-context','copilot-fill','batch-pause','batch-resume','batch-skip','register-workspace'].includes(message.type))return;
   (async()=>{
     const {base,currentTask,batch}=await chrome.storage.session.get(['base','currentTask','batch']);
     const extensionPage=sender.url?.startsWith(chrome.runtime.getURL(''));
@@ -134,11 +134,17 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
       return {ok:true};
     }
     if(!sender.tab?.id && !extensionPage)throw Error('Open a supported application page.');
-    if(message.type==='pull-company-recruiters') {
-      const tabId=extensionPage ? message.tabId : sender.tab.id,tab=await chrome.tabs.get(tabId),u=new URL(tab.url);
-      if(!/(^|\.)linkedin\.com$/.test(u.hostname) || !/^\/(company\/|jobs\/view\/)/.test(u.pathname))throw Error('Open a LinkedIn company People page or job listing.');
-      const [result]=await chrome.scripting.executeScript({target:{tabId},func:extractLinkedInCompanyPeople});
-      return request('import-browser-profiles',result.result);
+    if(['pull-company-recruiters','linkedin-get-email','browser-import-status'].includes(message.type)) {
+      if(!extensionPage && sender.frameId!==0)throw Error('Open the LinkedIn page in its main tab.');
+      const tabId=extensionPage?message.tabId:sender.tab.id,tab=await chrome.tabs.get(tabId),u=new URL(tab.url);
+      if(u.protocol!=='https:' || !/(^|\.)linkedin\.com$/.test(u.hostname) || !/^\/(in\/|company\/|jobs\/view\/|search\/results\/people\/?)/.test(u.pathname))throw Error('Open a LinkedIn profile, company People page or people search.');
+      if(message.type==='browser-import-status')return request('contact-result',{taskId:message.taskId});
+      const [result]=await chrome.scripting.executeScript({target:{tabId},func:message.type==='linkedin-get-email'?extractLinkedInProspect:extractLinkedInCompanyPeople,args:message.type==='linkedin-get-email'?[]:[{targetCount:Math.min(100,Number(message.targetCount)||100),duration:4000,company:message.company || ''}]});
+      if(!result?.result)throw Error('The page has not loaded any supported profiles.');
+      const data=result.result;
+      if(message.company?.trim())data.company=message.company.trim();
+      if(!data.company) return {needsCompany:true,profileName:data.profiles[0]?.name,message:'Enter the current company shown on this page, then click again. Mixed-company search results must be filtered to that company.'};
+      return request('import-browser-profiles',{...data,domain:message.domain || '',domainConfirmed:message.domainConfirmed===true,allowCredits:message.allowCredits===true});
     }
     if(message.type==='workspace-batch') {
       if(!sender.url || !base || new URL(sender.url).origin!==base)throw Error('Start a batch from your paired Veloce workspace.');

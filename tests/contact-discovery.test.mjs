@@ -211,3 +211,54 @@ test('a daily-budget pause preserves contacts and resumes cached discovery witho
   store.db.prepare("UPDATE provider_requests SET day='1999-01-01'").run();store.db.prepare('UPDATE tasks SET run_at=0 WHERE id=?').run(taskId);
   assert.equal((await runOne(store,queue,registry,taskId)).status,'completed');await store.refresh();assert.equal(searches,1);assert.equal(verifications,1);assert.equal(store.state.contacts[0].emailStatus,'verified');assert.equal(store.state.contactDiscoveryRuns[0].targets[0].added,1);
 });
+
+import {serperPeopleSearch} from '../server/providers/contacts/serper-xray.mjs';
+import {personaQueries,duckDuckGoNext} from '../server/providers/contacts/free-xray.mjs';
+import {checkContactDomains} from '../server/providers/contacts/dns.mjs';
+import {queueBrowserContacts,importBrowserContacts} from '../server/services/browser-contacts.mjs';
+import {CONTACT_CLUSTERS} from '../shared/contact-discovery.mjs';
+const testName=i=>`Person ${String.fromCharCode(65+Math.floor(i/26))}${String.fromCharCode(65+i%26)}`;
+const indexedPerson=(i,title='Director of Finance')=>({title:`${testName(i)} - ${title} at Company | LinkedIn`,link:`https://www.linkedin.com/in/person-${i}/?trk=search`,snippet:`${title} at Company`});
+
+test('deep Serper pages collect 50–100 unique canonical profiles and stop on exhausted or repeated pages',async()=>{
+  for(const targetCount of [50,100]){const pages=[],found=await serperPeopleSearch('Company finance people','test',{targetCount,fetcher:async(_url,init)=>{const b=JSON.parse(init.body);pages.push(b.page);assert.equal(b.num,50);return response({organic:Array.from({length:20},(_,i)=>indexedPerson((b.page-1)*20+i))});}});assert.equal(found.results.length,targetCount);assert.equal(new Set(found.results.map(p=>p.link)).size,targetCount);assert.ok(found.results.every(p=>!p.link.includes('?') && !p.link.endsWith('/')));assert.equal(pages.length,Math.ceil(targetCount/20));}
+  let calls=0;const repeated=await serperPeopleSearch('Company','test',{targetCount:100,fetcher:async()=>{calls++;return response({organic:[indexedPerson(0)]});}});assert.equal(calls,2);assert.equal(repeated.results.length,1);
+});
+test('four parallel persona tiers paginate through overlap, rank by domain and keep 100 genuine profiles',async()=>{
+  let active=0,peak=0;const queries=[],titles=['Managing Director','Finance Manager','Talent Acquisition Partner','Senior Financial Analyst'];
+  const found=await searchCompanyPeople('Company','company.com',{targetCount:100,job:{title:'Financial Analyst'},allowSearch:true,freeSearch:false,config:{SERPER_API_KEY:'test'},call:(_p,fn)=>fn(),fetcher:async(_url,init)=>{const {q,page}=JSON.parse(init.body),tier=q.includes('"Managing Director"')?0:q.includes('"Team Lead"')?1:q.includes('"Talent Acquisition"')?2:3;queries.push({q,page});active++;peak=Math.max(peak,active);await new Promise(r=>setTimeout(r,5));active--;return response({organic:Array.from({length:20},(_,i)=>indexedPerson(page===1?i:20+tier*20+i,titles[tier]))});}});
+  assert.equal(found.people.length,100);assert.equal(peak,4);assert.deepEqual(new Set(found.people.map(p=>p.searchTier)),new Set(['executive','management','recruiting','specialist']));assert.equal(new Set(found.people.map(p=>p.name)).size,100);assert.ok(queries.some(q=>q.page===2));assert.ok(found.people.every(p=>!p.email));
+  const generated=personaQueries('Company',contactTargeting({title:'Financial Analyst'}));assert.ok(generated.some(q=>q.q.includes('"Head of"')));assert.ok(generated.some(q=>q.q.includes('"Senior Consultant"')));
+});
+test('Brave uses page offsets 0,1 and honors exhaustion; DuckDuckGo follows bounded next-form fields',async()=>{
+  const offsets=[];await searchCompanyPeople('Company','company.com',{targetCount:100,allowSearch:true,freeSearch:false,config:{BRAVE_SEARCH_API_KEY:'test'},call:(_p,fn)=>fn(),fetcher:async input=>{const u=new URL(input),offset=Number(u.searchParams.get('offset'));offsets.push(offset);assert.equal(u.searchParams.get('count'),'20');return response({query:{more_results_available:offset===0},web:{results:Array.from({length:20},(_,i)=>{const p=indexedPerson(offset*20+i);return {title:p.title,url:p.link,description:p.snippet};})}});}});assert.ok(offsets.includes(1));assert.ok(offsets.every(n=>n<2));
+  assert.deepEqual(duckDuckGoNext('<form><input name="q" value="Company"><input name="s" value="30"><input name="vqd" value="token&amp;x"></form>','Company'),{q:'Company',s:'30',vqd:'token&x'});assert.equal(duckDuckGoNext('<form><input name="s" value="0"></form>','Company'),null);
+});
+test('100 browser profiles receive pattern confidence with one Google DoH MX check, stay unverified and deduplicate imports',async t=>{
+  const store=await personal(t),queue=taskQueue(store);await store.db.prepare('INSERT INTO companies(domain,name,body) VALUES(?,?,?)').run('company.com','Company',JSON.stringify({name:'Company',domain:'company.com',source:'User-confirmed corporate website',learnedPattern:{pattern:'{f}{last}',status:'corroborated',sampleCount:3}}));
+  const profiles=Array.from({length:100},(_,i)=>({fullName:testName(i),title:'Senior Analyst',profileUrl:`https://linkedin.com/in/person-${i}?trk=x`})),data={company:'Company',sourceUrl:'https://www.linkedin.com/company/company/people/',profiles};
+  const first=await queueBrowserContacts(data,store,queue),again=await queueBrowserContacts(data,store,queue);assert.equal(first.taskId,again.taskId);let dns=0;
+  const result=await importBrowserContacts(await queue.get(first.taskId),store,{},async input=>{assert.equal(new URL(input).hostname,'dns.google');dns++;return response({Status:0,Answer:[{type:15,data:'10 mx.company.com.'}]});});assert.equal(result.added,100);assert.equal(dns,1);assert.equal(store.state.contacts.length,100);assert.ok(store.state.contacts.every(c=>c.emailStatus==='unverified' && c.emailInferred && c.domainVerification.hasMx && c.confidence===75));assert.equal(store.state.contacts[0].email,'paa@company.com');assert.equal(store.state.campaigns.length,0);
+  assert.equal((await importBrowserContacts(await queue.get(first.taskId),store,{},async()=>response({Status:0,Answer:[{type:15,data:'10 mx.company.com.'}]}))).added,0);
+});
+test('all depth settings reach durable worker payloads and industry presets contain ten distinct firms',async t=>{
+  const store=await personal(t),queue=taskQueue(store);for(const targetCount of [15,35,50,100]){const {run}=await startContactDiscovery({source:'domains',domains:['company.com'],targetCount},store,queue);assert.equal(run.targetCount,targetCount);assert.equal(run.contactsPerCompany,targetCount);for(const target of run.targets){target.status='completed';await queue.cancel(target.taskId);}await store.save();}
+  for(const c of Object.values(CONTACT_CLUSTERS)){assert.equal(c.companies.length,10);assert.equal(new Set(c.companies.map(v=>v[1])).size,10);}
+});
+
+test('industry clusters process ten firms concurrently while keeping per-firm quotas and never queueing outreach',async t=>{
+  const {startBulkHarvest}=await import('../server/services/bulk-harvest.mjs'),store=await personal(t),queue=taskQueue(store),{run}=await startBulkHarvest({source:'companies',preset:'finance',companyLimit:10,contactsPerCompany:10},store,queue);assert.equal(run.targetCount,100);let active=0,peak=0;
+  await discoverBulkBatch(await queue.get(run.taskId),store,queue,{},async()=>assert.fail('No external request'),{findCompanyContacts:async(_job,company,options)=>{assert.equal(options.limit,10);active++;peak=Math.max(peak,active);await new Promise(r=>setTimeout(r,10));active--;return {contacts:[{name:'Riley Quinn',title:'Director',email:`riley@${company.domain}`,emailStatus:'unverified'}],warnings:[]};}});assert.equal(peak,10);assert.equal(store.state.contacts.length,10);assert.ok(store.state.contactDiscoveryRuns[0].targets.every(t=>t.status==='completed'));assert.equal(store.state.campaigns.length,0);
+});
+
+test('public DuckDuckGo pagination reuses next-form tokens and preserves unique profiles across overlapping tier results',async()=>{
+  const requested=[];const found=await searchCompanyPeople('Company','company.com',{targetCount:50,fetcher:async(input,init)=>{assert.equal(new URL(input).hostname,'lite.duckduckgo.com');const p=new URLSearchParams(init.body),q=p.get('q'),page=p.get('s')==='30'?2:1,tier=q.includes('"Managing Director"')?0:q.includes('"Team Lead"')?1:q.includes('"Talent Acquisition"')?2:3;requested.push(page);if(page===2)assert.equal(p.get('vqd'),'public-token');const rows=Array.from({length:10},(_,i)=>indexedPerson(page===1?i:10+tier*10+i)).map(r=>`<a href="${r.link}">${r.title}</a>`).join(''),next=page===1?`<form method="post"><input name="q" value="${q.replaceAll('"','&quot;')}"><input name="s" value="30"><input name="vqd" value="public-token"></form>`:'';return new Response(rows+next);}});assert.equal(found.people.length,50);assert.ok(requested.includes(2));
+});
+test('MX work is batched at twenty domains and never promotes suggested recipients to verified',async()=>{
+  let active=0,peak=0,calls=0;const contacts=Array.from({length:45},(_,i)=>({email:`maya@company${i}.com`,emailStatus:'unverified'}));
+  const results=await checkContactDomains(contacts,{fetcher:async()=>{active++;peak=Math.max(peak,active);calls++;await new Promise(r=>setTimeout(r,5));active--;return response({Status:0,Answer:[{type:15,data:'10 mx.company.com.'}]});}});assert.equal(peak,20);assert.equal(calls,45);assert.ok(results.every(c=>c.domainVerification.hasMx && c.emailStatus==='unverified'));
+});
+test('deep mailbox verification preserves the shared daily quota and does not repeat MX checks per address',async t=>{
+  const store=await personal(t),seedContacts=Array.from({length:25},(_,i)=>({name:testName(i),email:`person${i}@company.com`,companyDomain:'company.com',company:'Company',title:'Director',emailStatus:'unverified'}));let verified=0;
+  const found=await findCompanyContacts({company:'Company',title:'Financial Analyst'},{domain:'company.com',name:'Company'},{store,seedContacts,seedOnly:true,allowPublic:false,allowCredits:true,targetCount:25,dailyLimit:3,domainHealth:{domain:'company.com',hasMx:true,status:'mx-found'},config:{HUNTER_API_KEY:'test'},fetcher:async input=>{assert.equal(new URL(input).pathname,'/v2/email-verifier');verified++;return response({data:{status:'valid'}});}});assert.equal(verified,3);assert.equal(found.contacts.filter(c=>c.emailStatus==='verified').length,3);assert.equal(found.contacts.length,25);assert.ok(found.retryAt>Date.now());assert.equal(Number((await store.db.prepare('SELECT count(*) AS count FROM provider_requests').get()).count),3);
+});

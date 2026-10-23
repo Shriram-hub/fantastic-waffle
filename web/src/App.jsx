@@ -29,7 +29,7 @@ export default function App() {
   const toggleTheme=()=>setTheme(t=>t==='dark' ? 'light' : 'dark');
   useEffect(()=>applyTheme(theme),[theme]);
   useEffect(()=>{try{localStorage.setItem('veloce-sidebar',collapsed ? 'collapsed' : 'expanded');}catch{}},[collapsed]);
-  const [careerJobId,setCareerJobId]=useState(''),[careerMockStart,setCareerMockStart]=useState(false),[mailerCompany,setMailerCompany]=useState('');
+  const [careerJobId,setCareerJobId]=useState(''),[careerMockStart,setCareerMockStart]=useState(false),[mailerCompany,setMailerCompany]=useState(''),[mailerSelection,setMailerSelection]=useState(null);
   const [session,setSession]=useState(null),[retrying,setRetrying]=useState(false),[authError,setAuthError]=useState('');
   const [data, setData] = useState(null),
     [integrations, setIntegrations] = useState({}),
@@ -134,7 +134,7 @@ export default function App() {
       </div>
     );
   const app = {
-    cacheJobs,careerJobId,setCareerJobId,careerMockStart,setCareerMockStart,mailerCompany,setMailerCompany,theme,toggleTheme,worker,connected,
+    cacheJobs,careerJobId,setCareerJobId,careerMockStart,setCareerMockStart,mailerCompany,setMailerCompany:value=>{setMailerCompany(value);setMailerSelection(null);},mailerSelection,setMailerSelection,theme,toggleTheme,worker,connected,
     data,
     integrations,
     accounts,

@@ -83,4 +83,13 @@ for(const [selector,type,options] of [['#current','fill-current',{}],['#history'
 document.querySelector('#suggest').addEventListener('click',async event=>{event.target.disabled=true;try{const result=await chrome.runtime.sendMessage({type:'suggest-answers'});status.textContent=result.error || result.message;}catch(error){status.textContent=error.message;}finally{event.target.disabled=false;}});
 
 for(const [selector,type] of [['#pause-batch','batch-pause'],['#resume-batch','batch-resume'],['#skip-batch','batch-skip']])document.querySelector(selector).addEventListener('click',async()=>{const r=await chrome.runtime.sendMessage({type});status.textContent=r.error || r.message;});
-document.querySelector('#company-contacts').addEventListener('click',async event=>{event.target.disabled=true;try{const tab=await activePageAccess(),r=await chrome.runtime.sendMessage({type:'pull-company-recruiters',tabId:tab.id});status.textContent=r.error || r.message;}catch(error){status.textContent=error.message;}finally{event.target.disabled=false;}});
+for(const [selector,type] of [['#company-contacts','pull-company-recruiters'],['#get-email','linkedin-get-email']])document.querySelector(selector).addEventListener('click',async event=>{
+  event.target.disabled=true;
+  try{
+    const tab=await activePageAccess();status.textContent=type==='linkedin-get-email'?'Reading this profile…':'Scrolling and collecting loaded profiles…';
+    let r=await chrome.runtime.sendMessage({type,tabId:tab.id,targetCount:100,company:document.querySelector('#contact-company').value,domain:document.querySelector('#contact-domain').value,domainConfirmed:document.querySelector('#contact-domain-confirm').checked,allowCredits:document.querySelector('#contact-credits').checked});
+    if(r.error)throw Error(r.error);status.textContent=r.message;
+    for(let i=0;r.taskId && !['completed','failed','cancelled'].includes(r.status) && i<18;i++){await new Promise(resolve=>setTimeout(resolve,1000));r=await chrome.runtime.sendMessage({type:'browser-import-status',taskId:r.taskId,tabId:tab.id});if(r.error)throw Error(r.error);status.textContent=r.message;}
+    document.querySelector('#contact-results').textContent=(r.contacts || []).slice(0,10).map(c=>`${c.name}: ${c.email || 'No corporate address found'} · ${c.emailStatus==='verified'?'Verified mailbox':c.domainVerification?.hasMx?'MX routing found; mailbox unverified':'Pattern suggestion; mailbox unverified'}`).join('\n');
+  }catch(error){status.textContent=error.message;}finally{event.target.disabled=false;}
+});

@@ -10,8 +10,8 @@ export async function checkEmailDomain(email, lookupMx, fetcher=fetch) {
   if(!health.hasMx)return {emailStatus:'unverified',domainVerification:health,verification:{provider:health.provider,status:'unverified',at:now(),result:health.reason}};
   return null; // MX is a domain precheck, never proof that a mailbox exists.
 }
-export async function verifyWorkEmail(email, config, fetcher = fetch, lookupMx) {
-  const rejected = await checkEmailDomain(email, lookupMx,fetcher);
+export async function verifyWorkEmail(email, config, fetcher = fetch, lookupMx,domainHealth) {
+  const rejected = domainHealth?.hasMx ? null : await checkEmailDomain(email, lookupMx,fetcher);
   if (rejected) return rejected;
   if (!config.HUNTER_API_KEY)
     return rejected || {emailStatus:"unverified",verification:{provider:"DNS",status:"unverified",at:now(),result:"Mailbox verification requires a verification provider"}};

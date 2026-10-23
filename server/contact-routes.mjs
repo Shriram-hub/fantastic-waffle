@@ -1,7 +1,8 @@
+import {effectiveProviderConfig} from './services/provider-config.mjs';
 import {fail,hash} from './domain.mjs';
 import {startContactDiscovery,contactDiscoveryStatus} from './services/contact-discovery.mjs';
 import {checkContactProviders} from './services/contact-provider-checks.mjs';
-import {queueBrowserContacts} from './services/browser-contacts.mjs';
+import {queueBrowserContacts,browserImportResult} from './services/browser-contacts.mjs';
 import {companyDomain} from './providers/contacts/company.mjs';
 import {startBulkHarvest,SECTOR_PRESETS} from './services/bulk-harvest.mjs';
 
@@ -21,12 +22,13 @@ export function contactRoutes(store,queue,config,fetcher=fetch) {
       await store.save();json(res,200,{ok:true});return true;
     }
     if(path==='/api/contacts/import-browser-profiles' && req.method==='POST'){json(res,202,await queueBrowserContacts(await bodyJSON(req),store,queue));return true;}
+    if(path==='/api/contacts/browser-import-result' && req.method==='POST'){const data=await bodyJSON(req);json(res,200,await browserImportResult(data.taskId,store,queue));return true;}
     if(path==='/api/contacts/providers/check' && req.method==='POST'){await bodyJSON(req);json(res,200,await checkContactProviders(store,config,fetcher));return true;}
     if(path==='/api/contacts/discovery' && req.method==='GET'){json(res,200,await contactDiscoveryStatus(store,config));return true;}
     if(path==='/api/contacts/discover' && req.method==='POST'){json(res,202,await startContactDiscovery(await bodyJSON(req),store,queue,config));return true;}
     if(path==='/api/contacts/verify-batch' && req.method==='POST') {
       const data=await bodyJSON(req);if(data.confirmed!==true || !Array.isArray(data.ids) || !data.ids.length || data.ids.length>100)fail('Select 1–100 contacts and approve verification credit usage.');
-      if(!config.HUNTER_API_KEY)fail('Configure HUNTER_API_KEY before verifying mailboxes.',503);
+      if(!(await effectiveProviderConfig(store,config)).HUNTER_API_KEY)fail('Configure HUNTER_API_KEY before verifying mailboxes.',503);
       const contacts=[...new Set(data.ids)].map(id=>store.state.contacts.find(c=>c.id===id));
       if(contacts.some(c=>!c || c.isDemo || c.suppressed || !c.email))fail('Select existing, unsuppressed work-email contacts.');
       const tasks=[];

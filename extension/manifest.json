@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Veloce Application Assistant",
-  "version": "0.9.0",
-  "description": "Fill an application from your approved Veloce profile, then hand control back for review and submission.",
+  "version": "0.10.0",
+  "description": "Find company contacts on LinkedIn, review email suggestions and autofill applications from your approved Veloce profile.",
   "permissions": [
     "storage",
     "scripting",
@@ -23,7 +23,11 @@
     "https://*.taleo.net/*",
     "https://*.icims.com/*",
     "https://*.myworkdaysite.com/*",
-    "https://*.naukri.com/*"
+    "https://*.naukri.com/*",
+    "https://www.linkedin.com/search/results/people/*",
+    "https://*.linkedin.com/in/*",
+    "https://*.linkedin.com/company/*",
+    "https://*.linkedin.com/search/results/people/*"
   ],
   "optional_host_permissions": [
     "https://*/*"
@@ -34,7 +38,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Veloce · Application Assistant"
+    "default_title": "Veloce \u00b7 Application Assistant"
   },
   "content_scripts": [
     {
@@ -49,7 +53,12 @@
         "https://*.taleo.net/*",
         "https://*.icims.com/*",
         "https://*.myworkdaysite.com/*",
-        "https://*.naukri.com/*"
+        "https://*.naukri.com/*",
+        "https://www.linkedin.com/in/*",
+        "https://www.linkedin.com/search/results/people/*",
+        "https://*.linkedin.com/in/*",
+        "https://*.linkedin.com/company/*",
+        "https://*.linkedin.com/search/results/people/*"
       ],
       "js": [
         "confirmation.js",

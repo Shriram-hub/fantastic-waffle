@@ -4,7 +4,7 @@ import {connectionRoutes} from './connection-routes.mjs';
 import {redeemPackage} from './services/extension-pairing.mjs';
 import {mailCheckRoutes} from './mail-check-routes.mjs';
 import {jobPitchRoutes} from './job-pitch-routes.mjs';
-import {queueBrowserContacts} from './services/browser-contacts.mjs';
+import {queueBrowserContacts,browserImportResult} from './services/browser-contacts.mjs';
 import {maintenanceRoutes} from './workspace-maintenance.mjs';
 import {documentFingerprint,documentSummary} from './services/job-documents.mjs';
 import {warmHook} from './services/warm-connections.mjs';
@@ -148,11 +148,12 @@ export function upgradeRoutes(store, config, fetcher) {
       await serveResumeLink(req,res,share[1],store,queue,config);
       return true;
     }
-    if ((path!=='/api/contacts/import-browser-profiles' || req.headers.authorization?.startsWith('Bearer ')) && ["/api/extension/next", "/api/extension/report", "/api/extension/submission", "/api/extension/resume",'/api/extension/profile','/api/extension/context','/api/extension/import-linkedin','/api/extension/questions','/api/extension/documents','/api/extension/copilot','/api/extension/import-browser-profiles','/api/contacts/import-browser-profiles'].includes(path)) {
+    if ((path!=='/api/contacts/import-browser-profiles' || req.headers.authorization?.startsWith('Bearer ')) && ["/api/extension/next", "/api/extension/report", "/api/extension/submission", "/api/extension/resume",'/api/extension/profile','/api/extension/context','/api/extension/import-linkedin','/api/extension/questions','/api/extension/documents','/api/extension/copilot','/api/extension/import-browser-profiles','/api/extension/contact-result','/api/contacts/import-browser-profiles'].includes(path)) {
       const token = req.headers.authorization?.replace(/^Bearer /, "") || "",
         valid = await store.db.prepare("SELECT id FROM extension_tokens WHERE id=? AND expires>?").get(hash(token), Date.now());
       if (!valid) fail("The extension token expired or was revoked.", 401);
-      if(['/api/extension/import-browser-profiles','/api/contacts/import-browser-profiles'].includes(path) && req.method==='POST'){json(res,202,await queueBrowserContacts(await bodyJSON(req),store,queue));return true;}
+      if(['/api/extension/import-browser-profiles','/api/contacts/import-browser-profiles'].includes(path) && req.method==='POST'){json(res,202,await queueBrowserContacts(await bodyJSON(req),store,queue,{tokenId:valid.id}));return true;}
+      if(path==='/api/extension/contact-result' && req.method==='POST'){const data=await bodyJSON(req);json(res,200,await browserImportResult(data.taskId,store,queue,valid.id));return true;}
       if(await extensionEnhancements(req,res,u,{json,bodyJSON,valid,store,queue,config,fetcher}))return true;
       if(path==='/api/extension/profile' && req.method==='GET') {json(res,200,{profile:{...store.state.profile,master:candidateProfile(store.state.profile)},qa:store.state.settings.qaBank || [],resume:!!store.state.resume});return true;}
       if(path==='/api/extension/context' && req.method==='POST') {

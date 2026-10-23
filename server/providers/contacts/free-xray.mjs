@@ -1,3 +1,4 @@
+import {uniquePeople,profileURL} from '../../../shared/contact-discovery.mjs';
 import {withDeadline,boundedFetcher} from '../deadline.mjs';
 import {id,now,text,emailValid,safeUrl,stripHtml} from '../../domain.mjs';
 import {remoteJSON} from '../http.mjs';
@@ -17,7 +18,7 @@ export function searchHTMLResults(html,engine) {
     const u=new URL(link);if(!/(^|\.)linkedin\.com$/.test(u.hostname) || !/^\/(?:in|posts|pulse)\//.test(u.pathname))continue;
     results.push({link:u.origin+u.pathname,title:stripHtml(match[2]),snippet:stripHtml(html.slice(match.index,match.index+1200)).slice(0,500)});
   }catch{}
-  return results.slice(0,10);
+  return results.slice(0,100);
 }
 async function searchText(url,options,fetcher) {
   const r=await fetcher(url,{...options,headers:{'User-Agent':'VeloceBot/1.0 (+career workspace; public search)','Accept':'text/html','Accept-Language':'en-US,en;q=0.8',...options.headers},redirect:'error',signal:AbortSignal.timeout(4000)});
@@ -27,41 +28,66 @@ async function searchText(url,options,fetcher) {
   try {while(true){const part=await reader.read();if(part.done)break;length+=part.value.length;if(length>350000){await reader.cancel();return '';}chunks.push(part.value);}}finally{reader.releaseLock();}
   return Buffer.concat(chunks).toString('utf8');
 }
+export function duckDuckGoNext(html,query) {
+  for(const match of String(html).matchAll(/<form\b[^>]*>([\s\S]*?)<\/form>/gi)){
+    const values={};for(const input of match[1].matchAll(/<input\b[^>]*>/gi)){const name=input[0].match(/\bname=["']([^"']+)["']/i)?.[1],value=input[0].match(/\bvalue=["']([^"']*)["']/i)?.[1];if(name && /^(q|s|dc|v|api|o|vqd|kl|nextParams)$/.test(name) && value?.length<2500)values[name]=value.replaceAll('&amp;','&').replaceAll('&quot;','"').replaceAll('&#39;',"'");}
+    if(Number(values.s)>0 && (!values.q || values.q===query))return {...values,q:query};
+  }
+  return null;
+}
+export function personaQueries(company,targeting,options={}) {
+  const clean=v=>text(v,100).replace(/["\r\n]/g,' ').trim(),name=clean(cleanCompanyName(company)),department=clean(options.departmentKeyword || (targeting.field==='general'?'':targeting.label)),location=clean(options.location);
+  const base=`site:linkedin.com/in`,tail=`"${name}"${location?` (${location})`:''}`;
+  const queries=[
+    {tier:'executive',q:`${base} ("Managing Director" OR "Partner" OR "Vice President" OR "VP" OR "Director" OR "Head of") ${tail}`},
+    {tier:'management',q:`${base} ("Manager" OR "Lead" OR "Team Lead" OR "Principal" OR "Group Lead") ${tail} "${department}"`},
+    {tier:'recruiting',q:`${base} ("Talent Acquisition" OR "Recruiter" OR "HRBP" OR "Campus Recruitment" OR "People Partner") ${tail}`},
+    {tier:'specialist',q:`${base} ("Senior Analyst" OR "Associate Director" OR "Senior Consultant" OR "Staff") ${tail} "${department}"`},
+  ];
+  if(targeting.reporting.length)queries.unshift({tier:'reporting',q:`${base} (${[...targeting.reporting.map(r=>r.value),...targeting.titles].slice(0,12).map(t=>`"${clean(t)}"`).join(' OR ')}) "${name}"`});
+  queries.push({tier:'hiring',q:`(site:linkedin.com/posts OR site:linkedin.com/pulse) ("hiring" OR "looking for" OR "open role" OR "join my team") "${name}" "${clean(options.job?.title || targeting.label)}"`});
+  return queries;
+}
 export async function searchCompanyPeople(company,domain,options={}) {
-  const fetcher=options.fetcher || fetch,targeting=options.targeting || contactTargeting(options.job),name=text(cleanCompanyName(company),100).replaceAll('"',''),warnings=[];
-  const selected=options.targetPersona && options.targetPersona!=='all' && options.targetPersona!=='hiring-poster' ? targeting.personas.find(p=>p.id===options.targetPersona)?.titles || targeting.titles : [...targeting.reporting.map(r=>r.value),...targeting.personas[0].titles.slice(0,4),...targeting.personas[1].titles.slice(0,2),...targeting.personas[2].titles.slice(0,2)];
-  const titles=[...new Set(selected)].slice(0,10).map(t=>`"${t.replaceAll('"','')}"`).join(' OR ');
-  const queries=[`site:linkedin.com/in (${titles}) "${name}"`,`(site:linkedin.com/posts OR site:linkedin.com/pulse) ("hiring" OR "looking for" OR "open role" OR "join my team") "${name}" "${text(options.job?.title || targeting.label,70).replaceAll('"','')}"`];
-  const parse=results=>[...xrayPeople(results,company,domain,targeting),...activeHiringPeople(results,company,domain,targeting)];
-  const searchQuery=async q=>{
-  if(options.allowSearch && options.call)for(const [provider,field,search] of [['Serper','SERPER_API_KEY',serperSearch],['Tavily','TAVILY_API_KEY',tavilySearch]]) {
-    const key=options.config?.[field];if(!key)continue;
-    try {
-      const data=await options.call(provider,()=>search(q,key,{fetcher,limit:options.peopleLimit || 20}),q);
-      if(options.store){const {rememberBoards}=await import('../jobs/registry.mjs');const {taskQueue}=await import('../../queue.mjs');await rememberBoards(data.results.map(r=>({url:r.link})),options.store,taskQueue(options.store));}
-      const people=parse(data.results);if(people.length)return people;
-    }catch(error){warnings.push(error.status ? error.message : `${provider} search is unavailable.`);}
+  const fetcher=options.fetcher || fetch,targeting=options.targeting || contactTargeting(options.job),targetCount=Math.max(1,Math.min(100,options.targetCount || options.peopleLimit || 50)),warnings=[],deep=options.targetCount!==undefined,deadline=Date.now()+(deep?36000:3500);
+  const queries=personaQueries(company,targeting,options).filter(q=>options.targetPersona==='hiring-poster'?q.tier==='hiring':!deep || q.tier!=='hiring'),states=queries.map(query=>({...query,provider:0,page:1,ended:false})),collected=[];
+  const providers=[];
+  if(options.allowSearch && options.call)for(const [name,field] of [['Serper','SERPER_API_KEY'],['Tavily','TAVILY_API_KEY'],['SerpApi','SERPAPI_API_KEY'],['Brave','BRAVE_SEARCH_API_KEY']])if(options.config?.[field])providers.push({name,key:options.config[field]});
+  if(options.freeSearch!==false)providers.push({name:'DuckDuckGo'},{name:'Yahoo'});
+  async function pageFor(state) {
+    while(state.provider<providers.length && Date.now()<deadline) {
+      const {name,key}=providers[state.provider],page=state.page,q=state.q,requestKey=`${q}\npage:${page}`;
+      try {
+        let results=[],more=true;
+        if(name==='Serper'){const data=await options.call(name,()=>serperSearch(q,key,{fetcher,limit:50,page,timeout:4000}),requestKey);results=data.results;}
+        else if(name==='Tavily'){const data=await options.call(name,()=>tavilySearch(q,key,{fetcher,limit:20}),requestKey);results=data.results;more=false;}
+        else if(name==='SerpApi' || name==='Brave'){
+          const u=new URL(name==='SerpApi'?'https://serpapi.com/search.json':'https://api.search.brave.com/res/v1/web/search');
+          // Brave offset is a zero-based PAGE index, not a result offset.
+          u.search=new URLSearchParams(name==='SerpApi'?{engine:'google',q,num:'20',start:String((page-1)*20),api_key:key}:{q,count:'20',offset:String(page-1)});
+          const data=await options.call(name,()=>remoteJSON(u.href,name==='Brave'?{headers:{'X-Subscription-Token':key}}:{},fetcher,4000),requestKey);
+          results=name==='SerpApi'?data.organic_results || []:(data.web?.results || []).map(r=>({title:r.title,link:r.url,snippet:r.description}));if(name==='Brave' && data.query?.more_results_available===false)more=false;
+        }else if(name==='DuckDuckGo'){
+          const html=await searchText('https://lite.duckduckgo.com/lite/',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(state.nextDDG || {q,s:String((page-1)*30)}).toString()},fetcher);
+          results=searchHTMLResults(html,'DuckDuckGo');state.nextDDG=duckDuckGoNext(html,q);more=!!state.nextDDG;
+        }else{results=searchHTMLResults(await searchText(`https://search.yahoo.com/search?${new URLSearchParams({p:q,b:String((page-1)*10+1)})}`,{},fetcher),'Yahoo');}
+
+        const parsed=[...xrayPeople(results,company,domain,targeting),...activeHiringPeople(results,company,domain,targeting)].map(p=>({...p,searchTier:state.tier,department:targeting.label}));
+        const seen=state.seen || new Set(),fresh=parsed.filter(p=>{const key=p.linkedinUrl || p.hiringPost?.url || p.name;if(seen.has(key))return false;seen.add(key);return true;});state.seen=seen;
+        if(results.length && fresh.length){state.page++;if(!deep || !more || state.page>5){state.provider++;state.page=1;state.seen=new Set();}return fresh;}
+        state.provider++;state.page=1;state.seen=new Set();
+      }catch(error){warnings.push(error.status?error.message:`${name} people search was unavailable or reached its deadline.`);state.provider++;state.page=1;state.seen=new Set();}
+    }
+    state.ended=true;return [];
   }
-  if(options.allowSearch && options.call)for(const provider of ['SerpApi','Brave']) {
-    const key=options.config?.[provider==='SerpApi' ? 'SERPAPI_API_KEY' : 'BRAVE_SEARCH_API_KEY'];if(!key)continue;
-    try {
-      const u=new URL(provider==='SerpApi' ? 'https://serpapi.com/search.json' : 'https://api.search.brave.com/res/v1/web/search');
-      u.search=new URLSearchParams(provider==='SerpApi' ? {engine:'google',q,num:'5',api_key:key} : {q,count:'5'});
-      const data=await options.call(provider,()=>remoteJSON(u.href,provider==='Brave' ? {headers:{'X-Subscription-Token':key}} : {},fetcher,4000),q);
-      const results=provider==='SerpApi' ? data.organic_results || [] : (data.web?.results || []).map(r=>({title:r.title,link:r.url,snippet:r.description}));
-      const people=parse(results);if(people.length)return people;
-    }catch(error){warnings.push(error.status ? error.message : `${provider} search is unavailable.`);}
+  for(let round=0;round<5 && states.some(s=>!s.ended) && Date.now()<deadline;round++) {
+    const rows=await Promise.allSettled(states.filter(s=>!s.ended).map(pageFor));collected.push(...rows.filter(r=>r.status==='fulfilled').flatMap(r=>r.value));
+    if(uniquePeople(collected).length>=targetCount || !deep)break;
   }
-  if(options.freeSearch!==false) {const results=await Promise.allSettled([
-    ['DuckDuckGo','https://lite.duckduckgo.com/lite/',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({q}).toString()}],
-    ['DuckDuckGo',`https://html.duckduckgo.com/html/?${new URLSearchParams({q})}`,{}],
-    ['Yahoo',`https://search.yahoo.com/search?${new URLSearchParams({p:q})}`,{}]
-  ].map(async([engine,url,init])=>parse(searchHTMLResults(await searchText(url,init,fetcher),engine))));return results.filter(r=>r.status==='fulfilled').flatMap(r=>r.value);}
-  return [];
-  };
-  const results=await Promise.allSettled((options.targetPersona==='hiring-poster' ? queries.slice(1) : queries).map(searchQuery)),people=results.filter(r=>r.status==='fulfilled').flatMap(r=>r.value).map(p=>prioritizeContact(p,targeting));
-  if(!people.length)warnings.push('No source-supported people were returned by public search. Browser-assisted import is available on LinkedIn company pages.');
-  return {people:[...new Map(people.sort((a,b)=>b.priorityScore-a.priorityScore).map(p=>[p.linkedinUrl || p.hiringPost?.url || p.name,p])).values()].slice(0,options.peopleLimit || 8),warnings};
+  const people=uniquePeople(collected.map(p=>prioritizeContact(p,targeting)).sort((a,b)=>b.priorityScore-a.priorityScore)).slice(0,targetCount);
+  if(!people.length)warnings.push('No source-supported people were returned. Use the LinkedIn extension on a profile or company People page.');
+  if(people.length<targetCount)warnings.push(`Found ${people.length} of ${targetCount} requested profiles. Indexed results, source availability and provider quotas determine coverage.`);
+  return {people,warnings:[...new Set(warnings)].slice(0,6)};
 }
 
 export function activeHiringPeople(results,company,domain,targeting=contactTargeting()) {
@@ -109,19 +135,19 @@ export function namedPublishedContacts(content,domain,reference,company) {
   return contacts.slice(0,10);
 }
 export function xrayPeople(results,company,domain,targeting=contactTargeting()) {
-  return results.filter(r=>{try{return /(^|\.)linkedin\.com$/.test(new URL(r.link).hostname) && new URL(r.link).pathname.startsWith('/in/');}catch{return false;}}).flatMap(r=>{
+  return results.filter(r=>{try{return !!profileURL(r.link);}catch{return false;}}).flatMap(r=>{
     const title=text(r.title,220),parts=title.split(/\s[-–|]\s/),name=parts[0].replace(/\s*\([^)]*\)/g,'').trim();
-    if(!/recruit|talent|human resources|\bhr\b|hiring|manager|head of|\bc[tfmo]o\b|founder|director|vice president|partner|principal|lead|senior|controller|\bvp\b/i.test(`${title} ${r.snippet || ''}`) || !title.toLowerCase().includes(cleanCompanyName(company).toLowerCase())) return [];
-    const names=name.split(/\s+/);if(names.length<2 || names.length>5) return [];
-    return [prioritizeContact({firstName:names[0],lastName:names.at(-1),name,title:parts.slice(1).join(' — ').replace(/\s*\|?\s*LinkedIn$/i,''),linkedinUrl:safeUrl(r.link),companyDomain:domain,company,sources:[{url:safeUrl(r.link)}]},targeting)];
-  }).slice(0,50);
+    if(!/recruit|talent|human resources|\bhr\b|hiring|manager|head of|\bc[tfmo]o\b|founder|director|vice president|partner|principal|lead|senior|staff|associate|hrbp|controller|\bvp\b/i.test(`${title} ${r.snippet || ''}`) || !`${title} ${r.snippet || ''}`.toLowerCase().includes(cleanCompanyName(company).toLowerCase())) return [];
+    const names=name.split(/\s+/);if(!/^[\p{L}][\p{L}\p{M}'’. -]+$/u.test(name) || names.length<2 || names.length>5) return [];
+    return [prioritizeContact({firstName:names[0],lastName:names.at(-1),name,title:parts.slice(1).join(' — ').replace(/\s*\|?\s*LinkedIn$/i,''),linkedinUrl:profileURL(r.link),companyDomain:domain,company,companyAssociation:'Indexed company mention; current employment needs review',sources:[{url:safeUrl(r.link)}]},targeting)];
+  }).slice(0,100);
 }
 // Zero-key fallback reads actual published recruiting addresses. Search snippets
 // require the optional search API; no public, unlimited LinkedIn search API exists.
 export async function findPublicContacts(job,company,options={}) {
   const results=await Promise.allSettled([
     withDeadline(signal=>(options.pages || publicCompanyPages)(company.domain,{signal}),4000,options.signal),
-    withDeadline(signal=>options.searchPeople ? searchCompanyPeople(job.company,company.domain,{...options,job,fetcher:boundedFetcher(options.fetcher || fetch,signal)}) : {people:[]},4000,options.signal)
+    withDeadline(signal=>options.searchPeople ? searchCompanyPeople(job.company,company.domain,{...options,job,fetcher:boundedFetcher(options.fetcher || fetch,signal)}) : {people:[]},options.targetCount!==undefined?42000:4000,options.signal)
   ]);
   const pages=results[0].status==='fulfilled' ? results[0].value : [],searched=results[1].status==='fulfilled' ? results[1].value : {people:[],warnings:['Public people search reached its deadline.']};
   const contacts=[...publishedContacts(job.description,company.domain,job.url,job.company),...pages.flatMap(p=>[...publishedContacts(p.text,company.domain,p.url,job.company),...namedPublishedContacts(p.text,company.domain,p.url,job.company)])];
@@ -133,5 +159,5 @@ export async function findPublicContacts(job,company,options={}) {
   }
   if(options.warnings)options.warnings.push(...(searched.warnings || []));
   const targeting=options.targeting || contactTargeting(job);
-  return [...new Map(contacts.map(c=>prioritizeContact(c,targeting)).sort((a,b)=>b.priorityScore-a.priorityScore).map(c=>[c.email || c.hiringPost?.url || c.linkedinUrl,c])).values()].slice(0,options.peopleLimit || 12);
+  return [...new Map(contacts.map(c=>prioritizeContact(c,targeting)).sort((a,b)=>b.priorityScore-a.priorityScore).map(c=>[c.email || c.hiringPost?.url || c.linkedinUrl,c])).values()].slice(0,options.targetCount || options.peopleLimit || 12);
 }

@@ -248,8 +248,8 @@ function providerHandlers(store, queue, config = {}, fetcher = fetch, dependenci
       const c = find(store.state.contacts, task.payload.contactId),
         email = c.email;
       if(c.suppressed || c.isDemo)return {status:'cancelled'};
-      const policy=await getPolicy(store),limit=Math.min(100,Math.max(1,Number(config.CONTACT_API_DAILY_LIMIT) || policy.maxContactLookupsPerDay));
-      const result=await providerCall(store,`contacts-v2:${Math.floor(Date.now()/(7*86400000))}:verify:${email}`,'Hunter',limit,()=>verifyWorkEmail(email,config,fetcher,dependencies.lookupMx));
+      const effective=await effectiveProviderConfig(store,config),policy=await getPolicy(store),limit=Math.min(100,Math.max(1,Number(effective.CONTACT_API_DAILY_LIMIT) || policy.maxContactLookupsPerDay));
+      const result=await providerCall(store,`contacts-v3:${hash(effective.HUNTER_API_KEY || '')}:${Math.floor(Date.now()/(7*86400000))}:verify:${email}`,'Hunter',limit,()=>verifyWorkEmail(email,effective,fetcher,dependencies.lookupMx));
       await store.refresh();
       const latest = find(store.state.contacts, c.id);
       if (latest.email !== email) return {

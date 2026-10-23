@@ -1,3 +1,5 @@
+import {catalogReady,queryCatalog,catalogJob} from './job-catalog.mjs';
+import {uniquePeople} from '../../shared/contact-discovery.mjs';
 import {hydrateJobDetail} from './job-details.mjs';
 import {contactTargeting,prioritizeContact,matchesPersona,PERSONA_FILTERS} from './contact-personas.mjs';
 import {companyPattern,observeCompanyEmails} from './company-patterns.mjs';
@@ -23,41 +25,42 @@ import {githubCommitContacts} from '../providers/contacts/github-commits.mjs';
 
 const week=()=>Math.floor(Date.now()/(7*86400000));
 const retryFor=error=>error.status===429 ? Date.UTC(new Date().getUTCFullYear(),new Date().getUTCMonth(),new Date().getUTCDate()+1,0,5) : null;
-export async function findCompanyContacts(job,company,{store,config={},fetcher=fetch,pages,lookupMx,allowCredits=false,allowWarmSearch=false,limit=3,dailyLimit=20,seedContacts=[],hunterSearched=false,allowPublic=true,targetPersona='all'}={}) {
+export async function findCompanyContacts(job,company,{store,config={},fetcher=fetch,pages,lookupMx,allowCredits=false,allowWarmSearch=false,limit=3,targetCount,dailyLimit=20,seedContacts=[],seedOnly=false,domainHealth,hunterSearched=false,allowPublic=true,targetPersona='all',departmentKeyword='',location=''}={}) {
   config=await effectiveProviderConfig(store,config);
-  const targeting=contactTargeting(job,store.state.profile),contextKey=hash([targeting.field,targeting.reporting,targetPersona]);
+  const deep=targetCount!==undefined;limit=Math.max(1,Math.min(100,targetCount ?? limit));
+  const targeting=contactTargeting(job,store.state.profile),searchDepartment=targeting.field==='general'?departmentKeyword:targeting.label,contextKey=hash([targeting.field,targeting.reporting,targetPersona,searchDepartment,location]);
   const savedCompany=await companyPattern(store,company.domain);Object.assign(company,{...savedCompany,...company,learnedPattern:savedCompany.learnedPattern});
-  const healthPending=withDeadline(signal=>domainMailHealth(company.domain,{lookupMx,fetcher:boundedFetcher(fetcher,signal)}),4000).catch(()=>({domain:company.domain,status:'unknown',hasMx:false,gateway:'Unknown',provider:'DNS',reason:'Domain check reached its deadline'}));
-  const warnings=[],existing=store.state.contacts.filter(c=>!c.isDemo && !c.suppressed && c.emailStatus==='verified' && c.email?.split('@')[1]===company.domain);
+  const healthPending=domainHealth?Promise.resolve(domainHealth):withDeadline(signal=>domainMailHealth(company.domain,{lookupMx,preferDoH:deep,fetcher:boundedFetcher(fetcher,signal)}),4000).catch(()=>({domain:company.domain,status:'unknown',hasMx:false,gateway:'Unknown',provider:'DNS',reason:'Domain check reached its deadline'}));
+  const warnings=[],existing=store.state.contacts.filter(c=>!c.isDemo && !c.suppressed && c.emailStatus==='verified' && c.email?.split('@')[1]===company.domain && (!seedOnly || seedContacts.some(p=>p.linkedinUrl===c.linkedinUrl || p.email===c.email)));
   const published=(job.publicHiringEmails || []).filter(c=>c.email?.split('@')[1]?.toLowerCase()===company.domain).map(c=>({id:id(),name:'Hiring contact',title:'Published hiring contact',email:c.email.toLowerCase(),company:job.company,companyDomain:company.domain,emailStatus:'unverified',source:'Public hiring post',suppressed:false,isDemo:false,createdAt:now(),verification:{provider:'Public hiring post',status:'unverified',reference:c.sourceUrl,at:now(),result:'Published in a hiring post; mailbox not verified.'}}));
   let candidates=[...existing,...seedContacts,...published],retryAt=null;
-  const needsDiscovery=()=>candidates.filter(c=>{const ranked=prioritizeContact(c,targeting);return ranked.emailStatus==='verified' && matchesPersona(ranked,targetPersona) && (targetPersona!=='all' || ranked.persona==='manager');}).length<Math.min(3,limit);
+  const needsDiscovery=()=>candidates.filter(c=>{const ranked=prioritizeContact(c,targeting);return ranked.emailStatus==='verified' && matchesPersona(ranked,targetPersona) && (targetPersona!=='all' || ranked.persona==='manager');}).length<Math.min(deep?limit:3,limit);
   const call=(key,fn)=>providerCall(store,`contacts-v4:${hash(config.HUNTER_API_KEY || '')}:${week()}:${contextKey}:${key}`,'Hunter',dailyLimit,fn);
   const hunterPending=(async()=>{
-  if(!hunterSearched && allowCredits && config.HUNTER_API_KEY && needsDiscovery()) {
-    try{const result=await call(`domain:${company.domain}`,()=>withDeadline(signal=>searchHunterDomain(company.domain,config.HUNTER_API_KEY,10,boundedFetcher(fetcher,signal),targeting)));candidates.push(...(Array.isArray(result) ? result : result.contacts));if(result.pattern){company.pattern=result.pattern;company.providerPattern={pattern:result.pattern,status:'provider-reported',sampleCount:0,provider:'Hunter',mailboxVerified:false};}}
+  if(!seedOnly && !hunterSearched && allowCredits && config.HUNTER_API_KEY && needsDiscovery()) {
+    try{const result=await call(`domain:${company.domain}`,()=>withDeadline(signal=>searchHunterDomain(company.domain,config.HUNTER_API_KEY,Math.min(100,deep?limit:10),boundedFetcher(fetcher,signal),targeting)));candidates.push(...(Array.isArray(result) ? result : result.contacts));if(result.pattern){company.pattern=result.pattern;company.providerPattern={pattern:result.pattern,status:'provider-reported',sampleCount:0,provider:'Hunter',mailboxVerified:false};}}
     catch(error){if(config.CONTACT_READ_ONLY_DISCOVERY!=='true')await recordContactProviderFailure(store,'Hunter',error);retryAt=retryFor(error);warnings.push(error.status ? error.message : 'Hunter could not complete. Public careers-page discovery continued.');}
   }
   })();
   if(allowPublic && needsDiscovery()) {
     try{
       const saved=await store.db.prepare('SELECT body FROM companies WHERE domain=?').get(company.domain),cache=saved ? JSON.parse(saved.body).publicLookup : null,mode=allowWarmSearch ? 'search' : 'public';
-      if(cache?.mode===mode && cache?.contextKey===contextKey && Date.now()-Date.parse(cache.at)<86400000)candidates.push(...cache.contacts);
+      if(cache?.mode===mode && cache?.contextKey===contextKey && (!deep || (cache.targetCount || 0)>=limit) && Date.now()-Date.parse(cache.at)<86400000)candidates.push(...cache.contacts);
       else {
-        const contacts=await findPublicContacts(job,company,{store,pages,fetcher,config,peopleLimit:Math.max(12,limit),searchPeople:true,targeting,targetPersona,freeSearch:config.FREE_CONTACT_WEB_SEARCH!=='false',allowSearch:allowWarmSearch,call:(provider,fn,query)=>providerCall(store,`people-v5:${hash(config[({Serper:'SERPER_API_KEY',Tavily:'TAVILY_API_KEY',SerpApi:'SERPAPI_API_KEY',Brave:'BRAVE_SEARCH_API_KEY'})[provider]] || '')}:${week()}:${provider}:${company.domain}:${hash(query || contextKey)}`,provider,['Serper','Tavily'].includes(provider)?Math.min(500,Number(config.CONTACT_SEARCH_DAILY_LIMIT)||100):Math.min(30,Number(config.JOB_SEARCH_API_DAILY_LIMIT) || 6),fn),warnings});
-        candidates.push(...contacts);company.publicLookup={mode,contextKey,at:now(),contacts};
+        const contacts=await findPublicContacts(job,company,{store,pages,fetcher,config,peopleLimit:Math.max(12,limit),...(deep?{targetCount:limit}:{}),departmentKeyword:searchDepartment,location,searchPeople:true,targeting,targetPersona,freeSearch:config.FREE_CONTACT_WEB_SEARCH!=='false',allowSearch:allowWarmSearch,call:(provider,fn,query)=>providerCall(store,`people-v6:${hash(config[({Serper:'SERPER_API_KEY',Tavily:'TAVILY_API_KEY',SerpApi:'SERPAPI_API_KEY',Brave:'BRAVE_SEARCH_API_KEY'})[provider]] || '')}:${week()}:${provider}:${company.domain}:${hash(query || contextKey)}`,provider,['Serper','Tavily'].includes(provider)?Math.min(500,Number(config.CONTACT_SEARCH_DAILY_LIMIT)||100):Math.min(30,Number(config.JOB_SEARCH_API_DAILY_LIMIT) || 6),fn),warnings});
+        candidates.push(...contacts);company.publicLookup={mode,contextKey,targetCount:deep?limit:12,at:now(),contacts};
       }
     }
     catch{warnings.push('Public company careers pages were unavailable.');}
   }
   await hunterPending;
   const creditCall=(provider,key,fn)=>providerCall(store,`contacts-v4:${hash(config[({Prospeo:'PROSPEO_API_KEY',GetProspect:'GETPROSPECT_API_KEY',Minelead:'MINELEAD_API_KEY'})[provider]] || '')}:${week()}:${company.domain}:${provider}:${key}`,provider,dailyLimit,fn);
-  if(allowCredits && needsDiscovery())for(const [provider,key,search] of [['Minelead',config.MINELEAD_API_KEY,searchMineleadDomain],['Prospeo',config.PROSPEO_API_KEY,searchProspeoDomain]]) {
+  if(!seedOnly && allowCredits && needsDiscovery())for(const [provider,key,search] of [['Minelead',config.MINELEAD_API_KEY,searchMineleadDomain],['Prospeo',config.PROSPEO_API_KEY,searchProspeoDomain]]) {
     if(!key)continue;
     try {const found=await creditCall(provider,'domain',()=>search(company.domain,key,Math.min(25,limit),fetcher));candidates.push(...found.contacts);if(found.pattern)company.pattern=found.pattern;}catch(error){warnings.push(error.status?error.message:`${provider} is unavailable.`);}
     if(!needsDiscovery())break;
   }
-  if(config.GITHUB_CONTACT_DISCOVERY==='true')try{candidates.push(...await githubCommitContacts(company,{fetcher,token:config.GITHUB_PUBLIC_TOKEN || '',limit}));}catch(error){warnings.push(error.status?error.message:'GitHub public-source lookup is unavailable.');}
+  if(!seedOnly && config.GITHUB_CONTACT_DISCOVERY==='true')try{candidates.push(...await githubCommitContacts(company,{fetcher,token:config.GITHUB_PUBLIC_TOKEN || '',limit}));}catch(error){warnings.push(error.status?error.message:'GitHub public-source lookup is unavailable.');}
   const health=await healthPending;
   if(allowPublic && health.hasMx && candidates.length<limit)for(const local of ['careers','hr','talent','recruiting']) {
     candidates.push({id:id(),name:'Hiring team',title:'Suggested hiring inbox',email:`${local}@${company.domain}`,company:job.company,companyDomain:company.domain,emailStatus:'unverified',source:'Suggested role inbox',confidence:null,suppressed:false,isDemo:false,createdAt:now(),domainVerification:health,verification:{provider:health.provider,status:'unverified',at:now(),result:'Domain has MX records. This address is a suggestion; its mailbox has not been verified.'}});
@@ -71,7 +74,7 @@ export async function findCompanyContacts(job,company,{store,config={},fetcher=f
   for(const c of candidates)if(c.email ? !sampleEmail(c.email) && c.email.split('@')[1]?.toLowerCase()===company.domain : c.linkedinUrl || c.hiringPost?.url) {
     const key=c.email?.toLowerCase() || c.linkedinUrl || c.hiringPost?.url,old=byEmail.get(key);if(!old || old.emailStatus!=='verified' && c.emailStatus==='verified')byEmail.set(key,c);
   }
-  const warm=await withDeadline(signal=>prioritizeWarmContacts([...byEmail.values()],job,store,config,boundedFetcher(fetcher,signal),allowWarmSearch)).catch(()=>({contacts:[...byEmail.values()],people:[],warnings:['Warm search reached its deadline.']}));
+  const warm=seedOnly?{contacts:[...byEmail.values()],people:[],warnings:[]}:await withDeadline(signal=>prioritizeWarmContacts([...byEmail.values()],job,store,config,boundedFetcher(fetcher,signal),allowWarmSearch)).catch(()=>({contacts:[...byEmail.values()],people:[],warnings:['Warm search reached its deadline.']}));
   warnings.push(...warm.warnings);
   const prospects=[];
   for(const person of warm.people)if(!warm.contacts.some(c=>c.name.toLowerCase()===person.name.toLowerCase())) {
@@ -80,15 +83,15 @@ export async function findCompanyContacts(job,company,{store,config={},fetcher=f
     prospects.push({id:id(),company:job.company,title:'Shared-background professional',companyDomain:company.domain,email:'',emailStatus:'unverified',source:'Public alumni / past-company search',isDemo:false,suppressed:false,createdAt:now(),...person,...found});
     if(prospects.length>=limit)break;
   }
-  const results=[...warm.contacts,...prospects].map(c=>({...prioritizeContact(c,targeting),emailPattern:company.learnedPattern ? {pattern:company.learnedPattern.pattern,status:company.learnedPattern.status,sampleCount:company.learnedPattern.sampleCount} : null})).filter(c=>matchesPersona(c,targetPersona)).sort((a,b)=>b.priorityScore-a.priorityScore || Number(b.emailStatus==='verified')-Number(a.emailStatus==='verified')).slice(0,limit);
-  for(const candidate of results) {
-    if(!candidate.email && !allowCredits)continue;
+  const results=uniquePeople([...warm.contacts,...prospects]).map(c=>({...prioritizeContact(c,targeting),department:c.department || targeting.label,confidence:c.confidence ?? (c.emailStatus==='verified'?100:company.learnedPattern?.pattern?65:35),confidenceMeaning:'Naming-pattern confidence; MX does not verify a mailbox',emailPattern:company.learnedPattern ? {pattern:company.learnedPattern.pattern,status:company.learnedPattern.status,sampleCount:company.learnedPattern.sampleCount} : null})).filter(c=>matchesPersona(c,targetPersona)).sort((a,b)=>b.priorityScore-a.priorityScore || Number(b.emailStatus==='verified')-Number(a.emailStatus==='verified')).slice(0,limit);
+  const verifyCandidate=async candidate=>{
+    if(!candidate.email && !allowCredits)return;
     candidate.domainVerification=health;
     candidate.requiresDomainReview=company.requiresDomainReview===true;
     const domainCheck=health.status==='invalid' ? {emailStatus:'invalid',verification:{provider:health.provider,status:'invalid',at:now(),result:health.reason}} : null;
     if(domainCheck)Object.assign(candidate,domainCheck);
     else if(candidate.emailStatus!=='verified' && candidate.emailStatus!=='invalid' && candidate.emailStatus!=='catch-all' && allowCredits) {
-      if(config.HUNTER_API_KEY && candidate.email)try {Object.assign(candidate,await call(`verify:${candidate.email}`,()=>verifyWorkEmail(candidate.email,config,fetcher,lookupMx)));}
+      if(config.HUNTER_API_KEY && candidate.email)try {Object.assign(candidate,await call(`verify:${candidate.email}`,()=>verifyWorkEmail(candidate.email,config,fetcher,lookupMx,health)));}
       catch(error){retryAt=Math.max(retryAt || 0,retryFor(error) || 0) || null;warnings.push(error.status ? error.message : 'Verification was unavailable. The address stays unverified.');}
       if(candidate.emailStatus!=='verified' && candidate.name?.trim().includes(' ') && !/hiring team|company contact/i.test(candidate.name))for(const [provider,key,finder] of [['Prospeo',config.PROSPEO_API_KEY,findProspeoEmail],['GetProspect',config.GETPROSPECT_API_KEY,findGetProspectEmail]]) {
         if(!key)continue;
@@ -96,7 +99,8 @@ export async function findCompanyContacts(job,company,{store,config={},fetcher=f
         if(candidate.emailStatus==='verified')break;
       }
     }
-  }
+  };
+  for(let offset=0;offset<results.length;offset+=20)await Promise.allSettled(results.slice(offset,offset+20).map(verifyCandidate));
   if(company.requiresDomainReview)warnings.unshift('The domain is a DNS-based suggestion. Confirm the corporate website before outreach.');
   if(!results.length)warnings.unshift(health.hasMx ? 'No published hiring contact was found. Use browser-assisted import or review a company website.' : health.reason);
   await observeCompanyEmails(store,company,results);
@@ -105,8 +109,8 @@ export async function findCompanyContacts(job,company,{store,config={},fetcher=f
 export async function startContactDiscovery(data,store,queue,config={}) {
   config=await effectiveProviderConfig(store,config);
   if(store.state.isDemo)fail('Start your personal workspace before finding real company contacts.');
-  const policy=await getPolicy(store),limit=Number(data.contactsPerCompany ?? 3),companyLimit=Number(data.companyLimit ?? 5);
-  if(!Number.isInteger(limit)||limit<1||limit>5||!Number.isInteger(companyLimit)||companyLimit<1||companyLimit>50)fail('Choose 1–50 companies and 1–5 contacts per company.');
+  const policy=await getPolicy(store),limit=Number(data.targetCount ?? data.contactsPerCompany ?? 50),companyLimit=Number(data.companyLimit ?? 5);
+  if(!Number.isInteger(limit)||limit<1||limit>100||!Number.isInteger(companyLimit)||companyLimit<1||companyLimit>50)fail('Choose 1–50 companies and 1–100 contacts per company.');
   if(!['matches','domains'].includes(data.source || 'matches'))fail('Choose matched jobs or company domains.');
   if(data.allowCredits!==undefined && typeof data.allowCredits!=='boolean')fail('Choose whether to use Hunter credits.');
   const targetPersona=data.targetPersona || 'all';if(!PERSONA_FILTERS.includes(targetPersona))fail('Choose a valid target persona.');
@@ -125,8 +129,10 @@ export async function startContactDiscovery(data,store,queue,config={}) {
     const jobs=store.state.jobs.filter(j=>!j.isDemo && !j.archived).map(job=>({job,match:rankOpportunity(job,plan)})).filter(({match})=>match.recommendable && plan.personalized).sort((a,b)=>(b.match.score || 0)-(a.match.score || 0));
     const seen=new Set();
     for(const {job} of jobs) {const key=job.company.trim().toLowerCase();if(!seen.has(key)){seen.add(key);targets.push({company:job.company,jobId:job.id});}}
+    if(plan.personalized && await catalogReady(store))for(let page=0;page<5 && targets.length<companyLimit;page++){const feed=await queryCatalog(store,plan,{view:'foryou',offset:page*100,limit:100});for(const job of feed.jobs){const key=job.company.trim().toLowerCase();if(!seen.has(key)){seen.add(key);targets.push({company:job.company,jobId:job.id});}}if(feed.jobs.length<100)break;}
   }
   targets.splice(companyLimit);if(!targets.length)fail('Add company domains or save target roles and wait for matching jobs first.');
+  for(const target of targets)if(target.jobId && !store.state.jobs.some(j=>j.id===target.jobId)){const job=await catalogJob(target.jobId,store);if(job)store.state.jobs.push(job);}
   const allowWarmSearch=data.allowWarmSearch===true;
   if(allowWarmSearch && ![config.SERPER_API_KEY,config.TAVILY_API_KEY,config.SERPAPI_API_KEY,config.BRAVE_SEARCH_API_KEY].some(Boolean))fail('Add Serper or Tavily in Connections for people search.',503);
   const signature=hash({targets,limit,allowCredits,allowWarmSearch,targetPersona});
@@ -135,7 +141,7 @@ export async function startContactDiscovery(data,store,queue,config={}) {
   const active=previous.find(r=>r.signature===signature && inProgress(r));
   if(active)return {run:active,existing:true};
   if(previous.filter(inProgress).length>=3)fail('Three contact searches are already active. Let one finish or cancel its queued tasks in Automation.',409);
-  const run={id:id(),signature,createdAt:now(),contactsPerCompany:limit,allowCredits,allowWarmSearch,targetPersona,dailyLimit:Math.min(100,Math.max(1,Number(config.CONTACT_API_DAILY_LIMIT) || policy.maxContactLookupsPerDay)),targets:targets.map(t=>({...t,id:id(),status:'queued',added:0,verified:0,warnings:[]}))};
+  const run={id:id(),signature,createdAt:now(),contactsPerCompany:limit,...(data.targetCount!==undefined?{targetCount:limit*targets.length}:{}),allowCredits,allowWarmSearch,targetPersona,dailyLimit:Math.min(100,Math.max(1,Number(config.CONTACT_API_DAILY_LIMIT) || policy.maxContactLookupsPerDay)),targets:targets.map(t=>({...t,id:id(),status:'queued',added:0,verified:0,warnings:[]}))};
   await store.db.exec('BEGIN IMMEDIATE');
   try {
     const activeRuns=previous.filter(inProgress);
@@ -161,7 +167,7 @@ export async function discoverCompanyTask(task,store,queue,config={},fetcher=fet
     if(lookupRetryAt){Object.assign(target,{status:'queued',retryAt:lookupRetryAt,warnings:[lookupWarning]});await store.save();return {status:'deferred',runAt:lookupRetryAt};}
     target.status='needs-domain';target.warnings=[lookupWarning,'The company domain could not be resolved confidently. Search its corporate domain directly.'].filter(Boolean);await store.save();return {status:'Needs domain'};
   }
-  const found=await findCompanyContacts(job,company,{store,config,fetcher,pages:contactPages,lookupMx,allowCredits:run.allowCredits,allowWarmSearch:run.allowWarmSearch,limit:run.contactsPerCompany,dailyLimit:run.dailyLimit,seedContacts:hunterResult?.contacts || [],hunterSearched:!!hunterResult,targetPersona:run.targetPersona || 'all'});
+  const found=await findCompanyContacts(job,company,{store,config,fetcher,pages:contactPages,lookupMx,allowCredits:run.allowCredits,allowWarmSearch:run.allowWarmSearch,limit:run.contactsPerCompany,...(run.targetCount?{targetCount:run.contactsPerCompany}:{}),dailyLimit:run.dailyLimit,seedContacts:hunterResult?.contacts || [],hunterSearched:!!hunterResult,targetPersona:run.targetPersona || 'all'});
   await store.refresh();({run,target}=get());if(!run || !target || !['queued','running'].includes(target.status))return {status:'cancelled'};
   await store.db.prepare('INSERT INTO companies(domain,name,body) VALUES(?,?,?) ON CONFLICT(domain) DO UPDATE SET body=excluded.body').run(company.domain,job.company,JSON.stringify(company));
   const saved=[];let added=0;
