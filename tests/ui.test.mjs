@@ -62,6 +62,8 @@ test("React views render populated/empty states and escape untrusted profile and
       "TailoredDocuments",
       "CommandPalette",
       'CareerWorkspace',
+      'QuickMassMailer',
+      'CompanyExplorer',
     ]) {
       const html = renderToStaticMarkup(
         React.createElement(
@@ -76,6 +78,8 @@ test("React views render populated/empty states and escape untrusted profile and
       if(name==='Applications'){assert.match(html,/Kanban Board/);assert.match(html,/Compact Table/);assert.match(html,/Outreach Sent/);assert.match(html,/OA \/ Assessment/);assert.match(html,/Archived/);}
       if(name==='CommandPalette'){assert.match(html,/role="combobox"/);assert.match(html,/Run Job Discovery Now/);assert.match(html,/Test Mailbox Connection/);}
       if(name==='Connections') assert.match(html,/Free job discovery/);
+      if(name==='QuickMassMailer'){assert.match(html,/Select. Preview. Launch./);assert.match(html,/Live draft preview/);assert.match(html,/Launch mass mail batch/);assert.match(html,/Select all uncontacted/);assert.match(html,/MX routing alone/);}
+      if(name==='CompanyExplorer'){assert.match(html,/Company explorer/);assert.match(html,/Search public sources/);assert.match(html,/No job-source|need no API key/);}
       if(name==='Contacts'){assert.match(html,/Find company contacts/);assert.match(html,/Use email search/);assert.match(html,/Public-only discovery/);assert.match(html,/Target persona/);assert.match(html,/Functional Hiring Managers/);}
       if(name==='CareerWorkspace'){assert.match(html,/Interview prep/);assert.match(html,/STAR stories/);assert.match(html,/Search analytics/);}
       if(name === "Automation") {assert.match(html,/Autopilot Mode/);assert.match(html,/Enable Autopilot/);assert.match(html,/Approve|review queue/);assert.match(html,/Add Any Company Career URL/);}
@@ -87,6 +91,8 @@ test("React views render populated/empty states and escape untrusted profile and
       const html=renderToStaticMarkup(React.createElement(views.WorkspaceContext.Provider,{value:app},React.createElement(views[name],{workspace:career,jobs:data.jobs,stories:career.stories})));
       assert.ok(html.length>200);assert.ok(!html.includes('<script>alert(1)</script>'));
     }
+    const mock=renderToStaticMarkup(React.createElement(views.WorkspaceContext.Provider,{value:app},React.createElement(views.MockInterviewModal,{jobs:data.jobs,onClose(){}})));
+    assert.match(mock,/Mock interview studio/);assert.match(mock,/Evaluate answer/);assert.match(mock,/role="timer"/);assert.match(mock,/Text mode is always available|Type your answer/);assert.ok(!/[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/u.test(mock));assert.ok(!mock.includes('<script>alert(1)</script>'));
   }
 });
 

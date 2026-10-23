@@ -1,7 +1,7 @@
 import {withDeadline,boundedFetcher} from '../providers/deadline.mjs';
 // Accept provider-hosted raster assets only; never proxy arbitrary employer URLs.
 export function providerLogoURL(value) {
-  try{const u=new URL(value);return u.protocol==='https:' && !u.port && !u.username && !u.password && ['remotive.com','www.remotive.com','jobicy.com','www.jobicy.com'].includes(u.hostname) ? u.href : '';}catch{return '';}
+  try{const u=new URL(value);if(u.protocol!=='https:' || u.port || u.username || u.password)return '';if(u.hostname==='logo.clearbit.com')return !u.search && /^\/[a-z0-9.-]+\.[a-z]{2,}$/i.test(u.pathname)?u.href:'';return ['remotive.com','www.remotive.com','jobicy.com','www.jobicy.com'].includes(u.hostname)?u.href:'';}catch{return '';}
 }
 export function companyLogos(fetcher=fetch) {
   const cache=new Map();

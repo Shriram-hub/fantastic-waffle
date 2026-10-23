@@ -1,3 +1,4 @@
+import {mergeMail} from '../shared/mail-merge.mjs';
 import { randomUUID, createHash } from "node:crypto";
 
 export const STAGES = [
@@ -183,26 +184,7 @@ export function normalizeContact(row, source = "CSV") {
   };
 }
 export function renderTemplate(value, contact, profile) {
-  const vars = {
-    first_name: contact.name.split(" ")[0],
-    name: contact.name,
-    company: contact.company,
-    title: contact.title,
-    my_name: profile.name || "Your name",
-    my_role: profile.headline || (profile.interests || [])[0] || "my next role",
-    skills: (profile.skills || []).join(", "),
-    portfolio: profile.portfolio || "",
-    resume_url: profile.resumeUrl || "",
-    icebreaker: contact.icebreaker || "",
-    warm_hook:contact.warmOpener || "",
-    job_title:contact.jobTitle || '',
-    job_url:contact.jobUrl || '',
-  };
-  const unknown = [...value.matchAll(/\{\{\s*([^{}]+?)\s*\}\}/g)]
-    .map((m) => m[1])
-    .filter((k) => !(k in vars));
-  if (unknown.length) fail(`Unknown template variable: ${unknown[0]}`);
-  return value.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (_, k) => vars[k]);
+  try {return mergeMail(value,contact,profile);}catch(error){fail(error.message);}
 }
 export function previewCampaign(campaign, state) {
   if (!campaign.name || !campaign.subject || !campaign.body)
@@ -269,6 +251,7 @@ export function previewCampaign(campaign, state) {
 export function campaignFingerprint(campaign, state) {
   return hash({
     accountId: campaign.accountId || null,
+    ...(campaign.studio?{deliveryMode:campaign.deliveryMode,pacing:campaign.pacing,studio:true}:{}),
     sequence: campaign.sequence || null,
     name: campaign.name,
     subject: campaign.subject,

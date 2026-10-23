@@ -90,7 +90,7 @@ export async function discoverBulkBatch(task,store,queue,base={},fetcher=fetch,d
       if(!incoming.email && !incoming.linkedinUrl)continue;
       let contact=store.state.contacts.find(c=>incoming.email?c.email?.toLowerCase()===incoming.email.toLowerCase():c.linkedinUrl===incoming.linkedinUrl);
       if(contact?.suppressed || contact?.isDemo)continue;
-      if(!contact){contact={...incoming,id:id(),company:target.company,companyDomain:found.company.domain,jobId:target.jobId || null,discoveryRunId:run.id,createdAt:now()};store.state.contacts.push(contact);added++;}
+      if(!contact){contact={...incoming,id:id(),company:target.company,companyDomain:found.company.domain,jobId:target.jobId || null,...(target.jobId?{jobTitle:store.state.jobs.find(j=>j.id===target.jobId)?.title || '',jobUrl:store.state.jobs.find(j=>j.id===target.jobId)?.url || ''}:{}),discoveryRunId:run.id,createdAt:now()};store.state.contacts.push(contact);added++;}
       else if(contact.emailStatus!=='verified' && incoming.emailStatus==='verified')Object.assign(contact,{emailStatus:incoming.emailStatus,verification:incoming.verification});
       ids.push(contact.id);
     }

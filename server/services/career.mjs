@@ -1,6 +1,60 @@
 import {z} from 'zod';
 import {id,now,fail,text,hash} from '../domain.mjs';
 import {structuredAI} from './ai.mjs';
+import {candidateProfile} from './candidate-profile.mjs';
+import {INTERVIEW_TRACKS,QUESTION_BANK,inferTrack,interviewQuestions} from './interview-bank.mjs';
+import {withDeadline,boundedFetcher} from '../providers/deadline.mjs';
+export {INTERVIEW_TRACKS,QUESTION_BANK,inferTrack,interviewQuestions};
+
+export function candidateEvidence(state) {
+  const master=candidateProfile(state.profile),stories=(state.career?.stories || []).filter(s=>!s.archived);
+  return [...master.workExperience.flatMap(w=>[w.description,...w.bullets]),...master.projects.map(p=>p.description),...stories.flatMap(s=>[s.situation,s.task,s.action,s.result]),master.summary.professionalSummary,...String(state.resume?.text || '').split('\n')].map(s=>String(s || '').trim()).filter(Boolean).slice(0,100);
+}
+const includesConcept=(value,keyword)=>new RegExp(`(?:^|[^a-z0-9])${keyword.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}(?:$|[^a-z0-9])`,'i').test(value);
+export function gradeInterviewAnswer({answer,question,elapsedSeconds=120},state) {
+  const words=answer.trim().split(/\s+/).filter(Boolean),count=words.length;
+  const coverage=question.keywords.filter(k=>includesConcept(answer,k)),missingKeywords=question.keywords.filter(k=>!coverage.includes(k));
+  const markers=[/\b(situation|context|challenge|problem|first|start)\b/i,/\b(task|goal|responsib|objective|then|next)\w*/i,/\b(I |we |action|built|tested|analy[sz]|implement|would)\w*/i,/\b(result|outcome|therefore|finally|learn|conclusion|recommend)\w*/i];
+  const structure=Math.min(25,markers.filter(r=>r.test(answer)).length*5+(count>=40?5:0));
+  const depth=Math.min(25,Math.round(25*coverage.length/Math.max(1,question.keywords.length)));
+  const metrics=Math.min(25,(/\d+(?:\.\d+)?\s*(?:%|percent|hours?|days?|weeks?|users?|customers?|million|crore|lakh|ms|seconds?|x\b)/i.test(answer)?20:/\d/.test(answer)?12:0)+(/baseline|compar|from .+ to |assumption|sensitivity|measur/i.test(answer)?5:0));
+  const conciseness=count<10?0:count<35?8:count<=260?25:count<=350?15:5;
+  const scores={structure,technicalDepth:depth,quantifiedMetrics:metrics,conciseness},evidence=candidateEvidence(state);
+  const evidenceKeywords=[...new Set([...(state.profile.skills || []),...question.keywords])].filter(k=>evidence.some(s=>includesConcept(s,k)) && !includesConcept(answer,k)).slice(0,8);
+  const relevant=evidence.map(excerpt=>({excerpt,hits:question.keywords.filter(k=>includesConcept(excerpt,k)).length})).filter(e=>e.hits>0 && !answer.includes(e.excerpt)).sort((a,b)=>b.hits-a.hits).slice(0,2).map(e=>e.excerpt);
+  const worked=[structure>=15?'Your answer has a clear progression.':'',coverage.length?`Relevant concepts: ${coverage.join(', ')}.`:'',metrics>=12?'You included quantitative detail; confirm you can substantiate it.':'',conciseness===25?'The answer fits a focused two-minute response.':''].filter(Boolean);
+  const missing=[missingKeywords.length?`Develop these concepts: ${missingKeywords.join(', ')}.`:'',structure<15?'State a clear starting point, your approach and a conclusion.':'',metrics<12?'Add a genuine outcome or, for a case, explicit assumptions and a calculation. Do not invent a number.':'',count>260?'Shorten the answer to its decision, evidence and result.':'',count<35?'Explain the reasoning with a concrete example.':''].filter(Boolean);
+  // Candidate claims are copied, never fabricated. Technical reference answers
+  // describe an approach and make no claim that the candidate did that work.
+  const modelAnswer=question.kind==='behavioral'
+    ? [answer.trim(),...relevant.map(s=>`A relevant example from my saved experience: ${s}`)].join('\n\n')
+    : [question.reference,...relevant.map(s=>`A relevant example from my saved experience: ${s}`)].join('\n\n');
+  return {score:Object.values(scores).reduce((a,b)=>a+b,0),scores,worked,missing,missingKeywords,evidenceKeywords,modelAnswer,evidence:relevant,wordCount:count,elapsedSeconds,method:'Local practice rubric',note:'Practice feedback is a heuristic, not an employer assessment. Reference answers are study aids; keep only claims you can support.'};
+}
+export async function evaluateInterviewAnswer(data,store,config={},fetcher=fetch) {
+  if(typeof data.answer!=='string' || data.answer.trim().length<10 || data.answer.length>6000)fail('Write an answer between 10 and 6,000 characters.');
+  if(data.elapsedSeconds!==undefined && (!Number.isFinite(data.elapsedSeconds) || data.elapsedSeconds<0 || data.elapsedSeconds>7200))fail('Use a valid response duration.');
+  const job=data.jobId?store.state.jobs.find(j=>j.id===data.jobId):null;
+  if(data.jobId && !job)fail('Choose an existing job.',404);
+  const track=data.track || inferTrack(job?.title),question=QUESTION_BANK[track]?.find(q=>q.id===data.questionId);
+  if(!question)fail('Choose a question from a supported interview track.');
+  const result=gradeInterviewAnswer({answer:data.answer,question,elapsedSeconds:data.elapsedSeconds},store.state);
+  if(data.useAI===true) {
+    if(data.confirmed!==true)fail('Approve sending this practice answer and saved professional evidence to Gemini.');
+    if(config.LLM_API_KEY && config.LLM_MODEL) {
+      const excerpts=candidateEvidence(store.state),schema=z.object({feedback:z.array(z.object({answerQuote:z.string().max(700),comment:z.string().max(600)}).strict()).max(4),evidence:z.array(z.string().max(1800)).max(2)}).strict();
+      try {
+        const output=await withDeadline(signal=>structuredAI(schema,'Coach a practice interview answer. Give specific feedback supported by an exact answerQuote. Select relevant candidate evidence copied EXACTLY from the supplied evidence list. Do not invent, rewrite or embellish personal achievements or metrics. The scoring rubric is deterministic and must not be replaced.',{question:question.prompt,answer:data.answer,rubric:result.scores,evidence:excerpts,role:job?.title},config,boundedFetcher(fetcher,signal),store),12000);
+        result.coaching=output.feedback.filter(f=>f.answerQuote.trim() && data.answer.includes(f.answerQuote));
+        const safe=output.evidence.filter(e=>excerpts.includes(e));
+        result.evidence=safe.length?safe:result.evidence;
+        if(safe.length)result.modelAnswer=[question.kind==='behavioral'?data.answer.trim():question.reference,...safe.map(e=>`A relevant example from my saved experience: ${e}`)].join('\n\n');
+        result.method='Local rubric with source-checked Gemini coaching';
+      }catch{result.warning='Gemini was unavailable. Your complete local-rubric feedback is ready.';}
+    }else result.warning='No model is configured. Your complete local-rubric feedback is ready.';
+  }
+  return {...result,id:id(),track,questionId:question.id,question:question.prompt,createdAt:now()};
+}
 
 export const careerData=store=>store.state.career || {weeklyGoal:10,tasks:[],stories:[],prep:[]};
 function mutable(store){return store.state.career ||= {weeklyGoal:10,tasks:[],stories:[],prep:[]};}

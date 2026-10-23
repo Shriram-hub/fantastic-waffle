@@ -1,3 +1,5 @@
+import './workbench.css';
+import {CompanyExplorer} from './features/jobs/CompanyExplorer.jsx';
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { WorkspaceContext as Context, api } from './shared/workspace.jsx';
 import { Button } from './shared/ui.jsx';
@@ -27,7 +29,7 @@ export default function App() {
   const toggleTheme=()=>setTheme(t=>t==='dark' ? 'light' : 'dark');
   useEffect(()=>applyTheme(theme),[theme]);
   useEffect(()=>{try{localStorage.setItem('veloce-sidebar',collapsed ? 'collapsed' : 'expanded');}catch{}},[collapsed]);
-  const [careerJobId,setCareerJobId]=useState('');
+  const [careerJobId,setCareerJobId]=useState(''),[careerMockStart,setCareerMockStart]=useState(false),[mailerCompany,setMailerCompany]=useState('');
   const [session,setSession]=useState(null),[retrying,setRetrying]=useState(false),[authError,setAuthError]=useState('');
   const [data, setData] = useState(null),
     [integrations, setIntegrations] = useState({}),
@@ -132,7 +134,7 @@ export default function App() {
       </div>
     );
   const app = {
-    cacheJobs,careerJobId,setCareerJobId,theme,toggleTheme,worker,connected,
+    cacheJobs,careerJobId,setCareerJobId,careerMockStart,setCareerMockStart,mailerCompany,setMailerCompany,theme,toggleTheme,worker,connected,
     data,
     integrations,
     accounts,
@@ -152,6 +154,7 @@ export default function App() {
     {
       overview: Overview,
       jobs: Jobs,
+      companies:CompanyExplorer,
       applications: Applications,
       profile: Profile,
       documents:TailoredDocuments,
@@ -195,6 +198,9 @@ export { Button, Badge, Heading } from './shared/ui.jsx';
 export { Overview, Jobs, Applications, Profile, Contacts, Outreach, Inbox, Automation, Connections, SignIn, WorkspaceError, CareerWorkspace };
 export {CareerPlanner} from './features/career/CareerPlanner.jsx';
 export {CareerPrep} from './features/career/CareerPrep.jsx';
+export {MockInterviewModal} from './features/career/MockInterviewModal.jsx';
+export {QuickMassMailer} from './features/outreach/QuickMassMailer.jsx';
+export {CompanyExplorer};
 export {StoryBank} from './features/career/StoryBank.jsx';
 
 export {CommandPalette,TailoredDocuments};

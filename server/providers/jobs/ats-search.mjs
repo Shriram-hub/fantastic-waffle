@@ -1,3 +1,4 @@
+import {extraBoardFromURL,extraBoardURL} from './zero-key.mjs';
 import { remoteJSON } from "../http.mjs";
 import { text } from "../../domain.mjs";
 import {workdayBoard} from './public-ats.mjs';
@@ -8,6 +9,7 @@ export function boardFromURL(value) {
   try {
     const u = new URL(value);let slug = u.pathname.split("/").filter(Boolean)[0];
     if(u.protocol!=='https:' || u.username || u.password || u.port)return null;
+    const extra=extraBoardFromURL(value);if(extra)return extra;
     const workday=workdayBoard(value);if(workday)return {source:'Workday',slug:workday.url};
     for(const source of ['Keka','Darwinbox','Freshteam','Zoho Recruit']){const tenant=indiaBoard(source,value);if(tenant)return {source,slug:tenant.url};}
     if (/^[\w-]+\.recruitee\.com$/.test(u.hostname))return {source:'Recruitee',slug:u.hostname.split('.')[0]};
@@ -18,6 +20,7 @@ export function boardFromURL(value) {
   } catch { return null; }
 }
 export function boardURL(board) {
+  const extra=extraBoardURL(board.source,board.slug);if(extra)return extra;
   if(['Workday','Career Pages','Keka','Darwinbox','Freshteam','Zoho Recruit'].includes(board.source))return board.slug;
   const hosts={'Greenhouse':'boards.greenhouse.io','Lever':'jobs.lever.co','Lever EU':'jobs.eu.lever.co','Ashby':'jobs.ashbyhq.com','SmartRecruiters':'careers.smartrecruiters.com','Workable':'apply.workable.com'};
   return board.source==='Recruitee'?`https://${board.slug}.recruitee.com/`:hosts[board.source]?`https://${hosts[board.source]}/${board.slug}`:'';

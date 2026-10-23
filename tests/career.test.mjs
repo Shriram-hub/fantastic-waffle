@@ -6,6 +6,26 @@ import {createApp} from '../server/index.mjs';
 import {handlers,runOne} from '../server/worker.mjs';
 import {careerStatus,saveCareerTask,saveCareerStory,plannerCalendar,prepFingerprint} from '../server/services/career.mjs';
 import {taskQueue} from '../server/queue.mjs';
+import {QUESTION_BANK,INTERVIEW_TRACKS,gradeInterviewAnswer,evaluateInterviewAnswer} from '../server/services/career.mjs';
+
+test('six interview banks cover finance, accounting, consulting and software with deterministic source-grounded feedback',async t=>{
+  const store=await workspace(t);store.state.profile.skills=['Excel','WACC'];store.state.career={weeklyGoal:10,tasks:[],prep:[],stories:[{title:'Model review',action:'I reviewed WACC assumptions in an Excel model.',result:'The team used the documented assumptions.'}]};
+  assert.equal(INTERVIEW_TRACKS.length,6);for(const track of ['finance','accounting','consulting','software'])assert.ok(QUESTION_BANK[track].length>=5);
+  const question=QUESTION_BANK.finance.find(q=>q.id==='fin-dcf'),answer='First I would forecast free cash flow. Next I would discount cash flows at WACC and estimate terminal value. I would compare a 10% discount rate with a 12% rate in a sensitivity analysis. Finally I would explain which assumptions drive the result.';
+  const result=gradeInterviewAnswer({answer,question,elapsedSeconds:110},store.state);assert.ok(result.score>=0 && result.score<=100);assert.equal(Object.values(result.scores).reduce((a,b)=>a+b,0),result.score);assert.ok(Object.values(result.scores).every(n=>n>=0 && n<=25));assert.ok(!result.missingKeywords.includes('wacc'));assert.ok(result.evidenceKeywords.includes('Excel'));assert.match(result.modelAnswer,/WACC/);assert.ok(!result.modelAnswer.includes('increased revenue by'));
+  const weak=gradeInterviewAnswer({answer:'I would check the numbers.',question},store.state);assert.ok(weak.score<result.score);assert.ok(weak.missingKeywords.includes('terminal value'));
+  const local=await evaluateInterviewAnswer({track:'accounting',questionId:'acc-assertions',answer:'I would request the ledger and invoices and review the evidence.'},store,{},()=>assert.fail('No key must not make an external call'));assert.equal(local.method,'Local practice rubric');assert.ok(local.modelAnswer.length>100);
+});
+test('mock interview API validates bank questions, answer limits and AI consent; Gemini failure falls back without inventing evidence',async t=>{
+  const store=await workspace(t),app=createApp({store,config:{ENABLE_JOB_DISCOVERY:'false'},fetcher:()=>assert.fail('No-key evaluation must be offline')});await app.ready;
+  await new Promise(r=>app.server.listen(0,'127.0.0.1',r));t.after(async()=>{app.events.close();app.server.closeAllConnections();await new Promise(r=>app.server.close(r));});
+  const base=`http://127.0.0.1:${app.server.address().port}`,post=data=>fetch(base+'/api/career/evaluate-answer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+  const bank=await (await fetch(base+'/api/career/questions?track=finance')).json();assert.ok(bank.questions.some(q=>q.id==='fin-dcf'));assert.ok(bank.questions.every(q=>!q.reference));
+  const input={jobId:'role',track:'finance',questionId:'fin-dcf',answer:'I would forecast free cash flow, discount at WACC and test terminal value.'};
+  const valid=await post(input);assert.equal(valid.status,200);assert.ok((await valid.json()).missingKeywords.includes('sensitivity'));
+  assert.equal((await post({...input,questionId:'arbitrary'})).status,400);assert.equal((await post({...input,answer:'x'.repeat(6001)})).status,400);assert.equal((await post({...input,useAI:true})).status,400);
+  const fallback=await evaluateInterviewAnswer({...input,useAI:true,confirmed:true},store,{LLM_API_KEY:'test',LLM_MODEL:'model'},async()=>new Response('busy',{status:503}));assert.match(fallback.warning,/unavailable/);assert.equal(fallback.method,'Local practice rubric');
+});
 
 async function workspace(t) {
   const store=openStore(':memory:');t.after(()=>store.close());const state=initialState(false);

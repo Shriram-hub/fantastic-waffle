@@ -29,7 +29,8 @@ export async function findCompanyContacts(job,company,{store,config={},fetcher=f
   const savedCompany=await companyPattern(store,company.domain);Object.assign(company,{...savedCompany,...company,learnedPattern:savedCompany.learnedPattern});
   const healthPending=withDeadline(signal=>domainMailHealth(company.domain,{lookupMx,fetcher:boundedFetcher(fetcher,signal)}),4000).catch(()=>({domain:company.domain,status:'unknown',hasMx:false,gateway:'Unknown',provider:'DNS',reason:'Domain check reached its deadline'}));
   const warnings=[],existing=store.state.contacts.filter(c=>!c.isDemo && !c.suppressed && c.emailStatus==='verified' && c.email?.split('@')[1]===company.domain);
-  let candidates=[...existing,...seedContacts],retryAt=null;
+  const published=(job.publicHiringEmails || []).filter(c=>c.email?.split('@')[1]?.toLowerCase()===company.domain).map(c=>({id:id(),name:'Hiring contact',title:'Published hiring contact',email:c.email.toLowerCase(),company:job.company,companyDomain:company.domain,emailStatus:'unverified',source:'Public hiring post',suppressed:false,isDemo:false,createdAt:now(),verification:{provider:'Public hiring post',status:'unverified',reference:c.sourceUrl,at:now(),result:'Published in a hiring post; mailbox not verified.'}}));
+  let candidates=[...existing,...seedContacts,...published],retryAt=null;
   const needsDiscovery=()=>candidates.filter(c=>{const ranked=prioritizeContact(c,targeting);return ranked.emailStatus==='verified' && matchesPersona(ranked,targetPersona) && (targetPersona!=='all' || ranked.persona==='manager');}).length<Math.min(3,limit);
   const call=(key,fn)=>providerCall(store,`contacts-v4:${hash(config.HUNTER_API_KEY || '')}:${week()}:${contextKey}:${key}`,'Hunter',dailyLimit,fn);
   const hunterPending=(async()=>{

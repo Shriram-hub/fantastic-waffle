@@ -1,3 +1,4 @@
+import {workbenchRoutes} from './workbench-routes.mjs';
 import {sameApplicationLocation,sameApplicationHost} from '../extension/location.mjs';
 import {connectionRoutes} from './connection-routes.mjs';
 import {redeemPackage} from './services/extension-pairing.mjs';
@@ -65,7 +66,8 @@ export function upgradeRoutes(store, config, fetcher) {
   const discovery = discoveryRoutes(store,config);
   const candidate=candidateRoutes(store,queue,config,fetcher);
   const contacts=contactRoutes(store,queue,config,fetcher);
-  const career=careerRoutes(store,queue,config);
+  const career=careerRoutes(store,queue,config,fetcher);
+  const workbench=workbenchRoutes(store,queue,config,fetcher);
   const documents=documentRoutes(store,queue,config);
   const notifications=notificationRoutes(store,config);
   const mailChecks=mailCheckRoutes(store,queue);
@@ -275,6 +277,7 @@ export function upgradeRoutes(store, config, fetcher) {
     json,
     bodyJSON
   }) {
+    if(await workbench(req,res,u,{json,bodyJSON}))return true;
     if(await mailChecks(req,res,u,{json,bodyJSON}))return true;
     if(await connections(req,res,u,{json,bodyJSON}))return true;
     if(await jobPitches(req,res,u,{json,bodyJSON}))return true;

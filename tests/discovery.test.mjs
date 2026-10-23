@@ -265,3 +265,15 @@ test('new ATS apply links expand the persistent board registry only after a succ
   assert.equal((await knownBoards(store))[0].slug,'orbit-new-company');
   await rememberBoards([listing],store,queue);await drain(store,queue,()=>{throw Error('Already checked');});assert.equal(probes,1);
 });
+import {parseExtraATS,parsePersonioXML,parseHNThread,fetchHNHiring} from '../server/providers/jobs/zero-key.mjs';
+test('five zero-key ATS parsers normalize public schemas, preserve missing dates and reject off-board links',async()=>{
+  const fixtures=[['Rippling',[{uuid:'1',name:'Engineer',workLocation:{label:'Remote'},url:'https://ats.rippling.com/company/jobs/1'}]],['Pinpoint',{data:[{id:'2',title:'Analyst',location:{name:'Mumbai'},description:'<p>Build a forecast.</p>',url:'https://company.pinpointhq.com/en/postings/2',department:{name:'Finance'}}]}],['BreezyHR',[{id:'3',name:'Accountant',location:{name:'Delhi'},url:'https://company.breezy.hr/p/3'}]],['BambooHR',{result:[{id:'4',jobOpeningName:'Consultant',location:{city:'Bengaluru'}}]}]];
+  for(const [source,data] of fixtures){const jobs=parseExtraATS(source,'company',data);assert.equal(jobs.length,1,source);assert.equal(jobs[0].source,source);assert.equal(jobs[0].isDemo,false);assert.equal(jobs[0].publishedAt,null);assert.ok(jobs[0].url.startsWith('https://'));}
+  assert.equal(parseExtraATS('Rippling','company',[{uuid:'x',name:'Engineer',url:'https://evil.test/1'}]).length,0);
+  const xml='<workzag-jobs><position><id>7</id><name>Financial Analyst</name><office>Mumbai</office><jobDescriptions><jobDescription><name>Role</name><value><![CDATA[<p>Build forecasts</p>]]></value></jobDescription></jobDescriptions></position></workzag-jobs>',jobs=parsePersonioXML(xml,'company');assert.equal(jobs[0].title,'Financial Analyst');assert.match(jobs[0].description,/Build forecasts/);assert.throws(()=>parsePersonioXML('<!DOCTYPE x><workzag-jobs/>','company'),/Unsupported/);
+});
+test('Hacker News source chooses the official monthly thread and parses top-level hiring posts without verifying published addresses',async()=>{
+  const thread={id:42,children:[{id:43,text:'<p>Example | Software Engineer | Remote | Full-time</p><p>Apply at jobs@example.org. Build useful tools.</p>',created_at:new Date().toISOString(),children:[{id:44,text:'I am interested.'}]},{id:45,deleted:true,text:'Deleted | Engineer | Remote'},{id:46,text:'Seeking work | Software Engineer | Remote'}]};
+  const parsed=parseHNThread(thread);assert.equal(parsed.length,1);assert.equal(parsed[0].company,'Example');assert.equal(parsed[0].title,'Software Engineer');assert.equal(parsed[0].publicHiringEmails[0].status,'unverified');assert.match(parsed[0].url,/id=43/);
+  const calls=[],jobs=await fetchHNHiring(async url=>{calls.push(String(url));return new Response(JSON.stringify(calls.length===1?{hits:[{title:'Ask HN: Who wants to be hired?',objectID:'41',created_at:new Date().toISOString()},{title:'Ask HN: Who is hiring? (October 2026)',objectID:'42',created_at:new Date().toISOString()}]}:thread));});assert.equal(jobs.length,1);assert.match(calls[0],/author_whoishiring/);assert.match(calls[1],/items\/42$/);
+});

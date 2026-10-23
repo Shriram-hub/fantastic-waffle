@@ -26,7 +26,7 @@ export async function pruneSourceCache(store,ceiling=32*1048576) {
   let bytes=Number((await store.db.prepare('SELECT SUM(length(body)) AS bytes FROM job_source_cache').get()).bytes || 0);
   while(bytes>ceiling){const page=await store.db.prepare('SELECT id,length(body) AS bytes FROM job_source_cache ORDER BY expires_at,id LIMIT 100').all();if(!page.length)break;const ids=[];for(const row of page){ids.push(row.id);bytes-=Number(row.bytes);if(bytes<=ceiling)break;}await store.db.prepare(`DELETE FROM job_source_cache WHERE id IN (${ids.map(()=>'?').join(',')})`).run(...ids);}
 }
-export const SOURCE_DEFAULTS=Object.freeze({'Remotive':true,'Arbeitnow':true,'Remote OK':true,'Jobicy':true,'Himalayas':true,'Greenhouse':true,'Lever':true,'Ashby':true,'Google Jobs':false,'LinkedIn Guest':true,'India & finance boards':true,'SmartRecruiters':true,'Workable':true,'Recruitee':true,'Lever EU':true,'Workday':true,'The Muse':true,'Career Pages':true,'VC Portfolios':true,'Adzuna':false,'Keka':true,'Darwinbox':true,'Freshteam':true,'Zoho Recruit':true,'Amazon Jobs':true,'ATS Directory Search':true});
+export const SOURCE_DEFAULTS=Object.freeze({'Hacker News':true,'Rippling':true,'Pinpoint':true,'BreezyHR':true,'BambooHR':true,'Personio':true,'Remotive':true,'Arbeitnow':true,'Remote OK':true,'Jobicy':true,'Himalayas':true,'Greenhouse':true,'Lever':true,'Ashby':true,'Google Jobs':false,'LinkedIn Guest':true,'India & finance boards':true,'SmartRecruiters':true,'Workable':true,'Recruitee':true,'Lever EU':true,'Workday':true,'The Muse':true,'Career Pages':true,'VC Portfolios':true,'Adzuna':false,'Keka':true,'Darwinbox':true,'Freshteam':true,'Zoho Recruit':true,'Amazon Jobs':true,'ATS Directory Search':true});
 export async function getSearchConfig(store) {
   const row=await store.db.prepare("SELECT body FROM job_search_config WHERE id='local'").get();
   const p=store.state.profile;
@@ -80,7 +80,7 @@ export async function scheduleDiscovery(store,queue,config={},force=false,clock=
   } catch(e) {await store.db.exec('ROLLBACK');throw e;}
 }
 export function sourcePlan(plan,settings,prefs,registry=[]) {
-  const publicSources=[{source:'Remotive',board:'',ttl:6*3600000},{source:'Arbeitnow',board:'',ttl:DISCOVERY_INTERVAL},{source:'Remote OK',board:'',ttl:DISCOVERY_INTERVAL},{source:'Jobicy',board:'',ttl:DISCOVERY_INTERVAL}];
+  const publicSources=[{source:'Hacker News',board:'',ttl:6*3600000},{source:'Remotive',board:'',ttl:6*3600000},{source:'Arbeitnow',board:'',ttl:DISCOVERY_INTERVAL},{source:'Remote OK',board:'',ttl:DISCOVERY_INTERVAL},{source:'Jobicy',board:'',ttl:DISCOVERY_INTERVAL}];
   for(const role of (plan.roles.length ? plan.roles : ['']).slice(0,6)) for(let page=1;page<=(role ? 3 : 2);page++) publicSources.push({source:'Himalayas',board:role,page,ttl:86400000});
   const custom=['Greenhouse','Lever','Ashby'].flatMap(source=>(settings[`${source.toLowerCase()}Boards`] || []).map(slug=>({source,slug})));
   const locations=plan.locations?.length ? plan.locations : [plan.location || ''];

@@ -3,6 +3,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY web ./web
+COPY shared ./shared
 COPY public ./public
 COPY vite.config.mjs ./
 RUN npm run build && npm prune --omit=dev
@@ -13,6 +14,8 @@ COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
 COPY --chown=node:node package.json package-lock.json ./
 COPY --chown=node:node server ./server
+COPY --chown=node:node shared ./shared
+COPY --chown=node:node extension ./extension
 COPY --chown=node:node public ./public
 COPY --chown=node:node scripts ./scripts
 RUN mkdir -p /app/data && chown node:node /app/data

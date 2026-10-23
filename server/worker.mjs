@@ -1,3 +1,4 @@
+import {probeCompany,fetchCompanyJobs} from './services/company-explorer.mjs';
 import {workerHeartbeat} from './services/worker-health.mjs';
 import {effectiveProviderConfig} from './services/provider-config.mjs';
 import {discoverBulkBatch} from './services/bulk-harvest.mjs';
@@ -62,6 +63,8 @@ function providerHandlers(store, queue, config = {}, fetcher = fetch, dependenci
     };
   }
   return {
+    async 'company.probe'(task){return probeCompany(task,store,queue,config,fetcher,dependencies);},
+    async 'company.jobs'(task){return fetchCompanyJobs(task,store,queue,config,fetcher,dependencies);},
     async 'contacts.browser-import'(task){return importBrowserContacts(task,store,config,fetcher,dependencies);},
     async 'job.auto-pitch'(task){return buildJobPitch(task,store,queue,config,fetcher,dependencies);},
     async 'mail.test-send'(task) {

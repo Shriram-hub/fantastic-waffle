@@ -9,7 +9,7 @@ export const DIRECTORY_SOURCES=[
   {id:'cc0-ats',url:'https://raw.githubusercontent.com/moonie0201/ats-directory/main/companies.jsonl.gz',format:'jsonl',license:'CC0-1.0',reference:'https://github.com/moonie0201/ats-directory'},
   ...['keka','darwinbox','workday','greenhouse','lever','ashby','smartrecruiters','workable','recruitee'].map(provider=>({id:`community-${provider}`,provider,url:`https://raw.githubusercontent.com/Continuity1/d1_ats_scrapers/main/ats-companies/${provider}.csv`,format:'csv',license:'MIT',reference:'https://github.com/Continuity1/d1_ats_scrapers'})),
 ];
-const providers={greenhouse:'Greenhouse',lever:'Lever',ashby:'Ashby',recruitee:'Recruitee',smartrecruiters:'SmartRecruiters',workable:'Workable'};
+const providers={greenhouse:'Greenhouse',lever:'Lever',ashby:'Ashby',recruitee:'Recruitee',smartrecruiters:'SmartRecruiters',workable:'Workable',rippling:'Rippling',pinpoint:'Pinpoint',breezy:'BreezyHR',bamboohr:'BambooHR',personio:'Personio'};
 export function directoryBoard(row,source) {
   if(row.status && row.status!=='ok')return null;
   let board=row.url?boardFromURL(row.url):null;

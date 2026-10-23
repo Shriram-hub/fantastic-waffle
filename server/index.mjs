@@ -52,7 +52,7 @@ function publicState(s,preferences,catalogue) {
   const {
     previews,
     apolloResults,
-    career,contactDiscoveryRuns,jobDocuments,resumeTracking,alertConfig,jobPitches,
+    career,contactDiscoveryRuns,jobDocuments,resumeTracking,alertConfig,jobPitches,companyExplorer,
     ...rest
   } = s;
   return {

@@ -15,7 +15,7 @@ export async function catalogStats(store,plan) {
   const value={total:Number(row.total)||0,active:Number(row.active)||0,matches:Number(row.matches)||0,strong:Number(row.strong)||0,adjacent:Number(row.adjacent)||0,firstMover:Number(row.fresh)||0,capacity:CATALOG_CAPACITY,sources};snapshots.set(store,{scope:plan.scope,until:Date.now()+15000,value});return value;
 }
 function compact(job) {
-  const fields=['id','title','company','location','workMode','url','source','board','companyDomain','companyDomainSource','publishedAt','publishedAtSource','publishedAtIsUpdate','postedAt','fetchedAt','tags','type','salary','isDemo','archived','detailCacheKey','detailSourceId','descriptionHash','descriptionLength','descriptionTruncated','indexSkills','descriptionUnavailable','requiresSourceReview','indexedSnippet','postedBy','expiresAt'];
+  const fields=['id','title','company','location','workMode','url','source','board','companyDomain','companyDomainSource','publishedAt','publishedAtSource','publishedAtIsUpdate','postedAt','fetchedAt','tags','type','salary','isDemo','archived','detailCacheKey','detailSourceId','descriptionHash','descriptionLength','descriptionTruncated','indexSkills','descriptionUnavailable','requiresSourceReview','indexedSnippet','postedBy','expiresAt','publicHiringEmails'];
   const value=Object.fromEntries(fields.filter(k=>job[k]!==undefined).map(k=>[k,job[k]])),description=String(job.description || '');
   value.description=Buffer.from(description.slice(0,280)).toString();
   if(description.length>280){value.descriptionTruncated=true;value.descriptionLength=job.descriptionLength || description.length;value.descriptionHash=job.descriptionHash || hash(description);}return value;

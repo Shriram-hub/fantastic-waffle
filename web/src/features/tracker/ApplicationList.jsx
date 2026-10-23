@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp, api, stages, split, fmt } from '../../shared/workspace.jsx';
 import { Button, Badge, Heading, Empty, Panel, Field, Company, Modal, ConfirmAction, Sample } from '../../shared/ui.jsx';
 export function ApplicationList({ list }) {
-  const { data, setModal } = useApp();
+  const { data, setModal,go,setCareerJobId,setCareerMockStart } = useApp();
   return list.length ? (
     <div className="table-scroll">
       <table>
@@ -40,7 +40,7 @@ export function ApplicationList({ list }) {
                     onClick={() => setModal({ type: "application", id: a.id })}
                   >
                     View
-                  </Button>
+                  </Button>{j && <Button small onClick={()=>{setCareerJobId(j.id);setCareerMockStart(true);go('career');}}>Practice interview</Button>}
                 </td>
               </tr>
             );

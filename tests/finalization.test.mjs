@@ -25,6 +25,38 @@ import {renderTextPDF} from '../server/services/job-documents.mjs';
 import {parseResumeAsync} from '../server/resume.mjs';
 import {persistResume,hydrateResume} from '../server/services/resume-storage.mjs';
 import {mailFailure} from '../server/providers/mail/http.mjs';
+import {prepareQuickBatch,launchQuickBatch,batchProgress,controlQuickBatch,pasteContacts} from '../server/services/quick-mailer.mjs';
+import {renderTemplate} from '../server/domain.mjs';
+async function mailStudio(t){
+  const store=workspace(t),config={TOKEN_ENCRYPTION_KEY:key,ENABLE_LIVE_SEND:'true',PUBLIC_BASE_URL:'https://app.company.com'};
+  store.state.contacts=[{id:'recipient',name:'Riley Chen',email:'riley@company.com',company:'Company',title:'Recruiter',jobTitle:'Financial Analyst',emailStatus:'verified',suppressed:false,isDemo:false}];await store.save();
+  await store.db.prepare('INSERT INTO mail_accounts(id,provider,email,secret,metadata) VALUES(?,?,?,?,?)').run('mail','google','casey@candidate.com',tokenCipher(config).seal({access_token:'test-only',expires_at:Date.now()+3600000}),JSON.stringify({lastSync:new Date().toISOString()}));
+  const draft={name:'Reviewed batch',accountId:'mail',contactIds:['recipient'],subject:'{{role}} at {{company}}',body:'Hi {{firstName}}, my background includes {{myTopSkill}}. {{myExperienceHighlight}}',deliveryMode:'test',sequence:{enabled:false}};
+  return {store,config,draft,queue:taskQueue(store)};
+}
+test('mail studio uses shared camelCase merge tags, queues idempotently and reports real worker acceptance',async t=>{
+  const {store,config,draft,queue}=await mailStudio(t),review=await prepareQuickBatch(draft,store,config);
+  assert.equal(review.messages[0].subject,'Financial Analyst at Company');assert.match(review.messages[0].body,/Hi Riley/);assert.ok(!review.messages[0].body.includes('{{'));
+  assert.equal(renderTemplate('{{firstName}} / {{company}} / {{role}}',store.state.contacts[0],store.state.profile),'Riley / Company / Financial Analyst');
+  const launch={campaignId:review.campaignId,previewId:review.previewId,approved:true,confirmCount:1},first=await launchQuickBatch(launch,store,queue,config),second=await launchQuickBatch(launch,store,queue,config);assert.equal(first.progress.queued,1);assert.equal(second.existing,true);assert.equal((await queue.list()).filter(t=>t.kind==='campaign.send').length,1);
+  const task=(await queue.list()).find(t=>t.kind==='campaign.send');let sends=0;
+  const done=await runOne(store,queue,handlers(store,queue,config,async url=>{assert.match(String(url),/gmail.*messages\/send/);sends++;return response({id:'sent-1',threadId:'thread-1'});}),task.id);assert.equal(done.status,'completed');assert.equal(sends,1);await store.refresh();const progress=await batchProgress(review.campaignId,store);assert.equal(progress.sent,1);assert.equal(progress.queued,0);assert.equal(progress.unknown,0);
+});
+test('mail studio blocks MX-only, suppressed and previously queued recipients; paste never self-certifies verification',async t=>{
+  const {store,config,draft,queue}=await mailStudio(t);store.state.contacts[0].emailStatus='unverified';store.state.contacts[0].domainVerification={status:'mx-found'};
+  await assert.rejects(prepareQuickBatch(draft,store,config),/MX-only/);store.state.contacts[0].emailStatus='verified';store.state.contacts[0].suppressed=true;await assert.rejects(prepareQuickBatch(draft,store,config),/verification|mailboxes/);store.state.contacts[0].suppressed=false;
+  const pasted=await pasteContacts('Alex Doe, alex@anothercompany.com, Another Company, Manager',store);assert.equal(pasted.imported,1);assert.equal(store.state.contacts.find(c=>c.id===pasted.contactIds[0]).emailStatus,'unverified');
+  const review=await prepareQuickBatch(draft,store,config);await launchQuickBatch({...review,approved:true,confirmCount:1},store,queue,config);await assert.rejects(prepareQuickBatch({...draft,name:'Duplicate attempt'},store,config),/pending or accepted/);
+  await assert.rejects(prepareQuickBatch({...draft,contactIds:Array.from({length:6},(_,i)=>`x-${i}`)},store,config),/no longer exists/);
+});
+test('pause cancels queued work; retry only releases explicit provider failures and holds ambiguous sends',async t=>{
+  const {store,config,draft,queue}=await mailStudio(t),review=await prepareQuickBatch(draft,store,config);await launchQuickBatch({...review,approved:true,confirmCount:1},store,queue,config);
+  const task=(await queue.list()).find(t=>t.kind==='campaign.send');await runOne(store,queue,handlers(store,queue,config,async()=>new Response(JSON.stringify({error:{message:'Rejected'}}),{status:400})),task.id);await store.refresh();assert.equal((await batchProgress(review.campaignId,store)).failed,1);
+  await controlQuickBatch(review.campaignId,'retry',store,queue,config);assert.equal((await queue.get(task.id)).status,'queued');
+  await store.db.prepare('DELETE FROM send_leases').run();await runOne(store,queue,handlers(store,queue,config,async()=>new Response('Service unavailable',{status:503})),task.id);await store.refresh();assert.equal((await batchProgress(review.campaignId,store)).unknown,1);await assert.rejects(controlQuickBatch(review.campaignId,'retry',store,queue,config),/Unknown sends/);
+  store.state.contacts.push({id:'next',name:'Alex Kim',email:'alex@anothercompany.com',company:'Another Company',title:'Manager',emailStatus:'verified',suppressed:false,isDemo:false});await store.save();
+  const next=await prepareQuickBatch({...draft,contactIds:['next']},store,config);await launchQuickBatch({...next,approved:true,confirmCount:1},store,queue,config);await controlQuickBatch(next.campaignId,'pause',store,queue,config);assert.equal((await batchProgress(next.campaignId,store)).cancelled,1);assert.equal((await batchProgress(next.campaignId,store)).status,'Paused');
+});
 
 const response=data=>new Response(JSON.stringify(data),{headers:{'Content-Type':'application/json'}}),mx=async()=>[{exchange:'aspmx.l.google.com'}],key=Buffer.alloc(32,7).toString('base64');
 function workspace(t){const store=openStore(':memory:');t.after(()=>store.close());const s=initialState(false);Object.assign(s.profile,{name:'Casey Quinn',email:'casey@candidate.com',skills:['Excel','SQL'],interests:['Financial Analyst']});s.resume={name:'original.txt',text:'Casey Quinn\nExperience\n- Built Excel forecasts and SQL reports.\nEducation\nBCom Example University',base64:Buffer.from('Original private résumé bytes').toString('base64')};s.jobs=[{id:'job',company:'Deloitte India (Offices of the US)',title:'Financial Analyst',description:'Build Excel financial forecasts and SQL reports.',url:'https://jobs.deloitte.com/job/123',location:'Mumbai',workMode:'On-site',tags:['Excel'],source:'Company',isDemo:false,archived:false}];store.replace(s);return store;}

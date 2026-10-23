@@ -1,3 +1,4 @@
+import {QuickMassMailer} from './QuickMassMailer.jsx';
 import {QueueNowButton} from '../../shared/QueueNowButton.jsx';
 import {SequenceBuilder,followupDefaults} from './SequenceBuilder.jsx';
 import {JobDocuments} from '../resume/JobDocuments.jsx';
@@ -38,7 +39,7 @@ export function Outreach() {
         title="A thoughtful hello goes further."
         subtitle="Personalize your introduction. Preview every recipient. Send with measured pacing."
       ><QueueNowButton/></Heading>
-      <div className="two-column">
+      <QuickMassMailer/><details className="advanced-campaigns"><summary>Advanced campaign editor & saved campaigns</summary><div className="two-column">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -225,7 +226,7 @@ export function Outreach() {
             )}
           </Panel>
         </div>
-      </div>
+      </div></details>
     </>
   );
 }

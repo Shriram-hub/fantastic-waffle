@@ -10,6 +10,17 @@ import { hydrateResume } from '../server/services/resume-storage.mjs';
 import {putCatalogJobs,queryCatalog,importWorkspaceCatalog} from '../server/services/job-catalog.mjs';
 import {buildSearchPlan} from '../server/services/search-plan.mjs';
 import {saveProviderKey,effectiveProviderConfig} from '../server/services/provider-config.mjs';
+import {companyDirectory} from '../server/services/company-explorer.mjs';
+import {prepareQuickBatch,launchQuickBatch,batchProgress} from '../server/services/quick-mailer.mjs';
+import {tokenCipher} from '../server/providers/mail/oauth.mjs';
+test('Postgres company filters and mail-studio progress use durable rows and deduplicate a repeated reviewed launch',async t=>{
+  const db=new PGlite();t.after(()=>db.close());const store=await openPostgresStore({},poolFor(db)),{initialState}=await import('../server/fixtures.mjs'),state=initialState(false),config={TOKEN_ENCRYPTION_KEY:Buffer.alloc(32,3).toString('base64'),ENABLE_LIVE_SEND:'true'};
+  Object.assign(state.profile,{name:'Casey Quinn',email:'casey@candidate.com',skills:['SQL'],interests:['Engineer']});state.contacts=[{id:'riley',name:'Riley',email:'riley@company.com',company:'Company',title:'Recruiter',emailStatus:'verified',suppressed:false,isDemo:false}];await store.replace(state);
+  await store.db.prepare('INSERT INTO mail_accounts(id,provider,email,secret,metadata) VALUES(?,?,?,?,?)').run('mail','google','casey@candidate.com',tokenCipher(config).seal({access_token:'test',expires_at:Date.now()+3600000}),'{}');
+  await store.run(async()=>{const directory=await companyDirectory(store,{q:'Lazard'});assert.equal(directory.companies[0].name,'Lazard');const review=await prepareQuickBatch({accountId:'mail',contactIds:['riley'],subject:'{{role}} at {{company}}',body:'Hello {{firstName}}, I use {{myTopSkill}}.'},store,config),approval={...review,approved:true,confirmCount:1};
+    const first=await launchQuickBatch(approval,store,taskQueue(store),config),second=await launchQuickBatch(approval,store,taskQueue(store),config);assert.equal(first.progress.queued,1);assert.equal(second.existing,true);assert.equal((await batchProgress(review.campaignId,store)).total,1);
+  });
+});
 function poolFor(db) {
   const query=async(sql,params=[]) => {
     if (!params.length && sql.includes(';')) { const values=await db.exec(sql); const result=values.at(-1);return {rows:result?.rows || [],rowCount:result?.affectedRows || 0}; }

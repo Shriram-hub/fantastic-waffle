@@ -1,3 +1,4 @@
+import {EXTRA_ATS} from './zero-key.mjs';
 import {taskQueue} from '../../queue.mjs';
 import {hash,text,fail} from '../../domain.mjs';
 import {boardFromURL,boardURL} from './ats-search.mjs';
@@ -7,7 +8,7 @@ import {fetchJobs} from './index.mjs';
 import {workdayBoard} from './public-ats.mjs';
 import {careerURL,crawlCareerPage} from './career-pages.mjs';
 import {indiaBoard,INDIA_ATS} from './india-ats.mjs';
-const publicATS=['Greenhouse','Lever','Ashby','SmartRecruiters','Workable','Recruitee','Lever EU','Workday','Career Pages',...INDIA_ATS];
+const publicATS=['Greenhouse','Lever','Ashby','SmartRecruiters','Workable','Recruitee','Lever EU','Workday','Career Pages',...INDIA_ATS,...EXTRA_ATS];
 const validBoard=b=>publicATS.includes(b?.source) && (INDIA_ATS.includes(b.source)?!!indiaBoard(b.source,b.slug):b.source==='Workday' ? !!workdayBoard(b.slug) : b.source==='Career Pages' ? !!careerURL(b.slug) : /^[\w-]{1,80}$/.test(b.slug));
 const curatedKeys=new Set(curated.map(b=>`${b.source}:${b.slug}`));
 

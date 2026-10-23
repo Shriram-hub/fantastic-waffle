@@ -4262,5 +4262,473 @@
     "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
     "license": "MIT",
     "candidate": true
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.lazard.com/careers/",
+    "company": "Lazard",
+    "companyDomain": "lazard.com",
+    "reference": "https://www.lazard.com/careers/",
+    "candidate": true,
+    "sector": "Investment Banking & PE",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.evercore.com/careers/",
+    "company": "Evercore",
+    "companyDomain": "evercore.com",
+    "reference": "https://www.evercore.com/careers/",
+    "candidate": true,
+    "sector": "Investment Banking & PE",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.moelis.com/careers/",
+    "company": "Moelis",
+    "companyDomain": "moelis.com",
+    "reference": "https://www.moelis.com/careers/",
+    "candidate": true,
+    "sector": "Investment Banking & PE",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://hl.com/careers/",
+    "company": "Houlihan Lokey",
+    "companyDomain": "hl.com",
+    "reference": "https://hl.com/careers/",
+    "candidate": true,
+    "sector": "Investment Banking & PE",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.rothschildandco.com/en/careers/",
+    "company": "Rothschild & Co",
+    "companyDomain": "rothschildandco.com",
+    "reference": "https://www.rothschildandco.com/en/careers/",
+    "candidate": true,
+    "sector": "Investment Banking & PE",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.pjtpartners.com/careers",
+    "company": "PJT Partners",
+    "companyDomain": "pjtpartners.com",
+    "reference": "https://www.pjtpartners.com/careers",
+    "candidate": true,
+    "sector": "Investment Banking & PE",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.centerviewpartners.com/careers.aspx",
+    "company": "Centerview Partners",
+    "companyDomain": "centerviewpartners.com",
+    "reference": "https://www.centerviewpartners.com/careers.aspx",
+    "candidate": true,
+    "sector": "Investment Banking & PE",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.jefferies.com/careers/",
+    "company": "Jefferies",
+    "companyDomain": "jefferies.com",
+    "reference": "https://www.jefferies.com/careers/",
+    "candidate": true,
+    "sector": "Investment Banking & PE",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.nomura.com/americas/careers/",
+    "company": "Nomura",
+    "companyDomain": "nomura.com",
+    "reference": "https://www.nomura.com/americas/careers/",
+    "candidate": true,
+    "sector": "Fintech & Banking",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.macquarie.com/in/en/careers.html",
+    "company": "Macquarie",
+    "companyDomain": "macquarie.com",
+    "reference": "https://www.macquarie.com/in/en/careers.html",
+    "candidate": true,
+    "sector": "Fintech & Banking",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.nri.com/en/career",
+    "company": "Nomura Research Institute",
+    "companyDomain": "nri.com",
+    "reference": "https://www.nri.com/en/career",
+    "candidate": true,
+    "sector": "Management Consulting",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.oliverwyman.com/careers.html",
+    "company": "Oliver Wyman",
+    "companyDomain": "oliverwyman.com",
+    "reference": "https://www.oliverwyman.com/careers.html",
+    "candidate": true,
+    "sector": "Management Consulting",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.kearney.com/careers",
+    "company": "Kearney",
+    "companyDomain": "kearney.com",
+    "reference": "https://www.kearney.com/careers",
+    "candidate": true,
+    "sector": "Management Consulting",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.rolandberger.com/en/Join/",
+    "company": "Roland Berger",
+    "companyDomain": "rolandberger.com",
+    "reference": "https://www.rolandberger.com/en/Join/",
+    "candidate": true,
+    "sector": "Management Consulting",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.adlittle.com/en/careers",
+    "company": "Arthur D. Little",
+    "companyDomain": "adlittle.com",
+    "reference": "https://www.adlittle.com/en/careers",
+    "candidate": true,
+    "sector": "Management Consulting",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.alvarezandmarsal.com/careers",
+    "company": "Alvarez & Marsal",
+    "companyDomain": "alvarezandmarsal.com",
+    "reference": "https://www.alvarezandmarsal.com/careers",
+    "candidate": true,
+    "sector": "Management Consulting",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.fticonsulting.com/careers",
+    "company": "FTI Consulting",
+    "companyDomain": "fticonsulting.com",
+    "reference": "https://www.fticonsulting.com/careers",
+    "candidate": true,
+    "sector": "Management Consulting",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.grantthornton.in/careers/",
+    "company": "Grant Thornton Bharat",
+    "companyDomain": "grantthornton.in",
+    "reference": "https://www.grantthornton.in/careers/",
+    "candidate": true,
+    "sector": "Big 4 & Accounting",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.rsm.global/careers",
+    "company": "RSM",
+    "companyDomain": "rsm.global",
+    "reference": "https://www.rsm.global/careers",
+    "candidate": true,
+    "sector": "Big 4 & Accounting",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.forvismazars.com/group/en/careers",
+    "company": "Forvis Mazars",
+    "companyDomain": "forvismazars.com",
+    "reference": "https://www.forvismazars.com/group/en/careers",
+    "candidate": true,
+    "sector": "Big 4 & Accounting",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.crowe.com/careers",
+    "company": "Crowe",
+    "companyDomain": "crowe.com",
+    "reference": "https://www.crowe.com/careers",
+    "candidate": true,
+    "sector": "Big 4 & Accounting",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.bakertilly.com/careers",
+    "company": "Baker Tilly",
+    "companyDomain": "bakertilly.com",
+    "reference": "https://www.bakertilly.com/careers",
+    "candidate": true,
+    "sector": "Big 4 & Accounting",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.kkr.com/careers",
+    "company": "KKR",
+    "companyDomain": "kkr.com",
+    "reference": "https://www.kkr.com/careers",
+    "candidate": true,
+    "sector": "Investment Banking & PE",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.carlyle.com/careers",
+    "company": "Carlyle",
+    "companyDomain": "carlyle.com",
+    "reference": "https://www.carlyle.com/careers",
+    "candidate": true,
+    "sector": "Investment Banking & PE",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.tpg.com/careers",
+    "company": "TPG",
+    "companyDomain": "tpg.com",
+    "reference": "https://www.tpg.com/careers",
+    "candidate": true,
+    "sector": "Investment Banking & PE",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.baincapital.com/careers",
+    "company": "Bain Capital",
+    "companyDomain": "baincapital.com",
+    "reference": "https://www.baincapital.com/careers",
+    "candidate": true,
+    "sector": "Investment Banking & PE",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://warburgpincus.com/careers/",
+    "company": "Warburg Pincus",
+    "companyDomain": "warburgpincus.com",
+    "reference": "https://warburgpincus.com/careers/",
+    "candidate": true,
+    "sector": "Investment Banking & PE",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.generalatlantic.com/careers/",
+    "company": "General Atlantic",
+    "companyDomain": "generalatlantic.com",
+    "reference": "https://www.generalatlantic.com/careers/",
+    "candidate": true,
+    "sector": "Investment Banking & PE",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://eqtgroup.com/careers",
+    "company": "EQT",
+    "companyDomain": "eqtgroup.com",
+    "reference": "https://eqtgroup.com/careers",
+    "candidate": true,
+    "sector": "Investment Banking & PE",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.temasek.com.sg/en/careers",
+    "company": "Temasek",
+    "companyDomain": "temasek.com.sg",
+    "reference": "https://www.temasek.com.sg/en/careers",
+    "candidate": true,
+    "sector": "Investment Banking & PE",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.gic.com.sg/careers/",
+    "company": "GIC",
+    "companyDomain": "gic.com.sg",
+    "reference": "https://www.gic.com.sg/careers/",
+    "candidate": true,
+    "sector": "Investment Banking & PE",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.brookfield.com/careers",
+    "company": "Brookfield",
+    "companyDomain": "brookfield.com",
+    "reference": "https://www.brookfield.com/careers",
+    "candidate": true,
+    "sector": "Investment Banking & PE",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.icicicareers.com/",
+    "company": "ICICI Bank",
+    "companyDomain": "icicibank.com",
+    "reference": "https://www.icicicareers.com/",
+    "candidate": true,
+    "sector": "Fintech & Banking",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.axisbank.com/careers",
+    "company": "Axis Bank",
+    "companyDomain": "axisbank.com",
+    "reference": "https://www.axisbank.com/careers",
+    "candidate": true,
+    "sector": "Fintech & Banking",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.kotak.com/en/about-us/careers.html",
+    "company": "Kotak Mahindra Bank",
+    "companyDomain": "kotak.com",
+    "reference": "https://www.kotak.com/en/about-us/careers.html",
+    "candidate": true,
+    "sector": "Fintech & Banking",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.idfcfirstbank.com/careers",
+    "company": "IDFC FIRST Bank",
+    "companyDomain": "idfcfirstbank.com",
+    "reference": "https://www.idfcfirstbank.com/careers",
+    "candidate": true,
+    "sector": "Fintech & Banking",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.indusind.com/in/en/careers.html",
+    "company": "IndusInd Bank",
+    "companyDomain": "indusind.com",
+    "reference": "https://www.indusind.com/in/en/careers.html",
+    "candidate": true,
+    "sector": "Fintech & Banking",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://www.federalbank.co.in/career",
+    "company": "Federal Bank",
+    "companyDomain": "federalbank.co.in",
+    "reference": "https://www.federalbank.co.in/career",
+    "candidate": true,
+    "sector": "Fintech & Banking",
+    "locations": [
+      "Global"
+    ]
+  },
+  {
+    "source": "Career Pages",
+    "slug": "https://sbi.co.in/web/careers",
+    "company": "SBI",
+    "companyDomain": "sbi.co.in",
+    "reference": "https://sbi.co.in/web/careers",
+    "candidate": true,
+    "sector": "Fintech & Banking",
+    "locations": [
+      "Global"
+    ]
   }
 ]

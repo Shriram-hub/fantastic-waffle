@@ -1,3 +1,4 @@
+import {EXTRA_ATS,fetchExtraATS,fetchHNHiring} from './zero-key.mjs';
 import { fetchCoreJobs } from "./core.mjs";
 import {fetchIndiaATS,INDIA_ATS} from './india-ats.mjs';
 import {fetchEnterpriseJobs} from './enterprise-direct.mjs';
@@ -23,7 +24,7 @@ export const JOB_SOURCES = [
   "LinkedIn Guest",
   "India & finance boards",
   'SmartRecruiters','Workable','Recruitee','Lever EU','Workday','The Muse','Career Pages','VC Portfolios',
-  ...INDIA_ATS,'Amazon Jobs',
+  ...INDIA_ATS,'Amazon Jobs',...EXTRA_ATS,'Hacker News',
 ];
 export async function fetchJobs(
   source,
@@ -32,6 +33,8 @@ export async function fetchJobs(
   config = {},
   query = "",
 ) {
+  if(EXTRA_ATS.includes(source))return fetchExtraATS(source,board,fetcher);
+  if(source==='Hacker News')return fetchHNHiring(fetcher);
   if(INDIA_ATS.includes(source))return fetchIndiaATS(source,board,config,fetcher);
   if(source==='Amazon Jobs')return fetchEnterpriseJobs(source,query || board,config,fetcher);
   if(['SmartRecruiters','Workable','Recruitee','Workday'].includes(source))return fetchPublicATS(source,board,config,fetcher,config.SEARCH_QUERY || '');

@@ -4,6 +4,19 @@ import assert from "node:assert/strict";
 import { createApp } from "../server/index.mjs";
 import { handlers, runOne } from "../server/worker.mjs";
 import { tokenCipher } from "../server/providers/mail/oauth.mjs";
+test('unified mail API previews exact merge values, validates approval and exposes queue progress behind owner authentication',async t=>{
+  const encryptionKey=Buffer.alloc(32,9).toString('base64'),w=await workspace(t,{WORKSPACE_PASSWORD:'owner',TOKEN_ENCRYPTION_KEY:encryptionKey,ENABLE_LIVE_SEND:'true'}),authorization={Authorization:'Basic '+Buffer.from('orbit:owner').toString('base64')};
+  const state=initialState(false);Object.assign(state.profile,profile);state.contacts=[{id:'riley',name:'Riley Chen',email:'riley@company.com',company:'Company',title:'Recruiter',jobTitle:'Software Engineer',emailStatus:'verified',isDemo:false,suppressed:false}];await w.store.replace(state);
+  await w.store.db.prepare('INSERT INTO mail_accounts(id,provider,email,secret,metadata) VALUES(?,?,?,?,?)').run('mail','google',profile.email,tokenCipher({TOKEN_ENCRYPTION_KEY:encryptionKey}).seal({access_token:'test',expires_at:Date.now()+3600000}),'{}');
+  const draft={accountId:'mail',contactIds:['riley'],subject:'{{role}} at {{company}}',body:'Hello {{firstName}}, I use {{myTopSkill}}.',deliveryMode:'test'};
+  assert.equal((await w.call('/api/outreach/preview',draft)).status,401);assert.equal((await w.call('/api/companies')).status,401);
+  const review=await w.call('/api/outreach/preview',draft,'POST',authorization);assert.equal(review.status,200);assert.equal(review.json.messages[0].subject,'Software Engineer at Company');assert.match(review.json.messages[0].body,/Hello Riley/);
+  const launch={campaignId:review.json.campaignId,previewId:review.json.previewId,confirmCount:1};assert.equal((await w.call('/api/outreach/launch',launch,'POST',authorization)).status,400);
+  const [sent,repeated]=await Promise.all([w.call('/api/outreach/launch',{...launch,approved:true},'POST',authorization),w.call('/api/outreach/launch',{...launch,approved:true},'POST',authorization)]);assert.equal(sent.status,202);assert.equal(repeated.status,202);assert.equal(sent.json.progress.queued,1);assert.ok(sent.json.existing || repeated.json.existing);
+  const again=await w.call('/api/outreach/launch',{...launch,approved:true},'POST',authorization);assert.equal(again.json.existing,true);
+  const progress=await w.call(`/api/outreach/batches/${review.json.campaignId}`,undefined,'GET',authorization);assert.equal(progress.json.total,1);assert.equal(progress.json.sent,0);assert.equal(progress.json.queued,1);
+  const paused=await w.call(`/api/outreach/batches/${review.json.campaignId}/pause`,{confirmed:true},'POST',authorization);assert.equal(paused.json.progress.status,'Paused');assert.equal(paused.json.progress.cancelled,1);
+});
 
 const profile = {
   name: "Casey Quinn",

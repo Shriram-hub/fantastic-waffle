@@ -1,5 +1,8 @@
 import React from 'react';
 const paths={
+  mic:'M9 5a3 3 0 0 1 6 0v6a3 3 0 0 1-6 0V5M5 10v1a7 7 0 0 0 14 0v-1M12 18v4M8 22h8',
+  speaker:'M11 4 5 9H2v6h3l6 5V4M15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14',
+  companies:'M3 22V3h12v19M15 9h6v13M7 7h4M7 11h4M7 15h4M8 22v-4h2v4M18 13h1M18 17h1',
   documents:'M14 2H6v20h14V8l-6-6M14 2v6h6M9 12h8M9 16h6',
   sun:'M12 3v1M12 20v1M3 12h1M20 12h1M5.6 5.6l.7.7M17.7 17.7l.7.7M5.6 18.4l.7-.7M17.7 6.3l.7-.7M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0',
   moon:'M20.8 13A9 9 0 0 1 11 3.2 9 9 0 1 0 20.8 13',
