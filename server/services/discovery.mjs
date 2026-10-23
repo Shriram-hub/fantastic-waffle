@@ -124,11 +124,11 @@ async function fetchSource(descriptor,store,config,fetcher,plan,queue) {
       jobs=found.jobs.map(j=>({...j,source,board}));
       if(!jobs.length && !found.boards.length)fail('Public page has no readable JobPosting data or supported ATS links. Other sources continue.',422);
     } else if(source==='ATS Directory Search') {
-      let discovered=[],lastError;
+      let discovered=[],lastError;const errors=[];
       const providers=[config.SERPER_API_KEY && 'Serper',config.TAVILY_API_KEY && 'Tavily',config.SERPAPI_API_KEY && 'SerpApi'].filter(Boolean);
       if(!providers.length)fail('Add Serper or Tavily to expand the employer directory from web search. Public feeds continue.',503);
-      for(const provider of providers)try{const credential=config[({Serper:'SERPER_API_KEY',Tavily:'TAVILY_API_KEY',SerpApi:'SERPAPI_API_KEY'})[provider]];discovered=await providerCall(store,`ats-search:${hash(credential)}:${key}:${Math.floor(Date.now()/86400000)}`,provider,provider==='SerpApi'?Math.min(30,Number(config.JOB_SEARCH_API_DAILY_LIMIT)||6):Math.min(500,Number(config.CONTACT_SEARCH_DAILY_LIMIT)||100),()=>discoverATSBoards(board,descriptor.location,{...config,ATS_DISCOVERY_PROVIDER:provider},fetcher));lastError=null;break;}catch(error){lastError=error;}
-      if(lastError)throw lastError;
+      for(const provider of providers)try{const credential=config[({Serper:'SERPER_API_KEY',Tavily:'TAVILY_API_KEY',SerpApi:'SERPAPI_API_KEY'})[provider]];discovered=await providerCall(store,`ats-search:${hash(credential)}:${key}:${Math.floor(Date.now()/86400000)}`,provider,provider==='SerpApi'?Math.min(30,Number(config.JOB_SEARCH_API_DAILY_LIMIT)||6):Math.min(500,Number(config.CONTACT_SEARCH_DAILY_LIMIT)||100),()=>discoverATSBoards(board,descriptor.location,{...config,ATS_DISCOVERY_PROVIDER:provider},fetcher));lastError=null;break;}catch(error){lastError=error;errors.push(`${provider}: ${error.status?error.message:'Search unavailable.'}`);}
+      if(lastError)fail(errors.join(' · ').slice(0,1200),502);
       await rememberBoards(discovered.map(b=>({url:boardURL(b)})),store,queue);jobs=[];
     } else if(source==='India & finance boards') {
       if(!config.SERPAPI_API_KEY)fail('Configure SERPAPI_API_KEY for indexed regional-board discovery. Free feeds continue.',503);

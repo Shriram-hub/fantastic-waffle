@@ -1,4 +1,6 @@
 import {verifyProvider} from './services/provider-verification.mjs';
+import {serperSearch} from './providers/contacts/serper-xray.mjs';
+import {providerCall} from './services/provider-budget.mjs';
 import {bootstrapJobs} from './services/job-feed.mjs';
 import {effectiveProviderConfig,providerConfigView,withProviderConfig,publicProviderState} from './services/provider-config.mjs';
 import {catalogJob,retainCatalogJob,catalogStats} from './services/job-catalog.mjs';
@@ -166,6 +168,11 @@ export function createApp({
         const result=await bootstrap(),contacts=await contactDiscoveryStatus(store,config);
         let documentCheck;
         let contactFallbackCheck;
+        let searchCheck;
+        if(publicUrl.searchParams.get('checkSearch')==='true') {
+          try{const found=await providerCall(store,`serper-source-diagnostic:${hash(config.SERPER_API_KEY || '')}:${new Date().toISOString().slice(0,10)}`,'Serper',100,()=>serperSearch('site:jobs.lever.co "Financial Analyst" "Mumbai"',config.SERPER_API_KEY,{fetcher,limit:20,timeout:20000}));searchCheck={ok:true,results:found.results.length,creditsUsed:found.creditsUsed};}
+          catch(error){searchCheck={ok:false,message:error.status?error.message:'Search could not complete.'};}
+        }
         if(publicUrl.searchParams.get('checkContactFallback')==='true') {
           const selected=publicUrl.searchParams.get('jobId'),job=selected ? store.state.jobs.find(j=>j.id===selected && !j.isDemo) : store.state.jobs.find(j=>!j.isDemo && /Deloitte|Goldman Sachs|State Street|BDO India/i.test(j.company));
           const company=job ? await resolveCompany(job,fetcher,store) : null;
@@ -178,7 +185,7 @@ export function createApp({
           documentCheck=document ? {ok:true,documentId:document.id,resumeBytes:document.resume.size,coverLetterBytes:document.coverLetter.size,coverLetterWords:document.wordCount,storage:document.resume.storage?.kind || 'memory'} : {ok:false,reason:'No active role or the source profile changed.'};
         }
         return json(res,200,{ok:true,indexed:result.search.indexed,matches:result.search.matches,storage:store.kind || 'sqlite',googleConfigured:result.setup.googleConfigured,
-          contactDiscovery:{hunterConfigured:contacts.hunterConfigured,dailyLimit:contacts.dailyLimit,usedToday:contacts.usedToday},career:{available:true,openTasks:result.data.careerSummary.stats.openTasks},features:{regionalBoards:true,documents:true,sequenceSteps:3,copilotVersion:"0.9.0",phoneAlerts:true,automaticInterviewPrep:true,veloceUI:true,kanban:true,commandPalette:true,documentEditor:true,linkedInDrafts:true,companyPitch:true,mailboxSelfTests:true,extensionAutoPair:true,fieldPersonas:true,hiringPostSignals:true,emailPatternLearning:true,careerPageImport:true,firstMover:true,paginatedJobFeed:true,indexCapacity:result.search.indexCapacity,curatedEmployers:result.search.curatedEmployers},documentCheck,contactFallbackCheck,providerVerification:publicUrl.searchParams.get('checkProvider')==='serper'?await verifyProvider('serper',store,config,fetcher,{confirmMetered:true}):undefined,mail:{connectedAccounts:result.accounts.length,liveSending:result.setup.liveSendEnabled},providerChecks:publicUrl.searchParams.get('checkContacts')==='true' ? await checkContactProviders(store,config,fetcher) : undefined});
+          contactDiscovery:{hunterConfigured:contacts.hunterConfigured,dailyLimit:contacts.dailyLimit,usedToday:contacts.usedToday},career:{available:true,openTasks:result.data.careerSummary.stats.openTasks},features:{regionalBoards:true,documents:true,sequenceSteps:3,copilotVersion:"0.9.0",phoneAlerts:true,automaticInterviewPrep:true,veloceUI:true,kanban:true,commandPalette:true,documentEditor:true,linkedInDrafts:true,companyPitch:true,mailboxSelfTests:true,extensionAutoPair:true,fieldPersonas:true,hiringPostSignals:true,emailPatternLearning:true,careerPageImport:true,firstMover:true,paginatedJobFeed:true,indexCapacity:result.search.indexCapacity,curatedEmployers:result.search.curatedEmployers},documentCheck,contactFallbackCheck,searchCheck,providerVerification:publicUrl.searchParams.get('checkProvider')==='serper'?await verifyProvider('serper',store,config,fetcher,{confirmMetered:true}):undefined,mail:{connectedAccounts:result.accounts.length,liveSending:result.setup.liveSendEnabled},providerChecks:publicUrl.searchParams.get('checkContacts')==='true' ? await checkContactProviders(store,config,fetcher) : undefined});
       }
       if(await auth.handle(req,res,publicUrl,{json,bodyJSON}))return;
       if (await upgrade.publicRoute(req, res, publicUrl, {

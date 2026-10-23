@@ -16,7 +16,7 @@ export async function providerCall(store,...args) {
   const pending=reserved.then(async reservation=>{
     if(reservation.cached)return reservation.value;
     try{const value=await args[3]();await store.db.prepare("UPDATE provider_requests SET status='completed',body=? WHERE id=?").run(JSON.stringify(value),reservation.requestId);return value;}
-    catch(error){await store.db.prepare("UPDATE provider_requests SET status='held' WHERE id=?").run(reservation.requestId);throw error;}
+    catch(error){await store.db.prepare("UPDATE provider_requests SET status='held',body=? WHERE id=?").run(JSON.stringify({error:error.status?String(error.message).slice(0,500):'The provider request could not complete.'}),reservation.requestId);throw error;}
   });
   running.set(requestKey,pending);
   try{return await pending;}finally{running.delete(requestKey);if(reservations.get(store)===reserved)reservations.delete(store);}
@@ -25,7 +25,8 @@ async function reserveCall(store, key, provider, limit) {
   const requestId = hash([provider,key]), old = await store.db.prepare("SELECT * FROM provider_requests WHERE id=?").get(requestId);
   if (old) {
     if (old.status === "completed") return {cached:true,value:JSON.parse(old.body)};
-    fail(`${provider} lookup is held after an interrupted or failed request. Inspect provider usage before retrying.`, 409);
+    let reason='';try{reason=JSON.parse(old.body || '{}').error || '';}catch{}
+    fail(`${provider} lookup is held after an interrupted or failed request. Inspect provider usage before retrying.${reason?` Last error: ${reason}`:''}`, 409);
   }
   await store.db.exec("BEGIN IMMEDIATE");
   try {

@@ -28,7 +28,7 @@ export async function discoverATSBoards(role, location, config, fetcher = fetch)
   const provider=config.ATS_DISCOVERY_PROVIDER || (config.SERPER_API_KEY?'Serper':config.TAVILY_API_KEY?'Tavily':'SerpApi');
   if(provider==='Serper' || provider==='Tavily') {
     const search=provider==='Serper'?serperSearch:tavilySearch,key=config[provider==='Serper'?'SERPER_API_KEY':'TAVILY_API_KEY'];
-    const data=await search(query,key,{fetcher,limit:20});return [...new Map(data.results.map(r=>boardFromURL(r.link)).filter(Boolean).map(b=>[`${b.source}:${b.slug}`,b])).values()];
+    const data=await search(query,key,{fetcher,limit:20,timeout:20000});return [...new Map(data.results.map(r=>boardFromURL(r.link)).filter(Boolean).map(b=>[`${b.source}:${b.slug}`,b])).values()];
   }
   if (!config.SERPAPI_API_KEY) return [];
   const url = new URL("https://serpapi.com/search.json");
