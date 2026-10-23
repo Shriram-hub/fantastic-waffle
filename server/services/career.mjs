@@ -7,7 +7,7 @@ import {withDeadline,boundedFetcher} from '../providers/deadline.mjs';
 export {INTERVIEW_TRACKS,QUESTION_BANK,inferTrack,interviewQuestions};
 
 export function candidateEvidence(state) {
-  const master=candidateProfile(state.profile),stories=(state.career?.stories || []).filter(s=>!s.archived);
+  const master=candidateProfile(state.profile),stories=(state.career?.stories || []).filter(s=>!s.archived && !s.practiceOnly);
   return [...master.workExperience.flatMap(w=>[w.description,...w.bullets]),...master.projects.map(p=>p.description),...stories.flatMap(s=>[s.situation,s.task,s.action,s.result]),master.summary.professionalSummary,...String(state.resume?.text || '').split('\n')].map(s=>String(s || '').trim()).filter(Boolean).slice(0,100);
 }
 const includesConcept=(value,keyword)=>new RegExp(`(?:^|[^a-z0-9])${keyword.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}(?:$|[^a-z0-9])`,'i').test(value);
@@ -82,7 +82,7 @@ export async function saveCareerTask(data,store,taskId) {
   if(old)Object.assign(old,task);else career.tasks.unshift(task);
   career.updatedAt=now();await store.save();return task;
 }
-const storySchema=z.object({title:z.string().trim().min(1).max(200),situation:z.string().max(4000).default(''),task:z.string().max(4000).default(''),action:z.string().max(4000).default(''),result:z.string().max(4000).default(''),archived:z.boolean().default(false)}).strict();
+const storySchema=z.object({title:z.string().trim().min(1).max(200),situation:z.string().max(4000).default(''),task:z.string().max(4000).default(''),action:z.string().max(4000).default(''),result:z.string().max(4000).default(''),practiceOnly:z.boolean().default(false),archived:z.boolean().default(false)}).strict();
 export async function saveCareerStory(data,store,storyId) {
   const career=mutable(store),old=storyId ? career.stories.find(s=>s.id===storyId) : null;if(storyId && !old)fail('Story not found.',404);
   const {id:ignored,createdAt,updatedAt,...base}=old || {},{expectedUpdatedAt,...patch}=data;

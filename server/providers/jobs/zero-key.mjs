@@ -5,12 +5,13 @@ export const EXTRA_ATS=['Rippling','Pinpoint','BreezyHR','BambooHR','Personio'];
 const iso=v=>v && Number.isFinite(Date.parse(v))?new Date(v).toISOString():null;
 const label=v=>typeof v==='string'?v:v?.name || v?.label || v?.city || '';
 export function extraBoardURL(source,slug) {
+  if(source==='Personio' && /^https:\/\//i.test(slug || ''))try{const u=new URL(slug);if(u.username || u.password || u.port || !/^[a-z0-9_-]+\.jobs\.personio\.(de|com)$/i.test(u.hostname))return '';return u.origin;}catch{return '';}
   if(!/^[a-z0-9][a-z0-9_-]{0,79}$/i.test(slug || ''))return '';
   return source==='Rippling'?`https://ats.rippling.com/${slug}/jobs`:({Pinpoint:`https://${slug}.pinpointhq.com`,BreezyHR:`https://${slug}.breezy.hr`,BambooHR:`https://${slug}.bamboohr.com/careers`,Personio:`https://${slug}.jobs.personio.de`})[source] || '';
 }
 export function extraBoardFromURL(url) {
-  const host=new URL(url).hostname,providers={'pinpointhq.com':'Pinpoint','breezy.hr':'BreezyHR','bamboohr.com':'BambooHR','jobs.personio.de':'Personio'};
-  for(const [suffix,source] of Object.entries(providers)){const m=host.match(new RegExp(`^([a-z0-9_-]+)\\.${suffix.replaceAll('.','\\.')}$`,'i'));if(m && extraBoardURL(source,m[1]))return {source,slug:m[1]};}
+  const host=new URL(url).hostname,providers={'pinpointhq.com':'Pinpoint','breezy.hr':'BreezyHR','bamboohr.com':'BambooHR','jobs.personio.de':'Personio','jobs.personio.com':'Personio'};
+  for(const [suffix,source] of Object.entries(providers)){const m=host.match(new RegExp(`^([a-z0-9_-]+)\\.${suffix.replaceAll('.','\\.')}$`,'i'));if(m && extraBoardURL(source,m[1]))return {source,slug:suffix==='jobs.personio.com'?`https://${host}`:m[1]};}
   if(host==='ats.rippling.com'){const slug=new URL(url).pathname.split('/').filter(Boolean)[0];if(extraBoardURL('Rippling',slug))return {source:'Rippling',slug};}
   return null;
 }

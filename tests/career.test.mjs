@@ -7,6 +7,10 @@ import {handlers,runOne} from '../server/worker.mjs';
 import {careerStatus,saveCareerTask,saveCareerStory,plannerCalendar,prepFingerprint} from '../server/services/career.mjs';
 import {taskQueue} from '../server/queue.mjs';
 import {QUESTION_BANK,INTERVIEW_TRACKS,gradeInterviewAnswer,evaluateInterviewAnswer} from '../server/services/career.mjs';
+test('saved practice answers remain available in Story Bank without becoming professional resume evidence',async t=>{
+  const {documentEvidence,documentFingerprint}=await import('../server/services/job-documents.mjs'),{candidateEvidence}=await import('../server/services/career.mjs'),store=await workspace(t),job=store.state.jobs[0],before=documentFingerprint(store.state,job);
+  const story=await saveCareerStory({title:'Practice: DCF',action:'I would forecast free cash flow and test WACC assumptions.',practiceOnly:true},store);assert.equal(story.practiceOnly,true);assert.ok(store.state.career.stories.some(s=>s.id===story.id));assert.ok(!documentEvidence(store.state).some(e=>e.text.includes('test WACC')));assert.ok(!candidateEvidence(store.state).some(e=>e.includes('test WACC')));assert.equal(documentFingerprint(store.state,job),before);
+});
 
 test('six interview banks cover finance, accounting, consulting and software with deterministic source-grounded feedback',async t=>{
   const store=await workspace(t);store.state.profile.skills=['Excel','WACC'];store.state.career={weeklyGoal:10,tasks:[],prep:[],stories:[{title:'Model review',action:'I reviewed WACC assumptions in an Excel model.',result:'The team used the documented assumptions.'}]};

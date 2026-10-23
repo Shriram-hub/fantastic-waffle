@@ -10,7 +10,7 @@ This upgrade uses the existing Render web service, supervised worker and private
 - Type an answer, or explicitly start the browser microphone. `SpeechRecognition` / `webkitSpeechRecognition` availability depends on the browser. Its recognition service may process audio remotely; offline voice is not guaranteed. Text practice always remains available. Question read-aloud uses browser speech synthesis.
 - The two-minute timer uses an absolute deadline. Ending the timer stops voice input without automatically submitting an answer. Closing the session aborts recognition, cancels speech synthesis and cancels the pending evaluation request.
 - Optional Gemini coaching requires the in-session consent checkbox. It uses the existing encrypted key and structured output adapter, with a 12-second deadline and complete local fallback. Source-selected excerpts must match saved professional evidence exactly; no invented achievements or numeric outcomes are added.
-- A reference answer is editable and is saved to Story Bank only when the user clicks Save. Company briefs cite public sources and distinguish saved hiring signals from current news.
+- A reference answer is editable and is saved to Story Bank only when the user clicks Save. These entries are explicitly marked as practice notes and excluded from resume / cover-letter evidence and the professional-evidence input to coaching. Company briefs cite public sources and distinguish saved hiring signals from current news.
 
 ## One-screen mail studio
 

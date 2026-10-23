@@ -272,6 +272,7 @@ test('new ATS apply links expand the persistent board registry only after a succ
 });
 import {parseExtraATS,parsePersonioXML,parseHNThread,fetchHNHiring} from '../server/providers/jobs/zero-key.mjs';
 test('five zero-key ATS parsers normalize public schemas, preserve missing dates and reject off-board links',async()=>{
+  assert.deepEqual(boardFromURL('https://company.jobs.personio.com/job/123'),{source:'Personio',slug:'https://company.jobs.personio.com'});
   const fixtures=[['Rippling',[{uuid:'1',name:'Engineer',workLocation:{label:'Remote'},url:'https://ats.rippling.com/company/jobs/1'}]],['Pinpoint',{data:[{id:'2',title:'Analyst',location:{name:'Mumbai'},description:'<p>Build a forecast.</p>',url:'https://company.pinpointhq.com/en/postings/2',department:{name:'Finance'}}]}],['BreezyHR',[{id:'3',name:'Accountant',location:{name:'Delhi'},url:'https://company.breezy.hr/p/3'}]],['BambooHR',{result:[{id:'4',jobOpeningName:'Consultant',location:{city:'Bengaluru'}}]}]];
   for(const [source,data] of fixtures){const jobs=parseExtraATS(source,'company',data);assert.equal(jobs.length,1,source);assert.equal(jobs[0].source,source);assert.equal(jobs[0].isDemo,false);assert.equal(jobs[0].publishedAt,null);assert.ok(jobs[0].url.startsWith('https://'));}
   assert.equal(parseExtraATS('Rippling','company',[{uuid:'x',name:'Engineer',url:'https://evil.test/1'}]).length,0);

@@ -13,13 +13,13 @@ const excerpt=(value,limit)=>{
   const prefix=source.slice(0,limit),boundary=Math.max(prefix.lastIndexOf('. '),prefix.lastIndexOf('; '));
   return boundary>limit/2 ? prefix.slice(0,boundary+1) : `${prefix.slice(0,prefix.lastIndexOf(' '))}…`;
 };
-export const documentFingerprint=(state,job,useAI=false)=>hash(['job-documents-v2',job.id,job.title,job.company,job.descriptionHash || job.description,candidateProfile(state.profile),state.resume?.text,(state.career?.stories || []).filter(s=>!s.archived),useAI]);
+export const documentFingerprint=(state,job,useAI=false)=>hash(['job-documents-v2',job.id,job.title,job.company,job.descriptionHash || job.description,candidateProfile(state.profile),state.resume?.text,(state.career?.stories || []).filter(s=>!s.archived && !s.practiceOnly),useAI]);
 export function documentEvidence(state) {
   const m=candidateProfile(state.profile),items=[];
   const add=(kind,label,value)=>{if(value?.trim())items.push({id:`e${items.length}`,kind,label,text:text(value.trim(),1800)});};
   for(const role of m.workExperience)for(const value of role.bullets.length ? role.bullets : role.description.split(/\n+/))add('experience',[role.title,role.company].filter(Boolean).join(' | '),value);
   for(const project of m.projects)add('project',project.name,project.description);
-  for(const story of (state.career?.stories || []).filter(s=>!s.archived))add('story',story.title,[story.action,story.result].filter(Boolean).join(' '));
+  for(const story of (state.career?.stories || []).filter(s=>!s.archived && !s.practiceOnly))add('story',story.title,[story.action,story.result].filter(Boolean).join(' '));
   for(const line of String(state.resume?.text || '').split(/\n+/))if(/^[-•*]\s*\S/.test(line))add('resume','Résumé excerpt',line.replace(/^[-•*]\s*/,''));
   return items.filter((e,i,all)=>all.findIndex(other=>other.text.toLowerCase().replace(/\s+/g,' ')===e.text.toLowerCase().replace(/\s+/g,' '))===i).slice(0,180);
 }
