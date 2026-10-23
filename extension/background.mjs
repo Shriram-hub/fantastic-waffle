@@ -26,7 +26,7 @@ async function request(path,body) {
   const {base,token}=await chrome.storage.session.get(['base','token']);
   if(!base || !token)throw Error('Pair the extension first.');
   const response=await fetch(`${base}/api/extension/${path}`,{method:body ? 'POST' : 'GET',headers:{Authorization:`Bearer ${token}`,...(body ? {'Content-Type':'application/json'} : {})},...(body ? {body:JSON.stringify(body)} : {})});
-  const data=await response.json();if(!response.ok)throw Error(data.error || 'Veloce AI request failed.');return data;
+  const data=await response.json();if(!response.ok)throw Error(data.error || 'Veloce request failed.');return data;
 }
 async function permittedFrames(tabId) {
   const frames=await chrome.webNavigation.getAllFrames({tabId}),allowed=[];
@@ -57,7 +57,7 @@ async function runFill(task,tabId,options={}) {
   return {message:`Filled ${report.filled} fields${report.added ? ` and added ${report.added} sections` : ''}. Review the open application. ${report.missing.length ? `${report.missing.length} items still need attention.` : ''}`};
 }
 async function next(taskIds=null) {
-  const {task}=await request('next',taskIds ? {taskIds} : undefined);if(!task)return {message:'No queued applications. Select jobs in Veloce AI first.'};
+  const {task}=await request('next',taskIds ? {taskIds} : undefined);if(!task)return {message:'No queued applications. Select jobs in Veloce first.'};
   const tab=await chrome.tabs.create({url:task.url,active:!taskIds});await chrome.storage.session.set({currentTask:{task,tabId:tab.id}});
   await new Promise((resolve,reject)=>{
     const timer=setTimeout(()=>{chrome.tabs.onUpdated.removeListener(listener);reject(Error('Page is still loading. Use Fill this page once it is ready.'));},25000);
@@ -88,7 +88,7 @@ async function syncLinkedIn(tabId,confirmOwnProfile) {
 }
 async function suggestAnswers() {
   const {currentTask,lastResult}=await chrome.storage.session.get(['currentTask','lastResult']);
-  if(!currentTask?.task.id)throw Error('Queue this application in Veloce AI before requesting Gemini suggestions.');
+  if(!currentTask?.task.id)throw Error('Queue this application in Veloce before requesting Gemini suggestions.');
   const active=await chrome.tabs.get(currentTask.tabId);if(!sameApplicationLocation(currentTask.task.url,active.url))throw Error('Return to the queued application before suggesting answers.');
   const questions=lastResult?.questions || [];if(!questions.length)return {message:'No unanswered supported text questions were found. Fill the form first.'};
   const result=await request('questions',{taskId:currentTask.task.id,questions}),fresh=await request('profile'),answers=buildAnswers(fresh.profile,fresh.qa);
@@ -101,7 +101,7 @@ async function suggestAnswers() {
 async function advanceBatch() {
   const {batch,currentTask}=await chrome.storage.session.get(['batch','currentTask']);
   if(!batch || batch.paused)return {message:'Batch paused.'};
-  if(currentTask?.task.id)return {message:'Review and submit the current application, or skip it from the copilot.'};
+  if(currentTask?.task.id)return {message:'Review and submit the current application, or skip it from the application assistant.'};
   if(!batch.ids.length)return {message:`Batch finished: ${batch.completed} confirmed applications.`,finished:true};
   try {return await next(batch.ids);}catch(error){batch.paused=true;await chrome.storage.session.set({batch});throw error;}
 }
@@ -123,7 +123,7 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
     }
     if(message.type==='workspace-pair') {
       const installed=await installationConfig(),expected=base || installed.serverUrl;
-      if(!expected || !sender.tab?.id || new URL(sender.url).origin!==expected || !/^[A-Za-z0-9_-]{43}$/.test(message.token || ''))throw Error('Pair from the configured Veloce AI workspace.');
+      if(!expected || !sender.tab?.id || new URL(sender.url).origin!==expected || !/^[A-Za-z0-9_-]{43}$/.test(message.token || ''))throw Error('Pair from the configured Veloce workspace.');
       await chrome.storage.session.set({base:expected,token:message.token,expiresAt:message.expiresAt || Date.now()+86400000});return {message:'Extension paired for 24 hours. No URL or token copying needed.'};
     }
     if(message.type==='register-workspace') {
@@ -141,7 +141,7 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
       return request('import-browser-profiles',result.result);
     }
     if(message.type==='workspace-batch') {
-      if(!sender.url || !base || new URL(sender.url).origin!==base)throw Error('Start a batch from your paired Veloce AI workspace.');
+      if(!sender.url || !base || new URL(sender.url).origin!==base)throw Error('Start a batch from your paired Veloce workspace.');
       return startBatch(message.taskIds);
     }
     if(message.type==='copilot-context') {
@@ -165,7 +165,7 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
   if(!['submission-attempt','application-confirmation'].includes(message.type))return;
   (async()=>{
     const {currentTask}=await chrome.storage.session.get('currentTask');
-    if(!currentTask?.task.id || sender.tab?.id!==currentTask.tabId)throw Error('This tab has no active Veloce AI task.');
+    if(!currentTask?.task.id || sender.tab?.id!==currentTask.tabId)throw Error('This tab has no active Veloce task.');
     const source=new URL(sender.url),target=new URL(currentTask.task.url),tab=await chrome.tabs.get(currentTask.tabId);
     if(message.type==='submission-attempt' ? !sameApplicationLocation(currentTask.task.url,tab.url) : !sameApplicationHost(currentTask.task.url,tab.url))throw Error('Return to the queued application page.');
     const frames=await chrome.webNavigation.getAllFrames({tabId:currentTask.tabId});

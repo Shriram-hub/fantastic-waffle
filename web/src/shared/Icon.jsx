@@ -1,4 +1,4 @@
-import React,{useId} from 'react';
+import React from 'react';
 const paths={
   documents:'M14 2H6v20h14V8l-6-6M14 2v6h6M9 12h8M9 16h6',
   sun:'M12 3v1M12 20v1M3 12h1M20 12h1M5.6 5.6l.7.7M17.7 17.7l.7.7M5.6 18.4l.7-.7M17.7 6.3l.7-.7M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0',
@@ -19,6 +19,6 @@ const paths={
   refresh:'M20 7v5h-5M4 17v-5h5M6 6a8 8 0 0 1 13 1l1 5M18 18a8 8 0 0 1-13-1l-1-5',
   bookmark:'M6 3h12v18l-6-4-6 4V3',spark:'m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3',
 };
-export function Icon({name,size=20,...rest}) {return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...rest}><path d={paths[name] || paths.jobs}/></svg>;}
+export function Icon({name,size=20,...rest}) {return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...rest}><path d={paths[name] || paths.jobs}/></svg>;}
 
-export function BrandMark({size=36,...rest}) {const gradient=useId();return <svg width={size} height={size} viewBox="0 0 40 40" fill="none" aria-hidden="true" className="brand-mark" {...rest}><defs><linearGradient id={gradient} x1="2" y1="2" x2="38" y2="38" gradientUnits="userSpaceOnUse"><stop stopColor="#4F46E5"/><stop offset="1" stopColor="#06B6D4"/></linearGradient></defs><rect width="40" height="40" rx="12" fill={`url(#${gradient})`}/><path d="m9 12 8 17 14-19h-8l-6 9-3-7H9Z" fill="white"/><path d="m23 29 8-11v11h-8Z" fill="white" opacity=".5"/></svg>;}
+export function BrandMark({size=36,...rest}) {return <svg width={size} height={size} viewBox="0 0 40 40" fill="none" aria-hidden="true" className="brand-mark" {...rest}><rect width="40" height="40" rx="9" fill="#334155"/><path d="m9 12 8 17 14-19h-8l-6 9-3-7H9Z" fill="white"/><path d="m23 29 8-11v11h-8Z" fill="white" opacity=".5"/></svg>;}

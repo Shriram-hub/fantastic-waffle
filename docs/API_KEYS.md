@@ -1,3 +1,43 @@
+## Workspace keys and bulk discovery (October 2026)
+
+Open **Connections & Alerts → API keys** to save Hunter, Serper, Tavily, Prospeo,
+GetProspect, Minelead or Gemini keys. **Save key** encrypts the value on the server;
+**Verify key live** checks access and displays usage where the provider exposes it.
+Saved workspace keys override Render environment variables. Remove a workspace key
+to use its server fallback. Keys are never returned to the browser. Keep the existing
+`TOKEN_ENCRYPTION_KEY`; changing it invalidates encrypted credentials and mailbox tokens.
+
+| Provider | Optional Render fallback | Used for |
+| --- | --- | --- |
+| Hunter | `HUNTER_API_KEY` | Company search, learned address formats, independent verification |
+| Serper | `SERPER_API_KEY` | Google X-ray people search and ATS employer discovery |
+| Tavily | `TAVILY_API_KEY` | Alternative web and people search |
+| Prospeo | `PROSPEO_API_KEY` | People search and verified corporate email enrichment |
+| GetProspect | `GETPROSPECT_API_KEY` | Named email finder; runs in the background |
+| Minelead | `MINELEAD_API_KEY` | Company email search and reported address formats |
+| Gemini | `LLM_API_KEY` with `LLM_PROVIDER=gemini` | Resume extraction and drafting |
+
+Hunter, Prospeo, GetProspect and Tavily expose account/usage endpoints. Serper and
+Minelead live checks issue one search, with a usage notice next to the button;
+their balance must be checked in the provider dashboard. Live checks cache for one
+minute. Provider plans, credits and sign-up eligibility apply. Any one supported
+search provider plus an email finder is enough to start; all providers are optional.
+There is no guaranteed free batch of 500 verified addresses.
+
+**Contact Discovery → Bulk Contact Harvester** accepts matching companies, a sector
+preset or up to 50 company names/domains. It queues up to 100 matching companies and
+15 candidate contacts per company. Separate `CONTACT_SEARCH_DAILY_LIMIT` (100 by
+default, maximum 500) and `CONTACT_API_DAILY_LIMIT` (maximum 100) bound API attempts.
+These are local limits, not additional provider credits. The per-provider quota still
+applies. Public GitHub commits are opt-in, source-linked and unverified.
+
+Google Jobs aggregation still uses JSearch or SerpApi; Serper's organic search is
+used for people and ATS discovery, not presented as a Google Jobs API.
+
+See [catalogue architecture and directory attribution](SCALED_DISCOVERY.md).
+
+---
+
 # Keys and setup for the live Render + Supabase app
 
 Open **https://orbit-a1jt.onrender.com**. Hosting stays on Render + Supabase.
@@ -28,8 +68,8 @@ Then connect the mailbox there; saved credentials alone do not connect an accoun
 | Gmail sending and automatic application/reply updates | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | [Google Cloud credentials](https://console.cloud.google.com/apis/credentials) | Create a Web application OAuth client, use the exact callback below, then **Connect Google**. |
 | Gemini résumé extraction and personalized pitches | `LLM_PROVIDER`, `LLM_API_KEY`, `LLM_MODEL`, `LLM_BASE_URL` | [Google AI Studio](https://aistudio.google.com/api-keys) | Save your Gemini key as `LLM_API_KEY` and use the settings below. Enable AI drafting if wanted. |
 
-For the broadest requested features, start with one Google Jobs key, Apollo,
-Hunter, and a Google OAuth client. AI is optional: public job discovery,
+For Google Jobs and outreach, start with one Google Jobs key, a search provider,
+Hunter or another supported email finder, and a Google OAuth client. Apollo is optional. AI is optional: public job discovery,
 explained matching, résumé text parsing, factual template drafts and printable
 tailoring work without it.
 

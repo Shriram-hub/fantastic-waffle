@@ -34,12 +34,13 @@ export async function fetchPublicATS(source,board,config={},fetcher=fetch,query=
     const load=(url,options={})=>remoteJSON(url,options,boundedFetcher(fetcher,signal),6000);
     if(source==='Workable')return normalizePublicATS(source,board,await load(`https://apply.workable.com/api/v1/widget/accounts/${board}`));
     if(source==='Recruitee')return normalizePublicATS(source,board,await load(`https://${board}.recruitee.com/api/offers/`));
-    const page=Math.max(1,Math.min(20,Number(config.ATS_PAGE) || 1));
+    const page=Math.max(1,Math.min(500,Number(config.ATS_PAGE) || 1));
+    const paged=(data,size)=>{const jobs=normalizePublicATS(source,board,data),total=Number(data.totalFound ?? data.total);Object.defineProperty(jobs,'pagination',{value:{page,hasMore:page<500 && jobs.length===size && (!Number.isFinite(total) || page*size<total),nextPage:page+1}});return jobs;};
     if(source==='SmartRecruiters') {
       const u=new URL(`https://api.smartrecruiters.com/v1/companies/${board}/postings`);u.search=new URLSearchParams({limit:'100',offset:String((page-1)*100),...(query?{q:text(query,120)}:{})});
-      return normalizePublicATS(source,board,await load(u.href));
+      return paged(await load(u.href),100);
     }
     const tenant=workdayBoard(board);if(!tenant)fail('Use a public Workday tenant board URL.');
-    return normalizePublicATS(source,board,await load(`${tenant.origin}/wday/cxs/${tenant.tenant}/${tenant.board}/jobs`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({limit:20,offset:(page-1)*20,searchText:text(query,150),appliedFacets:{}})}));
+    return paged(await load(`${tenant.origin}/wday/cxs/${tenant.tenant}/${tenant.board}/jobs`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({limit:20,offset:(page-1)*20,searchText:text(query,150),appliedFacets:{}})}),20);
   },7000);
 }

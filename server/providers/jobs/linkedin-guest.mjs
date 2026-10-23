@@ -29,7 +29,7 @@ export function parseLinkedInCards(html,query='') {
 export async function fetchLinkedInGuest(query,config={},fetcher=fetch) {
   if(!String(query || '').trim()) return [];
   const freshness=config.LINKEDIN_FRESHNESS || config.freshness || '7d';
-  const results=await Promise.allSettled([0,25,50].map(start=>withDeadline(async signal=>{
+  const results=await Promise.allSettled([0,25,50,75,100].map(start=>withDeadline(async signal=>{
     const url=new URL('https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search');
     url.search=new URLSearchParams({keywords:text(query,150),location:text(config.SEARCH_LOCATION || config.SEARCH_COUNTRY || '',150),...(freshness==='any'?{}:{f_TPR:freshness==='24h'?'r86400':'r604800'}),start:String(start)});
     const response=await boundedFetcher(fetcher,signal)(url.href,{headers:{Accept:'text/html'},redirect:'error'});

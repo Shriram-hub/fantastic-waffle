@@ -15,11 +15,11 @@ export async function extensionEnhancements(req,res,url,{json,bodyJSON,valid,sto
     if(!job || !sameApplicationLocation(job.url,source))fail('This page is not the paired application.',409);
   } else job=store.state.jobs.find(j=>sameApplicationLocation(j.url,source));
   if(url.pathname==='/api/extension/documents') {
-    if(!data.taskId || !job)fail('Queue this role in Veloce AI before preparing application documents.',409);
+    if(!data.taskId || !job)fail('Queue this role in Veloce before preparing application documents.',409);
     const item=await ensureJobDocuments(job,store,queue,config,fetcher,false);if(!item)fail('Your profile changed while preparing documents. Retry.',409);
     json(res,200,{documentId:item.id,resume:await hydrateDocument(item,'resume',store,config),coverLetter:await hydrateDocument(item,'coverLetter',store,config)});return true;
   }
-  if(!job){json(res,200,{matched:false,message:'Queue this exact job link in Veloce AI to see a match, documents and hiring contacts.'});return true;}
+  if(!job){json(res,200,{matched:false,message:'Queue this exact job link in Veloce to see a match, documents and hiring contacts.'});return true;}
   const match=rankOpportunity(job,buildSearchPlan(store.state,await getSearchConfig(store))),candidate=JSON.stringify(store.state.profile.master || store.state.profile).toLowerCase()+String(store.state.resume?.text || '').toLowerCase();
   const keywords=[...(job.tags || []),'Excel','SQL','Python','Financial modeling','Valuation','DCF','Accounting','IFRS','GAAP','Power BI','React','TypeScript','JavaScript','Risk management','Cash flow'];
   const missing=[...new Set(keywords)].filter(k=>String(job.description || '').toLowerCase().includes(k.toLowerCase()) && !candidate.includes(k.toLowerCase())).slice(0,10);

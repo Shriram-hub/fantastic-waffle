@@ -3,6 +3,7 @@ import {text,safeUrl,hash} from '../domain.mjs';
 import {candidateProfile} from './candidate-profile.mjs';
 import {remoteJSON} from '../providers/http.mjs';
 import {providerCall} from './provider-budget.mjs';
+import {serperSearch,tavilySearch} from '../providers/contacts/serper-xray.mjs';
 const norm=v=>String(v || '').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
 const escaped=v=>v.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 export function sharedBackground(state) {
@@ -29,13 +30,14 @@ export function warmHook(contact,state) {
 }
 export async function prioritizeWarmContacts(contacts,job,store,config={},fetcher=fetch,enabled=false) {
   const background=sharedBackground(store.state);
-  if(!enabled || !config.SERPAPI_API_KEY || !background.length)return {contacts,people:[],warnings:[]};
+  if(!enabled || ![config.SERPAPI_API_KEY,config.SERPER_API_KEY,config.TAVILY_API_KEY].some(Boolean) || !background.length)return {contacts,people:[],warnings:[]};
   const url=new URL('https://serpapi.com/search.json'),terms=background.slice(0,4).map(b=>`"${text(b.name,120).replaceAll('"','')}"`).join(' OR ');
   url.search=new URLSearchParams({engine:'google',q:`site:linkedin.com/in "${text(job.company,100).replaceAll('"','')}" (${terms}) (${contactTargeting(job,store.state.profile).personas[2].titles.map(t=>`"${t}"`).join(' OR ')})`,num:'10',api_key:config.SERPAPI_API_KEY});
   try {
     const key=hash([job.company.toLowerCase(),background,Math.floor(Date.now()/(7*86400000))]);
-    const data=await providerCall(store,`warm:${key}`,'SerpApi',Math.min(30,Math.max(1,Number(config.JOB_SEARCH_API_DAILY_LIMIT)||6)),()=>remoteJSON(url.href,{},fetcher,30000));
-    const people=warmPeople(data.organic_results || [],job.company,background);
+    const provider=config.SERPER_API_KEY?'Serper':config.TAVILY_API_KEY?'Tavily':'SerpApi',search=provider==='Serper'?serperSearch:tavilySearch,secret=config[provider==='Serper'?'SERPER_API_KEY':provider==='Tavily'?'TAVILY_API_KEY':'SERPAPI_API_KEY'];
+    const data=await providerCall(store,`warm:${hash(secret)}:${key}`,provider,provider==='SerpApi'?Math.min(30,Math.max(1,Number(config.JOB_SEARCH_API_DAILY_LIMIT)||6)):Math.min(500,Number(config.CONTACT_SEARCH_DAILY_LIMIT)||100),()=>provider==='SerpApi'?remoteJSON(url.href,{},fetcher,30000):search(url.searchParams.get('q'),secret,{fetcher,limit:20}));
+    const people=warmPeople(data.results || data.organic_results || [],job.company,background);
     const ranked=contacts.map(c=>{const p=people.find(p=>norm(p.name)===norm(c.name) || c.linkedinUrl && c.linkedinUrl.replace(/\/$/,'')===p.linkedinUrl.replace(/\/$/,''));return p ? {...c,warmSignals:p.warmSignals,linkedinUrl:p.linkedinUrl} : c;}).sort((a,b)=>Number((b.warmSignals || []).some(s=>s.status==='source-supported'))-Number((a.warmSignals || []).some(s=>s.status==='source-supported')));
     return {contacts:ranked,people,warnings:[]};
   } catch(e){return {contacts,people:[],warnings:[e.status ? e.message : 'Warm search is unavailable. Standard discovery continued.']};}

@@ -1,4 +1,7 @@
+import {verifyProvider} from './services/provider-verification.mjs';
 import {bootstrapJobs} from './services/job-feed.mjs';
+import {effectiveProviderConfig,providerConfigView,withProviderConfig,publicProviderState} from './services/provider-config.mjs';
+import {catalogJob,retainCatalogJob,catalogStats} from './services/job-catalog.mjs';
 import {jobFreshness} from './services/job-freshness.mjs';
 import {companyLogos} from './services/company-logos.mjs';
 import {workerStatus} from './services/worker-health.mjs';
@@ -41,7 +44,8 @@ const buildRoot = fileURLToPath(new URL("../dist/", import.meta.url));
 const JSON_LIMIT = 8_000_000;
 const csvCell = v => `"${String(v ?? "").replace(/^[=+@\-\t\r]/, "'$&").replaceAll('"', '""')}"`;
 const filename = s => s.replace(/[^a-z0-9._-]/gi, "_").slice(0, 130);
-function publicState(s,preferences) {
+function publicState(s,preferences,catalogue) {
+  s=publicProviderState(s);
   const plan=buildSearchPlan(s,preferences),feed=bootstrapJobs(s,plan);
   const {
     previews,
@@ -52,7 +56,7 @@ function publicState(s,preferences) {
   return {
     ...rest,
     careerSummary:careerOverview(s),
-    ...feed,
+    ...feed,jobFeed:catalogue?{...feed.jobFeed,total:catalogue.active,truncated:true,capacity:catalogue.capacity,sources:catalogue.sources}:feed.jobFeed,
     jobs: s.isDemo ? feed.jobs.map(j=>({...j,match:scoreJob(j,s.profile)})) : feed.jobs,
     resume: s.resume ? Object.fromEntries(Object.entries(s.resume).filter(([key]) => key !== "base64")) : null
   };
@@ -81,6 +85,7 @@ export function createApp({
   fetcher = fetch,
   store: providedStore,wakeWorker
 } = {}) {
+  const baseConfig=config;config=providerConfigView(config);
   const store = providedStore || openStore(dataDir);
   const upgrade = upgradeRoutes(store, config, fetcher);
   const auth=workspaceAuth(store,config,fetcher);
@@ -123,7 +128,7 @@ export function createApp({
       named('application-tasks',()=>store.db.prepare('SELECT id,application_id,status,body FROM apply_tasks ORDER BY rowid DESC LIMIT 100').all()),
     ]);
     const setup=setupReadiness(store,config);
-    return {data:publicState(store.state,preferences),search,autopilot,accounts,setup,worker:await workerStatus(store),
+    return {data:publicState(store.state,preferences,search.catalogue),search,autopilot,accounts,setup,worker:await workerStatus(store),
       integrations:{remotive:true,greenhouse:true,lever:true,ashby:true,arbeitnow:true,himalayas:true,apollo:setup.apolloConfigured,hunter:setup.hunterConfigured,googleOAuth:setup.googleConfigured,microsoftOAuth:setup.microsoftConfigured,gmail:accounts.some(a=>a.provider==='google'),outlook:accounts.some(a=>a.provider==='microsoft'),resend:setup.resendConfigured,liveSendEnabled:setup.liveSendEnabled,ai:setup.aiConfigured,embeddings:!!(config.LLM_API_KEY && config.EMBEDDING_MODEL),adzuna:!!(config.ADZUNA_APP_ID && (config.ADZUNA_APP_KEY || config.ADZUNA_API_KEY)),queueDriver:config.REDIS_URL ? 'BullMQ + Redis' : store.kind==='postgres' ? 'PostgreSQL' : 'SQLite',autoApply:'assisted'},
       vault:{versions:versions.map(v=>({id:v.id,kind:v.kind,title:JSON.parse(v.body).title,createdAt:v.created_at})),links:resumeLinkSummaries(links,store.state)},
       tasks:{tasks,applications:applications.map(a=>({...a,details:JSON.parse(a.body)}))}};
@@ -145,7 +150,7 @@ export function createApp({
     try{content=await readFile(resolve(root,asset[0]));}catch(error){if(error.code==='ENOENT')fail('Asset not found.',404);throw error;}
     res.writeHead(200,{'Content-Type':asset[1]});res.end(req.method==='HEAD' ? undefined : content);
   }
-  const workspaceRequest=(req,res)=>ready.then(() => store.run(async () => {
+  const workspaceRequest=(req,res)=>ready.then(() => store.run(async () => withProviderConfig(await effectiveProviderConfig(store,baseConfig),async()=>{
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "no-referrer");
     res.setHeader("X-Frame-Options", "DENY");
@@ -173,7 +178,7 @@ export function createApp({
           documentCheck=document ? {ok:true,documentId:document.id,resumeBytes:document.resume.size,coverLetterBytes:document.coverLetter.size,coverLetterWords:document.wordCount,storage:document.resume.storage?.kind || 'memory'} : {ok:false,reason:'No active role or the source profile changed.'};
         }
         return json(res,200,{ok:true,indexed:result.search.indexed,matches:result.search.matches,storage:store.kind || 'sqlite',googleConfigured:result.setup.googleConfigured,
-          contactDiscovery:{hunterConfigured:contacts.hunterConfigured,dailyLimit:contacts.dailyLimit,usedToday:contacts.usedToday},career:{available:true,openTasks:result.data.careerSummary.stats.openTasks},features:{regionalBoards:true,documents:true,sequenceSteps:3,copilotVersion:"0.9.0",phoneAlerts:true,automaticInterviewPrep:true,veloceUI:true,kanban:true,commandPalette:true,documentEditor:true,linkedInDrafts:true,companyPitch:true,mailboxSelfTests:true,extensionAutoPair:true,fieldPersonas:true,hiringPostSignals:true,emailPatternLearning:true,careerPageImport:true,firstMover:true,paginatedJobFeed:true,indexCapacity:15000,curatedEmployers:result.search.curatedEmployers},documentCheck,contactFallbackCheck,mail:{connectedAccounts:result.accounts.length,liveSending:result.setup.liveSendEnabled},providerChecks:publicUrl.searchParams.get('checkContacts')==='true' ? await checkContactProviders(store,config,fetcher) : undefined});
+          contactDiscovery:{hunterConfigured:contacts.hunterConfigured,dailyLimit:contacts.dailyLimit,usedToday:contacts.usedToday},career:{available:true,openTasks:result.data.careerSummary.stats.openTasks},features:{regionalBoards:true,documents:true,sequenceSteps:3,copilotVersion:"0.9.0",phoneAlerts:true,automaticInterviewPrep:true,veloceUI:true,kanban:true,commandPalette:true,documentEditor:true,linkedInDrafts:true,companyPitch:true,mailboxSelfTests:true,extensionAutoPair:true,fieldPersonas:true,hiringPostSignals:true,emailPatternLearning:true,careerPageImport:true,firstMover:true,paginatedJobFeed:true,indexCapacity:result.search.indexCapacity,curatedEmployers:result.search.curatedEmployers},documentCheck,contactFallbackCheck,providerVerification:publicUrl.searchParams.get('checkProvider')==='serper'?await verifyProvider('serper',store,config,fetcher,{confirmMetered:true}):undefined,mail:{connectedAccounts:result.accounts.length,liveSending:result.setup.liveSendEnabled},providerChecks:publicUrl.searchParams.get('checkContacts')==='true' ? await checkContactProviders(store,config,fetcher) : undefined});
       }
       if(await auth.handle(req,res,publicUrl,{json,bodyJSON}))return;
       if (await upgrade.publicRoute(req, res, publicUrl, {
@@ -198,6 +203,8 @@ export function createApp({
         sameOrigin(req);
         if (sendLock) fail("A campaign is sending. Wait for it to finish before changing the workspace.", 409);
       }
+      const indexedJob=path.match(/^\/api\/jobs\/([^/]+)\/(?:auto-pitch|documents|detail)(?:\/|$)/);
+      if(indexedJob && !store.state.jobs.some(j=>j.id===indexedJob[1]))await retainCatalogJob(indexedJob[1],store);
       if (await upgrade.handle(req, res, u, {
         json,
         bodyJSON
@@ -215,14 +222,14 @@ export function createApp({
       }
       const logo=path.match(/^\/api\/jobs\/([^/]+)\/logo$/);
       if(logo && method==='GET') {
-        const job=store.state.jobs.find(j=>j.id===logo[1]),image=job && await logoFor(job);
+        const job=store.state.jobs.find(j=>j.id===logo[1]) || await catalogJob(logo[1],store),image=job && await logoFor(job);
         if(!image){res.writeHead(204);res.end();return;}
         res.writeHead(200,{'Content-Type':image.type,'Cache-Control':'private, max-age=3600'});res.end(image.bytes);return;
       }
       if (method === 'GET' && path === '/api/bootstrap') {
         return json(res,200,await bootstrap());
       }
-      if (method === "GET" && path === "/api/state") return json(res, 200, publicState(store.state,await getSearchConfig(store)));
+      if (method === "GET" && path === "/api/state") {const preferences=await getSearchConfig(store);return json(res, 200, publicState(store.state,preferences,await catalogStats(store,buildSearchPlan(store.state,preferences))));}
       if (method === "GET" && path === "/api/integrations") return json(res, 200, {
         remotive: true,
         greenhouse: true,
@@ -369,6 +376,7 @@ export function createApp({
           });
         }
         if (path === "/api/applications" && method === "POST") {
+          if(!s.jobs.some(j=>j.id===data.jobId))await retainCatalogJob(data.jobId,store);
           const j = find(s.jobs, data.jobId, "Job");
           if (!STAGES.includes(data.stage || "Saved")) fail("Unknown application stage.");
           const existing = s.applications.find(a => a.jobId === j.id);
@@ -398,6 +406,7 @@ export function createApp({
         }
         if (path === "/api/applications/batch" && method === "POST") {
           if (!Array.isArray(data.jobIds) || !data.jobIds.length || data.jobIds.length > 50) fail("Select between 1 and 50 jobs.");
+          for(const jid of [...new Set(data.jobIds)])if(!s.jobs.some(j=>j.id===jid))await retainCatalogJob(jid,store);
           const jobs = [...new Set(data.jobIds)].map(jid => find(s.jobs, jid, "Job"));
           let added = 0;
           for (const j of jobs) {
@@ -595,7 +604,7 @@ export function createApp({
       });else res.end();
       if (!e.status) console.error(JSON.stringify({event:'request-failed',reference,type:e.name,code:/^[A-Z0-9_]{1,40}$/.test(e.code || '') ? e.code : undefined,operation:e.operation,frames:String(e.stack || '').split('\n').filter(line=>/^\s+at /.test(line) && /\/server\//.test(line)).slice(0,5).map(line=>line.trim().replace(/file:\/\/[^ ]*\/server\//g,'server/'))}));
     }
-  },{readOnlyJobs:req.method==='GET' && (['/api/bootstrap','/api/state','/api/jobs/feed'].includes(new URL(req.url,'http://localhost').pathname) || /^\/api\/jobs\/[^/]+\/logo(?:\?|$)/.test(req.url))}));
+  }),{readOnlyJobs:req.method==='GET' && (['/api/bootstrap','/api/state','/api/jobs/feed'].includes(new URL(req.url,'http://localhost').pathname) || /^\/api\/jobs\/[^/]+\/logo(?:\?|$)/.test(req.url))}));
   // Browser asset bursts, health probes, auth and long-lived events need no
   // workspace snapshot. Bound the remaining requests on the 512 MB free plan.
   let activeRequests=0;const waiting=[];
@@ -648,7 +657,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   await app.ready;
   app.store.releaseRoot?.();
   const port = Number(process.env.PORT || 3000);
-  app.server.listen(port, host, () => console.log(`Veloce AI is running at http://${host}:${app.server.address().port}`));
+  app.server.listen(port, host, () => console.log(`Veloce is running at http://${host}:${app.server.address().port}`));
   let stopping = false,restartTimer,workerFailures=0;
   if (embeddedWorkerEnabled(process.env)) {
     startEmbeddedWorker();

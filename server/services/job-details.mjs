@@ -12,7 +12,7 @@ export async function hydrateJobDetail(job,store) {
   const row=await store.db.prepare('SELECT body FROM job_source_cache WHERE id=?').get(job.detailCacheKey);
   if(!row)return job;
   try {
-    const jobs=JSON.parse(gunzipSync(Buffer.from(row.body,'base64'),{maxOutputLength:16000000}).toString()),full=jobs.find(j=>j.id===(job.detailSourceId || job.id) || j.url===job.url);
+    const payload=JSON.parse(gunzipSync(Buffer.from(row.body,'base64'),{maxOutputLength:16000000}).toString()),jobs=Array.isArray(payload)?payload:payload.jobs,full=jobs.find(j=>j.id===(job.detailSourceId || job.id) || j.url===job.url);
     return full && (!job.descriptionHash || hash(full.description)===job.descriptionHash) ? {...job,description:full.description,descriptionTruncated:full.descriptionSourceTruncated===true} : job;
   }catch{return job;}
 }

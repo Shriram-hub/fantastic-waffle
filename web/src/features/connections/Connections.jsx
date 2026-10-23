@@ -1,4 +1,5 @@
 import {WorkspaceAppearance} from './WorkspaceAppearance.jsx';
+import {ProviderKeys} from './ProviderKeys.jsx';
 import {AlertSettings} from './AlertSettings.jsx';
 import {MailboxChecks} from './MailboxChecks.jsx';
 import {pairBrowserExtension} from '../../shared/browser-batch.mjs';
@@ -24,9 +25,10 @@ export function Connections() {
         subtitle="Explicit connections. Server-side secrets. A clear view of what is configured."
       />
       <WorkspaceAppearance/>
+      <ProviderKeys/>
       <SetupChecklist/>
       <AlertSettings/>
-      <section className="notice mb"><strong>Mail connects through Google or Microsoft OAuth</strong><p>Veloce AI sends and scans through HTTPS APIs, so Gmail App Password formatting and Render’s SMTP port restrictions do not apply. Connect the mailbox, then use the self-test buttons below. Register the exact callback URL shown in setup in Google Cloud.</p></section>
+      <section className="notice mb"><strong>Mail connects through Google or Microsoft OAuth</strong><p>Veloce sends and scans through HTTPS APIs, so Gmail App Password formatting and Render’s SMTP port restrictions do not apply. Connect the mailbox, then use the self-test buttons below. Register the exact callback URL shown in setup in Google Cloud.</p></section>
       <section className="notice mb"><strong>Free job discovery is included</strong><p>Greenhouse, Lever, Ashby and public feeds work without API keys. Optional JSEARCH_API_KEY or SERPAPI_API_KEY broadens coverage through Google Jobs. Save these in Render → Environment, then enable Google Jobs in search sources.</p><p>JSearch: {setup.jsearchConfigured ? 'key saved' : 'not configured'} · SerpApi: {setup.serpapiConfigured ? 'key saved' : 'not configured'}. Source health shows whether live provider requests succeed.</p></section>
       <div className="provider-grid">
         <section className="connection-card">
@@ -78,7 +80,7 @@ export function Connections() {
           ["Hunter", "Work-email verification", "hunter"],
           ["Adzuna", "Aggregator search using your target roles", "adzuna"],
           [
-            setup.geminiConfigured ? "Gemini AI & embeddings" : "AI & embeddings",
+            setup.geminiConfigured ? "Gemini & embeddings" : "Model & embeddings",
             "Structured extraction and semantic matching",
             "ai",
           ],
@@ -93,7 +95,7 @@ export function Connections() {
               />
             </div>
             <h3>{name}</h3>
-            <p>{description}. Keys belong in the server environment.</p>
+            <p>{description}. Save supported keys above; advanced integrations can also use Render environment variables.</p>
           </section>
         ))}
       </div>
@@ -250,7 +252,7 @@ export function Connections() {
             <p>
               Download and extract the assistant. Open chrome://extensions,
               enable Developer mode, and load the veloce-ai-extension folder.
-              The download includes this app’s address and a one-use installation code valid for 15 minutes. After installation, refresh Veloce AI and click Pair extension below if needed. No workspace password is included.
+              The download includes this app’s address and a one-use installation code valid for 15 minutes. After installation, refresh Veloce and click Pair extension below if needed. No workspace password is included.
               Tokens expire in 24 hours.
             </p>
             <div className="btn-row">

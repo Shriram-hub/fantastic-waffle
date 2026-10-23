@@ -23,7 +23,7 @@ const aliases=[
 export function companyDomain(value) {
   const domain = String(value || "").trim().toLowerCase().replace(/^www\./, "");
   if (!/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/i.test(domain)) return "";
-  if (/(^|\.)(gmail\.com|outlook\.com|yahoo\.com|hotmail\.com|greenhouse\.io|lever\.co|ashbyhq\.com|workday\.com|myworkdayjobs\.com|myworkdaysite\.com|linkedin\.com|indeed\.com|glassdoor\.com|naukri\.com|iimjobs\.com|instahyre\.com|wellfound\.com|internshala\.com|efinancialcareers\.[a-z.]+|smartrecruiters\.com|workable\.com|recruitee\.com|themuse\.com|adzuna\.[a-z.]+|icims\.com|taleo\.net|himalayas\.app|arbeitnow\.com|remotive\.com|remoteok\.com|jobicy\.com|example\.(com|org|net)|localhost)$/.test(domain)) return "";
+  if (/(^|\.)(gmail\.com|outlook\.com|yahoo\.com|hotmail\.com|greenhouse\.io|lever\.co|ashbyhq\.com|workday\.com|myworkdayjobs\.com|myworkdaysite\.com|linkedin\.com|indeed\.com|glassdoor\.com|naukri\.com|iimjobs\.com|instahyre\.com|wellfound\.com|internshala\.com|efinancialcareers\.[a-z.]+|keka\.com|darwinbox\.(in|com)|freshteam\.com|zohorecruit\.(com|in|eu)|zohopublic\.com|amazon\.jobs|github\.com|smartrecruiters\.com|workable\.com|recruitee\.com|themuse\.com|adzuna\.[a-z.]+|icims\.com|taleo\.net|himalayas\.app|arbeitnow\.com|remotive\.com|remoteok\.com|jobicy\.com|example\.(com|org|net)|localhost)$/.test(domain)) return "";
   return domain;
 }
 export async function resolveCompany(job, fetcher = fetch, store) {

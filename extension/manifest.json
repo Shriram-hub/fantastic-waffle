@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Veloce AI Application Assistant",
+  "name": "Veloce Application Assistant",
   "version": "0.9.0",
-  "description": "Fill an application from your approved Veloce AI profile, then hand control back for review and submission.",
+  "description": "Fill an application from your approved Veloce profile, then hand control back for review and submission.",
   "permissions": [
     "storage",
     "scripting",
@@ -34,7 +34,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Veloce AI · Application Copilot"
+    "default_title": "Veloce · Application Assistant"
   },
   "content_scripts": [
     {

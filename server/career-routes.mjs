@@ -21,7 +21,7 @@ export function careerRoutes(store,queue,config) {
     if(story && req.method===(story[1] ? 'PATCH' : 'POST')){json(res,story[1] ? 200 : 201,{story:await saveCareerStory(data,store,story[1])});return true;}
     if(path==='/api/career/prep' && req.method==='POST') {
       const job=store.state.jobs.find(j=>j.id===data.jobId);if(!job)fail('Choose an existing job.',404);
-      const useAI=data.useAI===true;if(useAI && data.confirmed!==true)fail('Approve sending your résumé and role description to the configured AI provider.');
+      const useAI=data.useAI===true;if(useAI && data.confirmed!==true)fail('Approve sending your résumé and role description to the configured model provider.');
       if(useAI && (!config.LLM_API_KEY || !config.LLM_MODEL))fail('The AI provider is not configured. Generate the role-based guide instead.',503);
       const fingerprint=prepFingerprint(store,job,useAI),existing=careerData(store).prep.find(p=>p.fingerprint===fingerprint);
       if(existing){json(res,200,{prep:existing,cached:true});return true;}

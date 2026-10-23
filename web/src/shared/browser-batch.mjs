@@ -3,7 +3,7 @@ export function startBrowserBatch(taskIds) {
     const requestId=crypto.randomUUID();
     const done=message=>{window.removeEventListener('message',listener);clearTimeout(timer);resolve(message);};
     const listener=event=>{if(event.source===window && event.origin===location.origin && event.data?.type==='orbit:batch-result' && event.data.requestId===requestId)done(event.data.error || event.data.message || 'The first application is ready for your review.');};
-    const timer=setTimeout(()=>done('Applications queued. Pair/reload extension 0.9, refresh Veloce AI, then use Open & fill next application.'),4000);
+    const timer=setTimeout(()=>done('Applications queued. Pair/reload extension 0.9, refresh Veloce, then use Open & fill next application.'),4000);
     window.addEventListener('message',listener);window.postMessage({type:'orbit:start-batch',taskIds,requestId},location.origin);
   });
 }

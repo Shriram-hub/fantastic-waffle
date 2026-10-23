@@ -18,10 +18,64 @@ import {learnEmailPattern,permuteEmails} from '../server/providers/contacts/perm
 import {observeCompanyEmails,companyPattern} from '../server/services/company-patterns.mjs';
 import {searchHunterDomain} from '../server/providers/contacts/hunter.mjs';
 import {ingestMessage} from '../server/services/inbox.mjs';
+import {saveProviderKey} from '../server/services/provider-config.mjs';
+import {findCompanyContacts} from '../server/services/contact-discovery.mjs';
+import {serperSearch,tavilySearch} from '../server/providers/contacts/serper-xray.mjs';
+import {searchProspeoDomain,findProspeoEmail} from '../server/providers/contacts/prospeo.mjs';
+import {findGetProspectEmail} from '../server/providers/contacts/getprospect.mjs';
+import {searchMineleadDomain} from '../server/providers/contacts/minelead.mjs';
+import {githubCommitContacts} from '../server/providers/contacts/github-commits.mjs';
+import {discoverBulkBatch} from '../server/services/bulk-harvest.mjs';
 
 const response=data=>new Response(JSON.stringify(data)),mx=async()=>[{exchange:'mx.company.test'}];
 async function personal(t){const store=openStore(':memory:');t.after(()=>store.close());await store.replace(initialState(false));return store;}
 const publicPages=async domain=>[{url:`https://${domain}/careers`,text:`Apply to hr&#64;${domain} or jobs@${domain}. Do not use jobs@elsewhere.com.`}];
+
+test('Hunter accepts a trimmed workspace-state key and dirty domains, and persists provider-reported formats without inventing samples',async t=>{
+  for(const domain of ['https://www.HDFCBANK.com/careers/',' www.HDFCBANK.com/careers ','hdfcbank.com']){
+    const result=await searchHunterDomain(domain,{connections:{hunterApiKey:' saved-key '}},1,async input=>{const u=new URL(input);assert.equal(u.searchParams.get('domain'),'hdfcbank.com');assert.equal(u.searchParams.get('api_key'),'saved-key');assert.equal(u.searchParams.get('department'),null);return response({data:{domain:'hdfcbank.com',pattern:'{first}.{last}',emails:[]}});});assert.equal(result.pattern,'{first}.{last}');
+  }
+  const store=await personal(t),config={TOKEN_ENCRYPTION_KEY:Buffer.alloc(32,4).toString('base64'),HUNTER_API_KEY:'wrong-server-key'};await saveProviderKey('hunter','saved-key',store,config);
+  await findCompanyContacts({company:'HDFC Bank',title:'Analyst'},{domain:'hdfcbank.com'},{store,config,allowCredits:true,allowPublic:false,lookupMx:mx,fetcher:async input=>{assert.equal(new URL(input).searchParams.get('api_key'),'saved-key');return response({data:{domain:'hdfcbank.com',pattern:'{first}.{last}',emails:[]}});}});
+  const saved=await companyPattern(store,'hdfcbank.com');assert.equal(saved.pattern,'{first}.{last}');assert.equal(saved.providerPattern.sampleCount,0);assert.equal(saved.providerPattern.mailboxVerified,false);
+});
+
+test('Serper and Tavily normalize source links, use server-side headers, and retain actual people instead of fabricating records',async()=>{
+  const result={title:'Maya Singh - Finance Director at Company | LinkedIn',link:'https://www.linkedin.com/in/maya-singh',snippet:'Director at Company'};
+  const serper=await serperSearch('Company people',{connections:{serperApiKey:' serper-test '}},{fetcher:async(url,options)=>{assert.equal(url,'https://google.serper.dev/search');assert.equal(options.headers['X-API-KEY'],'serper-test');assert.equal(JSON.parse(options.body).num,20);return response({organic:[result,{link:'javascript:bad'}],credits:1});}});
+  assert.equal(serper.results.length,1);assert.equal(serper.creditsUsed,1);
+  const tavily=await tavilySearch('Company people','tavily-test',{fetcher:async(url,options)=>{assert.equal(options.headers.Authorization,'Bearer tavily-test');assert.equal(JSON.parse(options.body).include_raw_content,false);return response({results:[{...result,url:result.link,content:result.snippet}]});}});assert.equal(tavily.results[0].link,result.link);
+  const found=await searchCompanyPeople('Company','company.com',{allowSearch:true,freeSearch:false,config:{SERPER_API_KEY:'test'},call:(_p,fn)=>fn(),fetcher:async()=>response({organic:[result]})});assert.equal(found.people[0].name,'Maya Singh');assert.equal(found.people[0].email,undefined);
+});
+
+test('Prospeo and GetProspect use current documented endpoints and only explicit mailbox verification qualifies',async()=>{
+  const person={name:'Maya Singh',linkedinUrl:'https://www.linkedin.com/in/maya-singh'};
+  const search=await searchProspeoDomain('company.com','prospeo-test',15,async(url,options)=>{assert.equal(url,'https://api.prospeo.io/search-person');assert.equal(options.headers['X-KEY'],'prospeo-test');assert.deepEqual(JSON.parse(options.body).filters.company.websites.include,['company.com']);return response({results:[{person:{person_id:'p1',full_name:person.name,linkedin_url:person.linkedinUrl,current_job_title:'Director of Finance'}}]});});assert.equal(search.contacts[0].emailStatus,'unverified');assert.equal(search.contacts[0].person_id,'p1');
+  const found=await findProspeoEmail(search.contacts[0],'company.com','prospeo-test',async(url,options)=>{assert.equal(url,'https://api.prospeo.io/enrich-person');const b=JSON.parse(options.body);assert.equal(b.enrich_mobile,false);assert.equal(b.only_verified_email,true);return response({person:{full_name:person.name,email:{revealed:true,email:'maya.singh@company.com',status:'VERIFIED'}}});});assert.equal(found.emailStatus,'verified');
+  assert.equal(await findProspeoEmail(person,'company.com','test',async()=>response({person:{email:{revealed:true,email:'maya@unrelated.com',status:'VERIFIED'}}})),null);
+  for(const [domain_status,status] of [['valid','verified'],['accept_all','catch-all']]){
+    const p=await findGetProspectEmail(person,'company.com','getprospect-test',async(url,options)=>{assert.equal(url,'https://api.getprospect.com/v2/email/find');assert.equal(options.headers['x-api-key'],'getprospect-test');assert.deepEqual(JSON.parse(options.body),{data:{full_name:person.name,domain:'company.com'}});return response({success:true,data:{email:'maya@company.com',status:'valid',domain_status}});});assert.equal(p.emailStatus,status);
+  }
+});
+
+test('Minelead quality scores and real GitHub commit addresses stay unverified; unrelated organizations and noreply mailboxes are excluded',async()=>{
+  const minelead=await searchMineleadDomain('company.com','minelead-test',10,async input=>{const u=new URL(input);assert.equal(u.searchParams.get('key'),'minelead-test');return response({pattern:'{first}.{last}@company.com',emails:[{name:'Maya Singh',email:'maya.singh@company.com',quality:100},{email:'hr@company.com',verification:{status:'valid'}},{email:'x@elsewhere.com',quality:100}]});});
+  assert.equal(minelead.pattern,'{first}.{last}');assert.equal(minelead.contacts.length,2);assert.equal(minelead.contacts[0].emailStatus,'unverified');assert.equal(minelead.contacts[1].emailStatus,'verified');
+  const github=await githubCommitContacts({name:'Company',domain:'company.com',githubOrg:'company'},{fetcher:async input=>{const path=new URL(input).pathname;if(path==='/orgs/company')return response({blog:'https://company.com'});if(path.endsWith('/repos'))return response([{name:'open-project',fork:false,private:false}]);return response([{html_url:'https://github.com/company/open-project/commit/1',commit:{author:{name:'Maya Singh',email:'maya.singh@company.com'},committer:{name:'GitHub',email:'noreply@github.com'}}}]);}});assert.equal(github.length,1);assert.equal(github[0].emailStatus,'unverified');assert.equal(github[0].emailObserved,true);
+  assert.deepEqual(await githubCommitContacts({domain:'company.com',githubOrg:'wrong'},{fetcher:async()=>response({blog:'https://elsewhere.com'})}),[]);
+});
+
+test('bulk-harvest API returns a deduplicated background task, discovers companies concurrently and never queues mail',async t=>{
+  const store=await personal(t),app=createApp({store,config:{WORKSPACE_PASSWORD:'test',ENABLE_JOB_DISCOVERY:'false'}});
+  await new Promise(r=>app.server.listen(0,'127.0.0.1',r));t.after(async()=>{app.events.close();app.server.closeAllConnections();await new Promise(r=>app.server.close(r));});
+  const url=`http://127.0.0.1:${app.server.address().port}/api/contacts/bulk-harvest`,headers={'Content-Type':'application/json',Authorization:`Basic ${Buffer.from('orbit:test').toString('base64')}`},body=JSON.stringify({source:'companies',companies:'company.com,other.com,company.com',contactsPerCompany:5,companyLimit:25});
+  assert.equal((await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body})).status,401);
+  const first=await fetch(url,{method:'POST',headers,body});assert.equal(first.status,202);const {run}=await first.json();assert.equal(run.targets.length,2);
+  assert.equal((await (await fetch(url,{method:'POST',headers,body})).json()).existing,true);
+  let active=0,peak=0;const queue=app.queue,task=await queue.get(run.taskId);
+  await store.run(()=>discoverBulkBatch(task,store,queue,{},async()=>assert.fail('No external provider calls in this test'),{findCompanyContacts:async(_job,company)=>{active++;peak=Math.max(peak,active);await new Promise(r=>setTimeout(r,10));active--;return {contacts:[{name:'Maya Singh',title:'Director of Finance',companyDomain:company.domain,email:`maya@${company.domain}`,emailStatus:'unverified',source:'Public source'}],warnings:[]};}}));
+  await store.refresh();assert.equal(peak,2);assert.equal(store.state.contacts.length,2);assert.ok(store.state.contactDiscoveryRuns[0].targets.every(t=>t.status==='completed' && t.verified===0));assert.ok((await queue.list()).every(t=>t.kind==='contacts.bulk'));assert.equal(store.state.campaigns.length,0);
+});
 
 test('field personas weight functional leaders first, preserve specialist recruiters and peers, and prefer the actual role over preferences',()=>{
   for(const title of ['Financial Analyst','Investment Banking Analyst','Accountant']) {
@@ -62,14 +116,14 @@ test('named public or verified observations learn patterns across searches while
   await ingestMessage({id:'pattern-mail',from:'"Asha Verma" <asha.verma@company.com>',subject:'Hello',body:'Thank you',receivedAt:new Date().toISOString()},store);
   assert.equal((await companyPattern(store,'company.com')).learnedPattern.status,'corroborated');
 });
-test('Hunter sends field-specific department filters and ranks finance leadership instead of discarding non-HR people',async()=>{
+test('Hunter requests unfiltered results and ranks finance leadership instead of discarding non-HR people',async()=>{
   const targeting=contactTargeting({title:'Investment Banking Analyst'});
-  const result=await searchHunterDomain('company.com','fake',10,async input=>{assert.match(new URL(input).searchParams.get('department'),/^finance,/);return response({data:{domain:'company.com',organization:'Company',emails:[{first_name:'Riley',last_name:'Patel',position:'Recruiter',department:'hr',value:'riley@company.com'},{first_name:'Maya',last_name:'Singh',position:'Head of FP&A',department:'finance',value:'maya@company.com'}]}});},targeting);
+  const result=await searchHunterDomain('company.com','fake',10,async input=>{assert.equal(new URL(input).searchParams.get('department'),null);return response({data:{domain:'company.com',organization:'Company',emails:[{first_name:'Riley',last_name:'Patel',position:'Recruiter',department:'hr',value:'riley@company.com'},{first_name:'Maya',last_name:'Singh',position:'Head of FP&A',department:'finance',value:'maya@company.com'}]}});},targeting);
   assert.equal(result.contacts[0].name,'Maya Singh');assert.equal(result.contacts[0].persona,'manager');assert.equal(result.contacts[0].emailStatus,'unverified');
 });
 
-test('Hunter filters at the provider, preserves sources and recent verification, and rejects mismatched company domains',async()=>{
-  const fetcher=async url=>{const u=new URL(url);assert.equal(u.searchParams.get('department'),'hr,executive');assert.equal(u.searchParams.get('limit'),'10');return response({data:{domain:'company.com',organization:'Company',accept_all:false,emails:[{value:'riley@company.com',first_name:'Riley',position:'Recruiter',department:'hr',verification:{status:'valid',date:new Date().toISOString()},sources:[{uri:'https://company.com/team',last_seen_on:'2026-10-20'}]},{value:'ceo@company.com',position:'CEO',department:'executive',verification:{status:'accept_all',date:new Date().toISOString()}},{value:'bad@elsewhere.com',department:'hr',verification:{status:'valid',date:new Date().toISOString()}}]}});};
+test('Hunter ranks unfiltered provider results, preserves sources and recent verification, and rejects mismatched company domains',async()=>{
+  const fetcher=async url=>{const u=new URL(url);assert.equal(new URL(url).searchParams.get('department'),null);assert.equal(u.searchParams.get('limit'),'10');return response({data:{domain:'company.com',organization:'Company',accept_all:false,emails:[{value:'riley@company.com',first_name:'Riley',position:'Recruiter',department:'hr',verification:{status:'valid',date:new Date().toISOString()},sources:[{uri:'https://company.com/team',last_seen_on:'2026-10-20'}]},{value:'ceo@company.com',position:'CEO',department:'executive',verification:{status:'accept_all',date:new Date().toISOString()}},{value:'bad@elsewhere.com',department:'hr',verification:{status:'valid',date:new Date().toISOString()}}]}});};
   const contacts=await searchHunter('company.com','test-only',5,fetcher);assert.equal(contacts.length,2);assert.equal(contacts[0].emailStatus,'verified');assert.equal(contacts[0].verification.reference,'https://company.com/team');assert.equal(contacts[1].emailStatus,'catch-all');
   await assert.rejects(searchHunter('company.com','test',3,async()=>response({data:{domain:'other.com',emails:[]}})),/different company/);
   const name=await searchHunterCompany('Company Ltd','test',3,fetcher);assert.equal(name.company.domain,'company.com');
@@ -142,7 +196,7 @@ test('matching-role batches resolve exact Hunter companies and keep the discover
 });
 test('free provider checks report endpoint errors and cache safe summaries without credits or account identity',async t=>{
   const store=await personal(t);let calls=0;
-  const config={APOLLO_API_KEY:'private-apollo-key',HUNTER_API_KEY:'private-hunter-key'},fetcher=async url=>{calls++;if(String(url).includes('apollo.io'))return new Response('private-apollo-key',{status:403});assert.match(String(url),/account-stats/);return response({data:{email:'private-owner@candidate.com',plan_name:'Free'}});};
+  const config={APOLLO_API_KEY:'private-apollo-key',HUNTER_API_KEY:'private-hunter-key'},fetcher=async url=>{calls++;if(String(url).includes('apollo.io'))return new Response('private-apollo-key',{status:403});assert.match(String(url),/v2\/account\?/);return response({data:{email:'private-owner@candidate.com',plan_name:'Free'}});};
   const result=await checkContactProviders(store,config,fetcher);assert.equal(result.checks[0].httpStatus,403);assert.equal(result.checks[1].ok,true);assert.equal(calls,2);
   await checkContactProviders(store,config,fetcher);assert.equal(calls,2);assert.equal(store.db.prepare('SELECT count(*) AS n FROM provider_requests').get().n,0);assert.equal(store.state.contacts.length,0);
   const body=JSON.stringify(result);for(const secret of ['private-apollo-key','private-hunter-key','private-owner@candidate.com'])assert.ok(!body.includes(secret));

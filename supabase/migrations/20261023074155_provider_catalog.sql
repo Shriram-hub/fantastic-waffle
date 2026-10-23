@@ -1,0 +1,18 @@
+CREATE TABLE IF NOT EXISTS orbit_runtime.provider_credentials(id TEXT PRIMARY KEY,secret TEXT NOT NULL,updated_at BIGINT NOT NULL);
+CREATE TABLE IF NOT EXISTS orbit_runtime.job_catalog(id TEXT PRIMARY KEY,canonical_key TEXT NOT NULL UNIQUE,source TEXT NOT NULL,board TEXT NOT NULL DEFAULT '',work_mode TEXT NOT NULL DEFAULT '',search_terms TEXT NOT NULL,scope TEXT NOT NULL,score INTEGER NOT NULL DEFAULT 0,tier TEXT NOT NULL,eligible INTEGER NOT NULL DEFAULT 0,recommendable INTEGER NOT NULL DEFAULT 0,archived INTEGER NOT NULL DEFAULT 0,published_at BIGINT NOT NULL DEFAULT 0,seen_at BIGINT NOT NULL,body TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS catalog_rank ON orbit_runtime.job_catalog(scope,archived,score DESC,published_at DESC,id);
+CREATE INDEX IF NOT EXISTS catalog_source ON orbit_runtime.job_catalog(source,board,seen_at);
+CREATE INDEX IF NOT EXISTS catalog_all_rank ON orbit_runtime.job_catalog(archived,score DESC,published_at DESC,id);
+CREATE TABLE IF NOT EXISTS orbit_runtime.directory_sync(id TEXT PRIMARY KEY,status TEXT NOT NULL,body TEXT NOT NULL,updated_at BIGINT NOT NULL);
+REVOKE ALL ON orbit_runtime.provider_credentials FROM PUBLIC,anon,authenticated;
+GRANT SELECT,INSERT,UPDATE,DELETE ON orbit_runtime.provider_credentials TO orbit_app;
+ALTER TABLE orbit_runtime.provider_credentials ENABLE ROW LEVEL SECURITY;
+CREATE POLICY orbit_private_server ON orbit_runtime.provider_credentials FOR ALL TO orbit_app USING(true) WITH CHECK(true);
+REVOKE ALL ON orbit_runtime.job_catalog FROM PUBLIC,anon,authenticated;
+GRANT SELECT,INSERT,UPDATE,DELETE ON orbit_runtime.job_catalog TO orbit_app;
+ALTER TABLE orbit_runtime.job_catalog ENABLE ROW LEVEL SECURITY;
+CREATE POLICY orbit_private_server ON orbit_runtime.job_catalog FOR ALL TO orbit_app USING(true) WITH CHECK(true);
+REVOKE ALL ON orbit_runtime.directory_sync FROM PUBLIC,anon,authenticated;
+GRANT SELECT,INSERT,UPDATE,DELETE ON orbit_runtime.directory_sync TO orbit_app;
+ALTER TABLE orbit_runtime.directory_sync ENABLE ROW LEVEL SECURITY;
+CREATE POLICY orbit_private_server ON orbit_runtime.directory_sync FOR ALL TO orbit_app USING(true) WITH CHECK(true);

@@ -1,4 +1,9 @@
 import {workerHeartbeat} from './services/worker-health.mjs';
+import {effectiveProviderConfig} from './services/provider-config.mjs';
+import {discoverBulkBatch} from './services/bulk-harvest.mjs';
+import {scheduleCatalog,importWorkspaceCatalog,rescoreCatalog} from './services/job-catalog.mjs';
+import {syncDirectories} from './providers/jobs/directory.mjs';
+import {buildSearchPlan} from './services/search-plan.mjs';
 import { resumeHash, hydrateResume, persistResume } from "./services/resume-storage.mjs";
 import { pathToFileURL } from "node:url";
 import { setTimeout as pause } from "node:timers/promises";
@@ -24,11 +29,15 @@ import { syncMailbox, watchMailbox } from "./providers/mail/inbox.mjs";
 import { ingestMessage, shouldClassify, scheduleMailboxSync } from "./services/inbox.mjs";
 import { deliverTask } from "./services/outreach.mjs";
 import { scheduleAutopilot, ensureSearchMatrix, discoverJobs, enrichCompany, draftPitches } from "./services/autopilot.mjs";
-import {scheduleDiscovery,discoverBatch} from './services/discovery.mjs';
+import {scheduleDiscovery,discoverBatch,getSearchConfig} from './services/discovery.mjs';
 import {verifyBoard} from './providers/jobs/registry.mjs';
 import {hydrateJobDetail,semanticJobHash} from './services/job-details.mjs';
 import { fail, hash, now } from "./domain.mjs";
-export function handlers(store, queue, config = {}, fetcher = fetch, dependencies = {}) {
+export function handlers(store,queue,config={},fetcher=fetch,dependencies={}) {
+  const registry=providerHandlers(store,queue,config,fetcher,dependencies);
+  return Object.fromEntries(Object.keys(registry).map(kind=>[kind,async task=>providerHandlers(store,queue,await effectiveProviderConfig(store,config),fetcher,dependencies)[kind](task)]));
+}
+function providerHandlers(store, queue, config = {}, fetcher = fetch, dependencies = {}) {
   const find = (values, id) => {
     const v = values.find(v => v.id === id);
     if (!v) fail("The target record no longer exists.", 404);
@@ -58,7 +67,7 @@ export function handlers(store, queue, config = {}, fetcher = fetch, dependencie
     async 'mail.test-send'(task) {
       const a=await store.db.prepare('SELECT id,email,metadata FROM mail_accounts WHERE id=?').get(task.payload.accountId);if(!a)return {status:'cancelled'};
       let result;
-      try{result=await sendNative({to:a.email,subject:'Veloce AI connection test',body:'Your connected mailbox can send through Veloce AI. This test was requested from Connections and sent only to your own address.',messageKey:task.id},a.id,store,config,null,fetcher);}
+      try{result=await sendNative({to:a.email,subject:'Veloce connection test',body:'Your connected mailbox can send through Veloce. This test was requested from Connections and sent only to your own address.',messageKey:task.id},a.id,store,config,null,fetcher);}
       catch(error){result={status:'failed',error:error.status ? error.message : 'Mailbox connection failed. Reconnect OAuth in Connections.'};}
       const row=await store.db.prepare('SELECT metadata FROM mail_accounts WHERE id=?').get(a.id);if(row){const meta=JSON.parse(row.metadata);meta.connectionTests={...meta.connectionTests,send:{at:now(),...result}};await store.db.prepare('UPDATE mail_accounts SET metadata=? WHERE id=?').run(JSON.stringify(meta),a.id);}
       return result;
@@ -74,6 +83,10 @@ export function handlers(store, queue, config = {}, fetcher = fetch, dependencie
     async 'documents.build'(task){return buildJobDocuments(task,store,queue,config,fetcher);},
     async 'career.prep'(task){return buildInterviewPrep(task,store,queue,config,fetcher);},
     async 'contacts.discover'(task){return discoverCompanyTask(task,store,queue,config,fetcher,dependencies);},
+    async 'contacts.bulk'(task){return discoverBulkBatch(task,store,queue,config,fetcher,dependencies);},
+    async 'catalog.import'(){return importWorkspaceCatalog(store,buildSearchPlan(store.state,await getSearchConfig(store)),config);},
+    async 'catalog.rescore'(task){return rescoreCatalog(task,store,queue,buildSearchPlan(store.state,await getSearchConfig(store)));},
+    async 'directory.sync'(task){return syncDirectories(store,queue,fetcher,task.id);},
     async 'profile.import'(task) {
       const parsed=await parseResumeAsync(await hydrateResume(task.payload.file,store,config));
       await store.refresh();
@@ -363,6 +376,7 @@ export async function startWorker(config = process.env) {
     queue = taskQueue(store),
     registry = handlers(store, queue, config);
   store.releaseRoot?.();
+  if(config.JOB_CATALOG_ENABLED==='true')await store.run(async()=>scheduleCatalog(store,queue,config,buildSearchPlan(store.state,await getSearchConfig(store))));
   let stopping = false;
   let wake,wakeRequested=false;
   const onWake=message=>{if(message?.type==='queue-wake'){wakeRequested=true;wake?.();}};
@@ -390,7 +404,7 @@ export async function startWorker(config = process.env) {
     });
     redisWorker.on("error", () => console.error("Redis worker connection error; durable tasks remain in the database."));
   }
-  console.log(`Veloce AI worker started (${config.REDIS_URL ? "BullMQ + Redis" : `durable ${store.kind || "SQLite"} queue`}).`);
+  console.log(`Veloce worker started (${config.REDIS_URL ? "BullMQ + Redis" : `durable ${store.kind || "SQLite"} queue`}).`);
   let lastRecovery=0;
   while (!stopping) {
     if (Date.now()-lastRecovery>60000) {
@@ -404,6 +418,7 @@ export async function startWorker(config = process.env) {
           await scheduleDiscovery(store,queue,config);
           await scheduleAutopilot(store,queue,config);
           await scheduleMailboxSync(store,queue);
+          await scheduleCatalog(store,queue,config,buildSearchPlan(store.state,await getSearchConfig(store)));
         });
       }
       catch { console.error("Autopilot schedule unavailable; durable work will be retried."); }

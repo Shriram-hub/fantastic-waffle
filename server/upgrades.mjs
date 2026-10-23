@@ -1,4 +1,5 @@
 import {sameApplicationLocation,sameApplicationHost} from '../extension/location.mjs';
+import {connectionRoutes} from './connection-routes.mjs';
 import {redeemPackage} from './services/extension-pairing.mjs';
 import {mailCheckRoutes} from './mail-check-routes.mjs';
 import {jobPitchRoutes} from './job-pitch-routes.mjs';
@@ -59,6 +60,7 @@ export function upgradeRoutes(store, config, fetcher) {
   const enqueue = async (res, json, kind, payload, options) => json(res, 202, {
     task: await queue.enqueue(kind, payload, options)
   });
+  const connections=connectionRoutes(store,config,fetcher);
   const autopilot = autopilotRoutes(store,queue,config,fetcher);
   const discovery = discoveryRoutes(store,config);
   const candidate=candidateRoutes(store,queue,config,fetcher);
@@ -274,6 +276,7 @@ export function upgradeRoutes(store, config, fetcher) {
     bodyJSON
   }) {
     if(await mailChecks(req,res,u,{json,bodyJSON}))return true;
+    if(await connections(req,res,u,{json,bodyJSON}))return true;
     if(await jobPitches(req,res,u,{json,bodyJSON}))return true;
     if(await maintenance(req,res,u,{json,bodyJSON}))return true;
     if (await notifications(req,res,u,{json,bodyJSON})) return true;

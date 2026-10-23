@@ -154,7 +154,7 @@ export function initialState(demo = true) {
         isDemo: true,
         url: "",
         publishedAt: new Date(Date.now() - i * 11 * 3600_000).toISOString(),
-        description: `This fictional ${j[1]} role at ${j[0]} demonstrates the Veloce AI workflow. Collaborate with a thoughtful team, take ownership of meaningful work, and develop your craft. Relevant skills include ${j[5].join(", ")}. Sample compensation is illustrative. This is not a live vacancy.`,
+        description: `This fictional ${j[1]} role at ${j[0]} demonstrates the Veloce workflow. Collaborate with a thoughtful team, take ownership of meaningful work, and develop your craft. Relevant skills include ${j[5].join(", ")}. Sample compensation is illustrative. This is not a live vacancy.`,
       }))
     : [];
   const contacts = demo

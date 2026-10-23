@@ -215,7 +215,7 @@ test('company logos use bounded provider raster assets without opening an arbitr
 });
 test('floating copilot mounts an accessible open Shadow DOM without inserting global host-page CSS',async()=>{
   const source=await readFile(new URL('../extension/copilot.js',import.meta.url),'utf8'),dom=new JSDOM('<style>button {font-size:80px!important}</style><p>Host application</p>',{url:'https://jobs.lever.co/example/role',runScripts:'outside-only'});
-  try{dom.window.eval(source);const host=dom.window.document.getElementById('orbit-career-copilot');assert.ok(host.shadowRoot);assert.equal(host.shadowRoot.mode,'open');assert.match(host.shadowRoot.querySelector('#launch').textContent,/Veloce AI/);assert.match(host.shadowRoot.querySelector('style').textContent,/:host\{all:initial/);assert.equal(dom.window.document.querySelectorAll('style').length,1);assert.equal(host.style.getPropertyPriority('z-index'),'important');}finally{dom.window.close();}
+  try{dom.window.eval(source);const host=dom.window.document.getElementById('orbit-career-copilot');assert.ok(host.shadowRoot);assert.equal(host.shadowRoot.mode,'open');assert.match(host.shadowRoot.querySelector('#launch').textContent,/Veloce/);assert.match(host.shadowRoot.querySelector('style').textContent,/:host\{all:initial/);assert.equal(dom.window.document.querySelectorAll('style').length,1);assert.equal(host.style.getPropertyPriority('z-index'),'important');}finally{dom.window.close();}
 });
 
 test('authenticated SSE connections create long-lived timers outside the workspace snapshot',async t=>{

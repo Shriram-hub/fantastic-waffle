@@ -127,7 +127,7 @@ export default function App() {
   if (!data)
     return (
       <div className="loading">
-        <BrandMark size={48}/><span className="logo-word">Veloce AI</span>
+        <BrandMark size={48}/><span className="logo-word">Veloce</span>
         <p>Getting your workspace ready…</p>
       </div>
     );
@@ -162,14 +162,14 @@ export default function App() {
       connections: Connections,
       career:CareerWorkspace,
     }[route] || Overview;
-  const brand={...DEFAULT_BRAND,...data.settings.brand};
+  const brand={...DEFAULT_BRAND,...data.settings.brand};if(brand.name==='Veloce AI')brand.name=DEFAULT_BRAND.name;
   const mailbox=accounts[0];
   return <Context.Provider value={app}>
     <a className="skip-link" href="#main" onClick={e=>{e.preventDefault();document.getElementById('main')?.focus();}}>Skip to content</a>
     <div className={`layout ${collapsed ? 'is-collapsed' : ''}`}>
       {mobile && <button className="nav-backdrop" aria-label="Close navigation" onClick={()=>setMobile(false)}/>}
       <aside className={`sidebar ${mobile ? 'open' : ''}`}>
-        <div className="brand"><BrandMark/><div className="brand-copy"><strong>{brand.name}</strong><small>CAREER & OUTREACH OS</small></div><button className="icon-button collapse-sidebar" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} onClick={()=>setCollapsed(v=>!v)}><Icon name="sidebar"/></button></div>
+        <div className="brand"><BrandMark/><div className="brand-copy"><strong>{brand.name}</strong><small>CANDIDATE PIPELINE</small></div><button className="icon-button collapse-sidebar" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} onClick={()=>setCollapsed(v=>!v)}><Icon name="sidebar"/></button></div>
         <button className="workspace-switch" onClick={()=>go('connections')} title="Workspace settings"><span className="workspace-mark">{(data.profile.name || 'My').slice(0,1)}</span><span className="workspace-copy"><strong>{data.profile.name ? `${data.profile.name.split(' ')[0]}’s workspace` : 'My workspace'}</strong><small>{data.isDemo ? 'Sample environment' : 'Personal workspace'}</small></span><span className="workspace-arrow">⌄</span></button>
         <div className="nav-scroll"><nav className="nav" aria-label="Workspace">{navGroups.map(group=><div className="nav-group" key={group.label}><p className="nav-label">{group.label}</p>{group.routes.map(key=>{const count=navigationCount(key,app);return <button key={key} className={`nav-item ${route===key ? 'active' : ''}`} onClick={()=>go(key)} aria-current={route===key ? 'page' : undefined} title={names[key]}><Icon name={key}/><span className="nav-name">{names[key]}</span>{count>0 && <span className="nav-count">{count>999 ? '999+' : count}</span>}</button>;})}</div>)}</nav></div>
         <button className="sidebar-command" onClick={()=>setPalette(true)} title="Search workspace"><Icon name="command"/><span>Search anything</span><kbd>⌘ K</kbd></button>
@@ -177,11 +177,11 @@ export default function App() {
       </aside>
       <div className="main-shell" inert={mobile ? true : undefined}><header className="topbar">
         <div className="topbar-location"><button className="icon-button mobile-only" onClick={()=>setMobile(v=>!v)} aria-label="Toggle navigation" aria-expanded={mobile}><Icon name="sidebar"/></button><span className="crumb"><span>Workspace</span><span className="crumb-divider">/</span><strong>{names[route] || 'Overview'}</strong></span></div>
-        <div className="topbar-actions"><WorkerStatus/><button className="command-trigger" onClick={()=>setPalette(true)} aria-label="Open command palette"><Icon name="jobs" size={16}/><span>Search</span><kbd>⌘ K</kbd></button><button className="provider-pill" title={mailbox ? `${mailbox.email} · ${setup.aiConfigured ? setup.geminiConfigured ? 'Gemini configured' : 'AI configured' : 'AI not configured'}` : 'Connect your mailbox and AI provider'} onClick={()=>go('connections')}><span className={`status-dot ${mailbox ? '' : 'warning'}`}/><span>{mailbox ? mailbox.provider==='google' ? 'Gmail' : 'Outlook' : 'No mailbox'}<span className="pill-divider">/</span>{setup.aiConfigured ? setup.geminiConfigured ? 'Gemini' : 'AI ready' : 'No AI'}</span></button><button className="icon-button theme-toggle" aria-label={`Switch to ${theme==='dark' ? 'light' : 'dark'} mode`} title={`Switch to ${theme==='dark' ? 'light' : 'dark'} mode`} onClick={toggleTheme}><Icon name={theme==='dark' ? 'sun' : 'moon'}/></button>{session?.googleConfigured && session.method==='password' && <a className="link-google" href="/api/auth/google/start">{session.googleLinked ? 'Use Google' : 'Link Google'}</a>}{session?.required && <button className="icon-button sign-out" onClick={signOut} title="Sign out" aria-label="Sign out"><Icon name="arrow"/></button>}</div>
+        <div className="topbar-actions"><WorkerStatus/><button className="command-trigger" onClick={()=>setPalette(true)} aria-label="Open command palette"><Icon name="jobs" size={16}/><span>Search</span><kbd>⌘ K</kbd></button><button className="provider-pill" title={mailbox ? `${mailbox.email} · ${setup.aiConfigured ? setup.geminiConfigured ? 'Gemini configured' : 'AI configured' : 'AI not configured'}` : 'Connect your mailbox and model provider'} onClick={()=>go('connections')}><span className={`status-dot ${mailbox ? '' : 'warning'}`}/><span>{mailbox ? mailbox.provider==='google' ? 'Gmail' : 'Outlook' : 'No mailbox'}<span className="pill-divider">/</span>{setup.aiConfigured ? setup.geminiConfigured ? 'Gemini' : 'Model ready' : 'No model'}</span></button><button className="icon-button theme-toggle" aria-label={`Switch to ${theme==='dark' ? 'light' : 'dark'} mode`} title={`Switch to ${theme==='dark' ? 'light' : 'dark'} mode`} onClick={toggleTheme}><Icon name={theme==='dark' ? 'sun' : 'moon'}/></button>{session?.googleConfigured && session.method==='password' && <a className="link-google" href="/api/auth/google/start">{session.googleLinked ? 'Use Google' : 'Link Google'}</a>}{session?.required && <button className="icon-button sign-out" onClick={signOut} title="Sign out" aria-label="Sign out"><Icon name="arrow"/></button>}</div>
       </header><main id="main" tabIndex={-1}>
         {authError && <div className="banner" role="alert">{authError}<button onClick={()=>setAuthError('')}>Dismiss</button></div>}
         {data.isDemo && <div className="banner"><span><strong>Sample workspace.</strong> Jobs, contacts, and events are fictional.</span><button onClick={()=>setModal({type:'reset',demo:false})}>Start my workspace →</button></div>}
-        <View key={route}/><footer className="page-footer"><span>{brand.name} <span className="footer-dot">·</span> Autonomous Career & Cold Outreach OS</span><span><span className={`status-dot ${connected ? '' : 'warning'}`}/>{connected ? 'Workspace synced' : 'Reconnecting live updates'}</span></footer>
+        <View key={route}/><footer className="page-footer"><span>{brand.name} <span className="footer-dot">·</span> Candidate Pipeline & Outbound Desk</span><span><span className={`status-dot ${connected ? '' : 'warning'}`}/>{connected ? 'Workspace synced' : 'Reconnecting live updates'}</span></footer>
       </main></div>
     </div>
     {modal && <ModalContent modal={modal} close={()=>setModal(null)}/>}

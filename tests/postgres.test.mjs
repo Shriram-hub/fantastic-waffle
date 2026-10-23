@@ -7,6 +7,9 @@ import { taskQueue } from '../server/queue.mjs';
 import { createApp } from '../server/index.mjs';
 import { handlers,runOne } from '../server/worker.mjs';
 import { hydrateResume } from '../server/services/resume-storage.mjs';
+import {putCatalogJobs,queryCatalog,importWorkspaceCatalog} from '../server/services/job-catalog.mjs';
+import {buildSearchPlan} from '../server/services/search-plan.mjs';
+import {saveProviderKey,effectiveProviderConfig} from '../server/services/provider-config.mjs';
 function poolFor(db) {
   const query=async(sql,params=[]) => {
     if (!params.length && sql.includes(';')) { const values=await db.exec(sql); const result=values.at(-1);return {rows:result?.rows || [],rowCount:result?.affectedRows || 0}; }
@@ -14,6 +17,16 @@ function poolFor(db) {
   };
   return {query,async connect(){return{query,release(){}};},async end(){}};
 }
+test('Postgres catalogue paging and encrypted credentials persist separately from workspace snapshots',async t=>{
+  const db=new PGlite();t.after(()=>db.close());const pool=poolFor(db),store=await openPostgresStore({},pool),config={TOKEN_ENCRYPTION_KEY:Buffer.alloc(32,2).toString('base64')};
+  const {initialState}=await import('../server/fixtures.mjs');await store.replace(initialState(false));
+  await store.run(async()=>{
+    const plan=buildSearchPlan(store.state,{roles:['Financial Analyst']});await saveProviderKey('serper','pg-private-key',store,config);
+    await putCatalogJobs(Array.from({length:22},(_,i)=>({id:`pg-catalog-${i}`,company:`Company ${i}`,title:'Financial Analyst',description:'Excel forecasting',url:`https://company.com/jobs/${i}`,location:'Remote',workMode:'Remote',source:'Lever'})),plan,store);
+    await importWorkspaceCatalog(store,plan);const first=await queryCatalog(store,plan,{limit:20}),last=await queryCatalog(store,plan,{limit:20,cursor:first.nextCursor});assert.equal(first.total,22);assert.equal(last.jobs.length,2);assert.equal(store.state.jobs.length,0);
+  });
+  const reopened=await openPostgresStore({},pool);assert.equal((await effectiveProviderConfig(reopened,config)).SERPER_API_KEY,'pg-private-key');assert.equal(reopened.state.jobs.length,0);assert.ok(!JSON.stringify(reopened.state).includes('pg-private-key'));
+});
 test('PostgreSQL runtime persists API records, private files, and worker state across connections',async t => {
   const db=new PGlite();t.after(()=>db.close());const pool=poolFor(db);
   const store=await openPostgresStore({},pool),app=createApp({store,config:{}});

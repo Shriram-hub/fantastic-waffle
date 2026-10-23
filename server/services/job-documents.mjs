@@ -34,7 +34,7 @@ export async function selectDocumentEvidence(state,job,useAI,config,fetcher,stor
   return selected;
 }
 export async function renderTextPDF({title,subtitle='',contact='',sections=[]}) {
-  const {default:PDFDocument}=await import('pdfkit'),doc=new PDFDocument({size:'A4',margins:{top:46,bottom:46,left:48,right:48},info:{Title:title,Creator:'Veloce AI'},bufferPages:true});
+  const {default:PDFDocument}=await import('pdfkit'),doc=new PDFDocument({size:'A4',margins:{top:46,bottom:46,left:48,right:48},info:{Title:title,Creator:'Veloce'},bufferPages:true});
   const chunks=[],complete=new Promise((resolve,reject)=>{doc.on('data',chunk=>chunks.push(chunk));doc.on('end',()=>resolve(Buffer.concat(chunks)));doc.on('error',reject);});
   // Fontsource packages split Unicode into separate files. Choose a face per
   // run so rupee signs and Indian names cannot silently turn into empty glyphs.

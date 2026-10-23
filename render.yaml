@@ -18,6 +18,10 @@ services:
         value: 0.0.0.0
       - key: ENABLE_EMBEDDED_WORKER
         value: "true"
+      - key: JOB_CATALOG_ENABLED
+        value: "true"
+      - key: JOB_DATABASE_BUDGET_MB
+        value: "440"
       - key: ENABLE_LIVE_SEND
         value: "false"
       - key: DATABASE_URL

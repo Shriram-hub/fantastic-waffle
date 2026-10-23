@@ -36,7 +36,7 @@ export async function queueAlert(kind,message,key,store,queue) {
 }
 export async function deliverAlert(task,store,config={},fetcher=fetch) {
   const c=store.state.alertConfig;if(!c?.enabled || c.id!==task.payload.configId || !c.events.includes(task.payload.kind))return {status:'cancelled'};
-  const secret=tokenCipher(config).open(c.credentials),message=`Veloce AI · ${task.payload.message}`;
+  const secret=tokenCipher(config).open(c.credentials),message=`Veloce · ${task.payload.message}`;
   let url,body;
   if(c.provider==='discord') {url=`${secret.webhookUrl}?wait=true`;body={content:message,allowed_mentions:{parse:[]}};}
   else if(c.provider==='telegram') {url=`https://api.telegram.org/bot${secret.botToken}/sendMessage`;body={chat_id:secret.chatId,text:message,link_preview_options:{is_disabled:true}};}

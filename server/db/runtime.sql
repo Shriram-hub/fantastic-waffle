@@ -78,3 +78,11 @@ CREATE INDEX IF NOT EXISTS outreach_company_window ON orbit_runtime.outreach_com
 -- Veloce AI: one first-touch reservation per workspace / normalized email / role.
 CREATE TABLE IF NOT EXISTS orbit_runtime.outreach_job_reservations(workspace_id TEXT NOT NULL,contact_email TEXT NOT NULL CHECK(contact_email=lower(trim(contact_email))),job_id TEXT NOT NULL,campaign_id TEXT NOT NULL,task_id TEXT NOT NULL,created_at BIGINT NOT NULL,PRIMARY KEY(workspace_id,contact_email,job_id));
 CREATE TABLE IF NOT EXISTS orbit_runtime.worker_health(id TEXT PRIMARY KEY,status TEXT NOT NULL,heartbeat_at BIGINT NOT NULL);
+
+-- Provider vault and disk-backed discovery catalogue.
+CREATE TABLE IF NOT EXISTS orbit_runtime.provider_credentials(id TEXT PRIMARY KEY,secret TEXT NOT NULL,updated_at BIGINT NOT NULL);
+CREATE TABLE IF NOT EXISTS orbit_runtime.job_catalog(id TEXT PRIMARY KEY,canonical_key TEXT NOT NULL UNIQUE,source TEXT NOT NULL,board TEXT NOT NULL DEFAULT '',work_mode TEXT NOT NULL DEFAULT '',search_terms TEXT NOT NULL,scope TEXT NOT NULL,score INTEGER NOT NULL DEFAULT 0,tier TEXT NOT NULL,eligible INTEGER NOT NULL DEFAULT 0,recommendable INTEGER NOT NULL DEFAULT 0,archived INTEGER NOT NULL DEFAULT 0,published_at BIGINT NOT NULL DEFAULT 0,seen_at BIGINT NOT NULL,body TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS catalog_rank ON orbit_runtime.job_catalog(scope,archived,score DESC,published_at DESC,id);
+CREATE INDEX IF NOT EXISTS catalog_source ON orbit_runtime.job_catalog(source,board,seen_at);
+CREATE INDEX IF NOT EXISTS catalog_all_rank ON orbit_runtime.job_catalog(archived,score DESC,published_at DESC,id);
+CREATE TABLE IF NOT EXISTS orbit_runtime.directory_sync(id TEXT PRIMARY KEY,status TEXT NOT NULL,body TEXT NOT NULL,updated_at BIGINT NOT NULL);

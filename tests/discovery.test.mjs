@@ -1,5 +1,39 @@
 import test from 'node:test';
+import {directoryBoard,syncDirectories,DIRECTORY_SOURCES} from '../server/providers/jobs/directory.mjs';
+import {discoverATSBoards} from '../server/providers/jobs/ats-search.mjs';
+import {pruneSourceCache} from '../server/services/discovery.mjs';
 import assert from 'node:assert/strict';
+
+test('Keka, Darwinbox and Freshteam public responses preserve actual locations, dates and application links',async()=>{
+  const uuid='12345678-1234-1234-1234-123456789abc';
+  const keka=await fetchJobs('Keka','https://company.keka.com/careers',async input=>String(input).endsWith('/careers')?new Response(`<img src="/ats/documents/${uuid}/careerportal/logo.png">`):json([{id:'k1',title:'Financial Analyst',description:'<p>Forecasting</p>',jobLocations:[{city:'Mumbai',countryName:'India'}],publishedOn:'2026-10-22',skillNames:['Excel']} ]));
+  assert.equal(keka[0].url,'https://company.keka.com/careers/jobdetails/k1');assert.equal(keka[0].description,'Forecasting');assert.equal(keka[0].location,'Mumbai, India');assert.deepEqual(keka[0].tags,['Excel']);
+  const darwin=await fetchJobs('Darwinbox','https://company.darwinbox.in/ms/candidate/careers',async(input,options)=>{assert.match(String(input),/\/ms\/candidateapi\/job\/alljobs\?companyId=main$/);assert.deepEqual(JSON.parse(options.body),{companyId:'main',page:4,sort_option:'new',limit:10});return json({status:'success',job_counts:100,data:Array.from({length:10},(_,i)=>({id:`d${i}`,designation_display_name:'Financial Analyst',locations:'Mumbai',jd:'<p>Finance reporting</p>',posted_on:'2026-10-22',is_remote:'0'}))});},{ATS_PAGE:4});
+  assert.equal(darwin[0].description,'Finance reporting');assert.equal(darwin[0].workMode,'On-site');assert.equal(darwin.pagination.nextPage,5);assert.equal(darwin.pagination.hasMore,true);
+  const fresh=await fetchJobs('Freshteam','https://company.freshteam.com/jobs',async input=>{assert.equal(String(input),'https://company.freshteam.com/hire/widgets/jobs.json');return json([{id:'f1',title:'Accountant',location:{city:'Delhi',country:'India'},description:'Accounting'}]);});assert.equal(fresh[0].company,'company');assert.equal(fresh[0].location,'Delhi, India');
+  await assert.rejects(fetchJobs('Keka','https://127.0.0.1/careers'),/supported/);
+  await assert.rejects(fetchJobs('Darwinbox','https://company.darwinbox.in/ms/candidate/careers',async()=>new Response('CAPTCHA',{status:403})),/HTTP 403/);
+});
+
+test('Amazon, Workday and SmartRecruiters pagination continues past the old shallow-page limit',async()=>{
+  const amazon=await fetchJobs('Amazon Jobs','Financial Analyst',async input=>{const u=new URL(input);assert.equal(u.searchParams.get('offset'),'300');assert.equal(u.searchParams.get('result_limit'),'100');assert.equal(u.searchParams.get('loc_query'),'Mumbai');return json({hits:1000,jobs:Array.from({length:100},(_,i)=>({id:`a${i}`,title:'Financial Analyst',job_path:`/en/jobs/a${i}`,location:'Mumbai, India',description:'Finance',posted_date:'2026-10-22'}))});},{ATS_PAGE:4,SEARCH_LOCATION:'Mumbai'});assert.equal(amazon.pagination.hasMore,true);assert.equal(amazon[0].url,'https://www.amazon.jobs/en/jobs/a0');
+  const workday=await fetchJobs('Workday','https://company.wd1.myworkdayjobs.com/External',async(_input,options)=>{assert.equal(JSON.parse(options.body).offset,180);return json({total:220,jobPostings:Array.from({length:20},(_,i)=>({title:'Analyst',externalPath:`/job/analyst-${i}`,locationsText:'Mumbai'}))});},{ATS_PAGE:10});assert.equal(workday.pagination.nextPage,11);assert.equal(workday.pagination.hasMore,true);
+  const smart=await fetchJobs('SmartRecruiters','Company',async input=>{assert.equal(new URL(input).searchParams.get('offset'),'900');return json({totalFound:1001,content:Array.from({length:100},(_,i)=>({id:i+1,name:'Analyst'}))});},{ATS_PAGE:10});assert.equal(smart.pagination.hasMore,true);assert.equal(smart.pagination.nextPage,11);
+});
+
+test('streamed community directories deduplicate candidates, record attribution and never assert live validation',async t=>{
+  const store=clean(t),queue=taskQueue(store),source=DIRECTORY_SOURCES[0];
+  assert.equal(directoryBoard({provider:'greenhouse',slug:'company',name:'Company',status:'ok'},source).license,'CC0-1.0');
+  assert.equal(directoryBoard({url:'http://localhost/jobs'},source),null);
+  const result=await syncDirectories(store,queue,async input=>String(input).endsWith('.gz')?new Response(gzipSync(JSON.stringify({provider:'greenhouse',slug:'company',name:'Company',status:'ok'})+'\n')):new Response('name,url\n"Company, Ltd",https://company.keka.com/careers\n'));
+  assert.equal(result.companies,2);assert.equal(result.failures.length,0);assert.ok(store.db.prepare('SELECT status FROM discovered_boards').all().every(r=>r.status==='candidate'));
+  assert.ok((await knownBoards(store)).some(b=>b.source==='Keka' && b.company==='Company, Ltd'));assert.equal(store.state.jobs.length,0);
+});
+
+test('Serper ATS search recognizes supported career boards and source cache maintenance is bounded',async t=>{
+  const found=await discoverATSBoards('Analyst','Mumbai',{SERPER_API_KEY:'test'},async(_u,options)=>{assert.match(JSON.parse(options.body).q,/site:keka.com/);return json({organic:[{link:'https://company.keka.com/careers/jobdetails/1'},{link:'https://jobs.lever.co/company/1'},{link:'https://www.linkedin.com/in/someone'}]});});assert.deepEqual(found.map(b=>b.source),['Keka','Lever']);
+  const store=clean(t);for(let i=0;i<5;i++)store.db.prepare('INSERT INTO job_source_cache(id,expires_at,body) VALUES(?,?,?)').run(`cache-${i}`,Date.now()+i,'x'.repeat(100));await pruneSourceCache(store,200);assert.ok(store.db.prepare('SELECT SUM(length(body)) AS n FROM job_source_cache').get().n<=200);
+});
 import {openStore} from '../server/store.mjs';
 import {initialState} from '../server/fixtures.mjs';
 import {taskQueue} from '../server/queue.mjs';
@@ -86,10 +120,10 @@ test('snippet sources cannot replace a complete cached description or its observ
   const expired={...complete,id:'expired',company:'Expired Co',expiresAt:'2025-01-01T00:00:00Z'};
   assert.equal(mergeDiscoveryResults(initialState(false),[{descriptor:{source:'Lever',board:'stripe'},jobs:[expired]}],plan).jobs[0].archived,true);
 });
-test('LinkedIn fetches three pages concurrently with freshness parameters, deduplicates, and retains partial successful pages',async()=>{
+test('LinkedIn fetches five pages concurrently with freshness parameters, deduplicates, and retains partial successful pages',async()=>{
   const starts=[];let active=0,peak=0;
   const jobs=await fetchLinkedInGuest('Analyst',{freshness:'24h'},async input=>{const u=new URL(input),start=u.searchParams.get('start');starts.push(start);assert.equal(u.searchParams.get('f_TPR'),'r86400');active++;peak=Math.max(peak,active);await new Promise(r=>setTimeout(r,10));active--;if(start==='50')return new Response('blocked',{status:403});return new Response(`<li><a class="base-card__full-link" href="https://www.linkedin.com/jobs/view/analyst-${start}"></a><h3 class="base-search-card__title">Analyst</h3><h4 class="base-search-card__subtitle">Company</h4></li>`);});
-  assert.deepEqual(starts,['0','25','50']);assert.equal(jobs.length,2);assert.equal(peak,3);
+  assert.deepEqual(starts,['0','25','50','75','100']);assert.equal(jobs.length,4);assert.equal(peak,5);
   const clock=Date.parse('2026-10-22T12:00:00Z');
   assert.equal(jobFreshness({publishedAt:'2026-10-22T10:00:00Z'},clock).firstMover,true);
   for(const fixture of [{fetchedAt:'2026-10-22T11:00:00Z'},{publishedAt:'2026-10-20T10:00:00Z'},{publishedAt:'2026-10-23T10:00:00Z'},{source:'Greenhouse',publishedAt:'2026-10-22T10:00:00Z'}])assert.equal(jobFreshness(fixture,clock).firstMover,false);

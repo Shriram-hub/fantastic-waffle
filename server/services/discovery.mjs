@@ -9,15 +9,24 @@ import {activity,getPolicy,profileScope} from './autopilot-policy.mjs';
 import {knownBoards,rememberBoards} from '../providers/jobs/registry.mjs';
 import {providerCall} from './provider-budget.mjs';
 import {crawlCareerPage} from '../providers/jobs/career-pages.mjs';
-import {boardURL} from '../providers/jobs/ats-search.mjs';
+import {boardURL,discoverATSBoards} from '../providers/jobs/ats-search.mjs';
 import {compactRank,rankedMatch} from './job-feed.mjs';
+import {putCatalogJobs,catalogReady,catalogStats,compactWorkspace,CATALOG_CAPACITY,scheduleCatalog,archiveMissingCatalogJobs} from './job-catalog.mjs';
 
 export const DISCOVERY_INTERVAL=2*3600000;
 // Keep retained provider payloads small enough for Render's shared free instance.
 const BATCH_SIZE=4;
 export const MAX_INDEX=15000;
 const sourceKey=d=>hash([d.source,d.board,d.page || 1,d.location || '',d.country || '',d.query || '',d.freshness || '7d']);
-export const SOURCE_DEFAULTS=Object.freeze({'Remotive':true,'Arbeitnow':true,'Remote OK':true,'Jobicy':true,'Himalayas':true,'Greenhouse':true,'Lever':true,'Ashby':true,'Google Jobs':false,'LinkedIn Guest':true,'India & finance boards':true,'SmartRecruiters':true,'Workable':true,'Recruitee':true,'Lever EU':true,'Workday':true,'The Muse':true,'Career Pages':true,'VC Portfolios':true,'Adzuna':false});
+const cacheCleanups=new WeakMap();
+export async function pruneSourceCache(store,ceiling=32*1048576) {
+  if((cacheCleanups.get(store) || 0)>Date.now())return;
+  cacheCleanups.set(store,Date.now()+10*60000);
+  await store.db.prepare('DELETE FROM job_source_cache WHERE expires_at<?').run(Date.now()-86400000);
+  let bytes=Number((await store.db.prepare('SELECT SUM(length(body)) AS bytes FROM job_source_cache').get()).bytes || 0);
+  while(bytes>ceiling){const page=await store.db.prepare('SELECT id,length(body) AS bytes FROM job_source_cache ORDER BY expires_at,id LIMIT 100').all();if(!page.length)break;const ids=[];for(const row of page){ids.push(row.id);bytes-=Number(row.bytes);if(bytes<=ceiling)break;}await store.db.prepare(`DELETE FROM job_source_cache WHERE id IN (${ids.map(()=>'?').join(',')})`).run(...ids);}
+}
+export const SOURCE_DEFAULTS=Object.freeze({'Remotive':true,'Arbeitnow':true,'Remote OK':true,'Jobicy':true,'Himalayas':true,'Greenhouse':true,'Lever':true,'Ashby':true,'Google Jobs':false,'LinkedIn Guest':true,'India & finance boards':true,'SmartRecruiters':true,'Workable':true,'Recruitee':true,'Lever EU':true,'Workday':true,'The Muse':true,'Career Pages':true,'VC Portfolios':true,'Adzuna':false,'Keka':true,'Darwinbox':true,'Freshteam':true,'Zoho Recruit':true,'Amazon Jobs':true,'ATS Directory Search':true});
 export async function getSearchConfig(store) {
   const row=await store.db.prepare("SELECT body FROM job_search_config WHERE id='local'").get();
   const p=store.state.profile;
@@ -38,6 +47,7 @@ export async function saveSearchConfig(data,store,queue,config={}) {
   // Explicit preferences update only search-related profile fields.
   Object.assign(store.state.profile,{interests:next.roles,location:next.location,workMode:next.workMode});
   await store.save();
+  await scheduleCatalog(store,queue,config,buildSearchPlan(store.state,next));
   if(next.enabled) await scheduleDiscovery(store,queue,config,true);
   return next;
 }
@@ -90,14 +100,15 @@ export function sourcePlan(plan,settings,prefs,registry=[]) {
     return (roles.length ? roles : ['']).flatMap(query=>(['Workday','SmartRecruiters'].includes(b.source)?[1,2,3]:[1]).map(page=>({source:b.source,board:b.slug,page,query,ttl:DISCOVERY_INTERVAL,company:b.company,companyDomain:b.companyDomain})));
   });
   const regional=plan.country==='IN' && prefs.sources['India & finance boards'] ? locations.slice(0,3).map(location=>({source:'India & finance boards',board:`(${plan.roles.slice(0,4).map(role=>`"${role.replaceAll('"','')}"`).join(' OR ')})${plan.experience==='Internship' ? ' (intern OR internship OR trainee)' : ''}`,location,country:'IN',ttl:24*3600000})) : [];
-  return [...paid.slice(0,2),...regional,...paid.slice(2),...guest,...publicSources,...muse,...adzuna,...vc,...catalog].filter(d=>prefs.sources[d.source]);
+  const enterprise=pairs.slice(0,6).map(pair=>({source:'Amazon Jobs',...pair,ttl:DISCOVERY_INTERVAL}));
+  return [...paid.slice(0,2),...regional,...paid.slice(2),...guest,...publicSources,...muse,...adzuna,...enterprise,...pairs.slice(0,4).map(pair=>({source:'ATS Directory Search',...pair,ttl:86400000})),...vc,...catalog].filter(d=>prefs.sources[d.source]);
 }
 async function fetchSource(descriptor,store,config,fetcher,plan,queue) {
   const {source,board,ttl,page}=descriptor,key=sourceKey(descriptor);
-  let jobs,cached=false;
+  let jobs,pagination,cached=false;
   const cache=await store.db.prepare('SELECT body,expires_at FROM job_source_cache WHERE id=?').get(key);
   if(cache?.expires_at>Date.now()) {
-    try {jobs=JSON.parse(gunzipSync(Buffer.from(cache.body,'base64'),{maxOutputLength:16000000}).toString());cached=true;} catch {}
+    try {const data=JSON.parse(gunzipSync(Buffer.from(cache.body,'base64'),{maxOutputLength:16000000}).toString());jobs=Array.isArray(data)?data:data.jobs;pagination=data.pagination;cached=Array.isArray(jobs);} catch {}
   }
   if(!jobs) {
     const existingSync=store.state.syncs[`${source}:${board}`];
@@ -112,6 +123,13 @@ async function fetchSource(descriptor,store,config,fetcher,plan,queue) {
       await rememberBoards(found.boards.map(b=>({url:boardURL(b)})),store,queue);
       jobs=found.jobs.map(j=>({...j,source,board}));
       if(!jobs.length && !found.boards.length)fail('Public page has no readable JobPosting data or supported ATS links. Other sources continue.',422);
+    } else if(source==='ATS Directory Search') {
+      let discovered=[],lastError;
+      const providers=[config.SERPER_API_KEY && 'Serper',config.TAVILY_API_KEY && 'Tavily',config.SERPAPI_API_KEY && 'SerpApi'].filter(Boolean);
+      if(!providers.length)fail('Add Serper or Tavily to expand the employer directory from web search. Public feeds continue.',503);
+      for(const provider of providers)try{const credential=config[({Serper:'SERPER_API_KEY',Tavily:'TAVILY_API_KEY',SerpApi:'SERPAPI_API_KEY'})[provider]];discovered=await providerCall(store,`ats-search:${hash(credential)}:${key}:${Math.floor(Date.now()/86400000)}`,provider,provider==='SerpApi'?Math.min(30,Number(config.JOB_SEARCH_API_DAILY_LIMIT)||6):Math.min(500,Number(config.CONTACT_SEARCH_DAILY_LIMIT)||100),()=>discoverATSBoards(board,descriptor.location,{...config,ATS_DISCOVERY_PROVIDER:provider},fetcher));lastError=null;break;}catch(error){lastError=error;}
+      if(lastError)throw lastError;
+      await rememberBoards(discovered.map(b=>({url:boardURL(b)})),store,queue);jobs=[];
     } else if(source==='India & finance boards') {
       if(!config.SERPAPI_API_KEY)fail('Configure SERPAPI_API_KEY for indexed regional-board discovery. Free feeds continue.',503);
       jobs=await providerCall(store,`regional:${key}:${Math.floor(Date.now()/86400000)}`,'SerpApi',Math.max(1,Math.min(30,Number(config.JOB_SEARCH_API_DAILY_LIMIT)||6)),()=>fetchSourceJobs());
@@ -124,14 +142,16 @@ async function fetchSource(descriptor,store,config,fetcher,plan,queue) {
       }
       if(!jobs) throw lastError;
     } else jobs=await fetchSourceJobs();
-    jobs=jobs.map(j=>({...j,description:text(j.description,10000),descriptionSourceTruncated:(j.description?.length || 0)>10000,...(descriptor.company ? {company:descriptor.company,companyDomain:descriptor.companyDomain,companyDomainSource:'provider'} : {})}));
+    pagination=jobs.pagination;
+    jobs=jobs.map(j=>({...j,description:text(j.description,10000),descriptionSourceTruncated:(j.description?.length || 0)>10000,...(descriptor.company ? {company:descriptor.company,...(descriptor.companyDomain?{companyDomain:descriptor.companyDomain,companyDomainSource:'provider'}:{})} : {})}));
     await store.db.prepare('INSERT INTO job_source_cache(id,expires_at,body) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET expires_at=excluded.expires_at,body=excluded.body')
-      .run(key,Date.now()+ttl,gzipSync(JSON.stringify(jobs)).toString('base64'));
+      .run(key,Date.now()+ttl,gzipSync(JSON.stringify(pagination?{jobs,pagination}:jobs)).toString('base64'));
   }
   const matched=jobs.filter(j=>rankOpportunity(j,plan).recommendable).length;
   await store.db.prepare("INSERT INTO job_source_health(id,source,board,checked_at,status,scanned,matched,message) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET checked_at=excluded.checked_at,status=excluded.status,scanned=excluded.scanned,matched=excluded.matched,message=excluded.message")
     .run(key,source,board,Date.now(),cached ? 'cached' : 'healthy',jobs.length,matched,null);
-  return {descriptor,jobs:jobs.map(j=>compactIndexedJob(j,plan,key)),cached,key};
+  await store.db.prepare("UPDATE discovered_boards SET status='active',checked_at=? WHERE source=? AND slug=?").run(Date.now(),source,board);
+  return {descriptor,jobs:jobs.map(j=>compactIndexedJob(j,plan,key)),cached,key,pagination};
 }
 export function mergeDiscoveryResults(state,results,plan) {
   const map=new Map(state.jobs.filter(j=>!j.isDemo).map(j=>[canonicalJobKey(j),j]));
@@ -171,6 +191,7 @@ export function mergeDiscoveryResults(state,results,plan) {
   return {jobs:kept,added:kept.filter(j=>!before.has(canonicalJobKey(j))).length};
 }
 export async function discoverBatch(task,store,queue,config={},fetcher=fetch) {
+  await pruneSourceCache(store);
   await store.refresh();
   const prefs=await getSearchConfig(store),plan=buildSearchPlan(store.state,prefs);
   const row=await store.db.prepare('SELECT * FROM job_search_runs WHERE id=?').get(task.payload.runId);
@@ -185,7 +206,7 @@ export async function discoverBatch(task,store,queue,config={},fetcher=fetch) {
   progress.descriptors=descriptors;
   await store.db.prepare("UPDATE job_search_runs SET status='running',updated_at=? WHERE id=?").run(Date.now(),row.id);
   const results=[];let next=0,failed=0,activeFetches=0;const waiting=[];
-  // Fan-out adapters (including three LinkedIn pages) share the worker's two
+  // Fan-out adapters (including five LinkedIn pages) share the worker's two
   // network slots instead of multiplying global concurrency per source.
   const limitedFetch=async(url,options={})=>{
     if(activeFetches>=2)await new Promise(resolve=>waiting.push(resolve));
@@ -200,6 +221,7 @@ export async function discoverBatch(task,store,queue,config={},fetcher=fetch) {
       try {results.push(await fetchSource(descriptor,store,config,limitedFetch,plan,queue));}
       catch(e) {
         failed++;
+        await store.db.prepare("UPDATE discovered_boards SET status='unavailable',checked_at=? WHERE source=? AND slug=?").run(Date.now(),descriptor.source,descriptor.board);
         await store.db.prepare("INSERT INTO job_source_health(id,source,board,checked_at,status,scanned,matched,message) VALUES(?,?,?,?,'unavailable',0,0,?) ON CONFLICT(id) DO UPDATE SET checked_at=excluded.checked_at,status='unavailable',message=excluded.message")
           .run(sourceKey(descriptor),descriptor.source,descriptor.board,Date.now(),e.status ? e.message : 'Source temporarily unavailable.');
       }
@@ -211,14 +233,22 @@ export async function discoverBatch(task,store,queue,config={},fetcher=fetch) {
     await store.db.prepare("UPDATE job_search_runs SET status='cancelled',updated_at=? WHERE id=?").run(Date.now(),row.id);return {status:'cancelled'};
   }
   const merged=mergeDiscoveryResults(store.state,results,plan);
+  if(config.JOB_CATALOG_ENABLED==='true')for(const result of results){const stored=await putCatalogJobs(result.jobs,plan,store,config);if(!stored.paused)await archiveMissingCatalogJobs(result,store);}
+  for(const result of results)if(result.pagination?.hasMore) {
+    const next={...result.descriptor,page:result.pagination.nextPage};
+    if(!descriptors.some(d=>sourceKey(d)===sourceKey(next)))descriptors.push(next);
+  }
   await rememberBoards(results.flatMap(r=>r.jobs),store,queue);
   store.state.jobs=merged.jobs;
   for(const result of results) store.state.syncs[`${result.descriptor.source}:${result.descriptor.board}`]={ok:true,at:now(),count:result.jobs.length};
   await store.save();
+  const catalogue=config.JOB_CATALOG_ENABLED==='true' && await catalogReady(store);
+  if(catalogue)await compactWorkspace(store,plan);
   // Persist counters and the next task together, so a crash cannot lose a batch.
   const priorOffset=progress.offset || 0;
   if(priorOffset<=offset) progress={...progress,offset:offset+batch.length,sourcesTotal:descriptors.length,sourcesChecked:progress.sourcesChecked+batch.length,scanned:progress.scanned+results.reduce((n,r)=>n+r.jobs.length,0),failed:progress.failed+failed,cached:progress.cached+results.filter(r=>r.cached).length,added:progress.added+merged.added};
   progress.matched=merged.jobs.filter(j=>j.discoveryMatch.recommendable && !j.archived).length;progress.indexed=merged.jobs.filter(j=>!j.archived).length;
+  if(catalogue){const stats=await catalogStats(store,plan);progress.matched=stats.matches;progress.indexed=stats.active;}
   const more=offset+batch.length<descriptors.length;
   await store.db.exec('BEGIN IMMEDIATE');
   try {
@@ -236,11 +266,12 @@ export async function discoverBatch(task,store,queue,config={},fetcher=fetch) {
 export async function searchStatus(store) {
   const preferences=await getSearchConfig(store),plan=buildSearchPlan(store.state,preferences);
   const run=await store.db.prepare('SELECT * FROM job_search_runs ORDER BY created_at DESC LIMIT 1').get();
-  const health=await store.db.prepare('SELECT * FROM job_source_health ORDER BY checked_at DESC').all();
+  const health=await store.db.prepare('SELECT * FROM job_source_health ORDER BY checked_at DESC LIMIT 1000').all();
   const details=run ? JSON.parse(run.body) : null;if(details) delete details.descriptors;
   const matches=store.state.jobs.filter(j=>!j.archived && !j.isDemo).map(j=>rankedMatch(j,plan));
-  return {preferences,plan,indexCapacity:MAX_INDEX,curatedEmployers:boards.length,firstMover:store.state.jobs.filter(j=>!j.archived && jobFreshness(j).firstMover).length,run:run ? {...run,details,body:undefined} : null,sources:health,schedule:await store.db.prepare("SELECT next_run FROM autopilot_schedule WHERE id='jobs'").get() || null,
-    indexed:store.state.jobs.filter(j=>!j.archived && !j.isDemo).length,matches:plan.personalized ? matches.filter(m=>m.recommendable).length : null,
-    strongMatches:matches.filter(m=>m.tier==='strong').length,
-    adjacentMatches:matches.filter(m=>m.tier==='adjacent').length};
+  const catalogue=await catalogStats(store,plan),directory=await store.db.prepare("SELECT status,body,updated_at FROM directory_sync WHERE id='directories'").get(),storage=await store.db.prepare("SELECT status,body FROM directory_sync WHERE id='catalog-storage'").get();
+  return {preferences,plan,indexCapacity:catalogue?CATALOG_CAPACITY:MAX_INDEX,catalogue,directory:directory?{status:directory.status,...JSON.parse(directory.body),updatedAt:directory.updated_at}:null,storage:storage?{status:storage.status,...JSON.parse(storage.body)}:null,curatedEmployers:boards.length,firstMover:catalogue?.firstMover ?? store.state.jobs.filter(j=>!j.archived && jobFreshness(j).firstMover).length,run:run ? {...run,details,body:undefined} : null,sources:health,schedule:await store.db.prepare("SELECT next_run FROM autopilot_schedule WHERE id='jobs'").get() || null,
+    indexed:catalogue?.active ?? store.state.jobs.filter(j=>!j.archived && !j.isDemo).length,matches:plan.personalized ? catalogue?.matches ?? matches.filter(m=>m.recommendable).length : null,
+    strongMatches:catalogue?.strong ?? matches.filter(m=>m.tier==='strong').length,
+    adjacentMatches:catalogue?.adjacent ?? matches.filter(m=>m.tier==='adjacent').length};
 }

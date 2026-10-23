@@ -3,11 +3,14 @@ import {startContactDiscovery,contactDiscoveryStatus} from './services/contact-d
 import {checkContactProviders} from './services/contact-provider-checks.mjs';
 import {queueBrowserContacts} from './services/browser-contacts.mjs';
 import {companyDomain} from './providers/contacts/company.mjs';
+import {startBulkHarvest,SECTOR_PRESETS} from './services/bulk-harvest.mjs';
 
 const csvCell=value=>`"${String(value ?? '').replace(/^[=+@\-\t\r]/,"'$&").replaceAll('"','""')}"`;
 export function contactRoutes(store,queue,config,fetcher=fetch) {
   return async(req,res,url,{json,bodyJSON})=>{
     const path=url.pathname;
+    if(path==='/api/contacts/bulk-harvest' && req.method==='POST'){json(res,202,await startBulkHarvest(await bodyJSON(req),store,queue,config));return true;}
+    if(path==='/api/contacts/sector-presets' && req.method==='GET'){json(res,200,{presets:SECTOR_PRESETS});return true;}
     if(path==='/api/contacts/company-domain/confirm' && req.method==='POST') {
       const data=await bodyJSON(req),domain=companyDomain(data.domain);
       if(data.confirmed!==true || !domain || typeof data.company!=='string')fail('Confirm the official domain for this company.');

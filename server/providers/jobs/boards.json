@@ -1382,5 +1382,2885 @@
     "referenceCheckedAt": "2026-10-22",
     "referenceType": "Public employer career page; API health checked each sweep",
     "companyDomain": "trackman.com"
+  },
+  {
+    "source": "Keka",
+    "slug": "https://analyticsvidhya.keka.com/careers",
+    "company": "Analytics Vidhya",
+    "reference": "https://analyticsvidhya.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://candorhealth.keka.com/careers",
+    "company": "CANHEALTH ANALYTICS PRIVATE LIMITED",
+    "reference": "https://candorhealth.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://jaikisan.keka.com/careers",
+    "company": "GREENIZON AGRITECH CONSULTANCY PRIVATE LIMITED",
+    "reference": "https://jaikisan.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://openfinancial.keka.com/careers",
+    "company": "Open Financial Technologies",
+    "reference": "https://openfinancial.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://pyxis.keka.com/careers",
+    "company": "PYXIS Management Consulting Group LLC",
+    "reference": "https://pyxis.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://satsure.keka.com/careers",
+    "company": "SatSure Analytics India",
+    "reference": "https://satsure.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://pwc.darwinbox.com/ms/candidate/careers",
+    "company": "PwC Asia",
+    "reference": "https://pwc.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://sbchero.darwinbox.com/ms/candidate/careers",
+    "company": "Security Bank Cards (SBC Hero)",
+    "reference": "https://sbchero.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://autalenthub.darwinbox.in/ms/candidate/careers",
+    "company": "AU Small Finance Bank",
+    "reference": "https://autalenthub.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://btpn.darwinbox.com/ms/candidate/careers",
+    "company": "Bank BTPN",
+    "reference": "https://btpn.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://rhea.darwinbox.com/ms/candidate/careers",
+    "company": "Bank of the Philippine Islands (BPI)",
+    "reference": "https://rhea.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://dmiunify.darwinbox.in/ms/candidate/careers",
+    "company": "DMI Unify (DMI Finance)",
+    "reference": "https://dmiunify.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://edelweisslife.darwinbox.in/ms/candidate/careers",
+    "company": "Edelweiss Life Insurance",
+    "reference": "https://edelweisslife.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://hcconnect.darwinbox.com/ms/candidate/careers",
+    "company": "Home Credit Philippines",
+    "reference": "https://hcconnect.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://kotaklifeinsurance.darwinbox.in/ms/candidate/careers",
+    "company": "Kotak Life Insurance",
+    "reference": "https://kotaklifeinsurance.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://disha.darwinbox.in/ms/candidate/careers",
+    "company": "Niva Bupa Health Insurance (Disha)",
+    "reference": "https://disha.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://piramalfinance.darwinbox.in/ms/candidate/careers",
+    "company": "Piramal Finance",
+    "reference": "https://piramalfinance.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://merapnbil.darwinbox.com/ms/candidate/careers",
+    "company": "Punjab National Bank International",
+    "reference": "https://merapnbil.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://rebithr.darwinbox.in/ms/candidate/careers",
+    "company": "Reserve Bank Information Technology Pvt Ltd",
+    "reference": "https://rebithr.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://sbilife.darwinbox.in/ms/candidate/careers",
+    "company": "SBI Life Insurance",
+    "reference": "https://sbilife.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://vivriti.darwinbox.in/ms/candidate/careers",
+    "company": "Vivriti Capital",
+    "reference": "https://vivriti.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://yesforyou.darwinbox.in/ms/candidate/careers",
+    "company": "YES Bank",
+    "reference": "https://yesforyou.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://100.keka.com/careers",
+    "company": "Bright Future",
+    "reference": "https://100.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://abcoffee.keka.com/careers",
+    "company": "Brewbay Innovations",
+    "reference": "https://abcoffee.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://acaindia.keka.com/careers",
+    "company": "Asian Christian Academy",
+    "reference": "https://acaindia.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://acuitilabs.keka.com/careers",
+    "company": "Acuiti Labs",
+    "reference": "https://acuitilabs.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://adit.keka.com/careers",
+    "company": "Adit",
+    "reference": "https://adit.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://afreespace.keka.com/careers",
+    "company": "Freespace",
+    "reference": "https://afreespace.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://ahinternational.keka.com/careers",
+    "company": "A H INTERNATIONAL PRIVATE LIMITED",
+    "reference": "https://ahinternational.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://aitmc.keka.com/careers",
+    "company": "AITMC VENTURES LTD",
+    "reference": "https://aitmc.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://aivarinnovations.keka.com/careers",
+    "company": "AIVAR INNOVATIONS",
+    "reference": "https://aivarinnovations.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://almirqab.keka.com/careers/amfm",
+    "company": "Al Mirqab Facilities Management",
+    "reference": "https://almirqab.keka.com/careers/amfm",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://alphamindxaddmind.keka.com/careers",
+    "company": "Alphamind",
+    "reference": "https://alphamindxaddmind.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://amberstudent.keka.com/careers",
+    "company": "amber",
+    "reference": "https://amberstudent.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://americanchase.keka.com/careers",
+    "company": "American Chase",
+    "reference": "https://americanchase.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://aminu.keka.com/careers",
+    "company": "AMINU",
+    "reference": "https://aminu.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://anubhutiorganization.keka.com/careers",
+    "company": "Anubhuti Samiti",
+    "reference": "https://anubhutiorganization.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://arisinfra.keka.com/careers",
+    "company": "Aris",
+    "reference": "https://arisinfra.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://arthanergy.keka.com/careers",
+    "company": "ARTHA ENERGY PROJECTS PRIVATE LIMITED",
+    "reference": "https://arthanergy.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://asint.keka.com/careers",
+    "company": "AsInt India Private Limited",
+    "reference": "https://asint.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://attentiveos.keka.com/careers",
+    "company": "Attentive.ai",
+    "reference": "https://attentiveos.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://aubergine.keka.com/careers",
+    "company": "Aubergine Solutions Pvt Ltd",
+    "reference": "https://aubergine.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://aurigait.keka.com/careers",
+    "company": "Auriga",
+    "reference": "https://aurigait.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://avidorganics.keka.com/careers",
+    "company": "AVID ORGANICS PRIVATE LIMITED",
+    "reference": "https://avidorganics.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://awiros.keka.com/careers",
+    "company": "Awiros",
+    "reference": "https://awiros.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://babyorgano.keka.com/careers",
+    "company": "BabyOrgano",
+    "reference": "https://babyorgano.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://balavikasa.keka.com/careers",
+    "company": "Bala Vikasa",
+    "reference": "https://balavikasa.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://bimakavach.keka.com/careers",
+    "company": "BIMAKAVACH",
+    "reference": "https://bimakavach.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://bizhero.keka.com/careers",
+    "company": "NowPurchase Hiring Team",
+    "reference": "https://bizhero.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://blitznow.keka.com/careers",
+    "company": "Blitz",
+    "reference": "https://blitznow.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://blueflamelabs.keka.com/careers",
+    "company": "Blueflame Labs",
+    "reference": "https://blueflamelabs.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://bookmytournow.keka.com/careers",
+    "company": "Book My Tour Now",
+    "reference": "https://bookmytournow.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://botvfx.keka.com/careers",
+    "company": "BOT VFX (INDIA) PRIVATE LIMITED",
+    "reference": "https://botvfx.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://braves.keka.com/careers",
+    "company": "Braves Offshore Management Services Private Limited",
+    "reference": "https://braves.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://breakinbrew.keka.com/careers",
+    "company": "breakin brew",
+    "reference": "https://breakinbrew.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://bukhashbrothers.keka.com/careers",
+    "company": "Bukhash Brothers",
+    "reference": "https://bukhashbrothers.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://burlington.keka.com/careers",
+    "company": "Burlington English - Careers",
+    "reference": "https://burlington.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://buyogo.keka.com/careers",
+    "company": "SOLVEI8",
+    "reference": "https://buyogo.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://caizin.keka.com/careers",
+    "company": "Caizin",
+    "reference": "https://caizin.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://casepoint.keka.com/careers",
+    "company": "Casepoint Private Limited",
+    "reference": "https://casepoint.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://cis.keka.com/careers",
+    "company": "candiidus international school",
+    "reference": "https://cis.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://cleanmax.keka.com/careers",
+    "company": "Clean Max Enviro Energy Solutions Private Limited",
+    "reference": "https://cleanmax.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://clickpost.keka.com/careers",
+    "company": "Clickpost",
+    "reference": "https://clickpost.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://coditude.keka.com/careers",
+    "company": "Coditude",
+    "reference": "https://coditude.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://comida.keka.com/careers",
+    "company": "BIK",
+    "reference": "https://comida.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://conservetrichy.keka.com/careers",
+    "company": "Conserve Solutions",
+    "reference": "https://conservetrichy.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://convegenius.keka.com/careers",
+    "company": "Convegenius",
+    "reference": "https://convegenius.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://coozmoo.keka.com/careers",
+    "company": "Career at Coozmoo Digital Solutions",
+    "reference": "https://coozmoo.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://crepdogcrew.keka.com/careers",
+    "company": "Crepdog Crew Careers",
+    "reference": "https://crepdogcrew.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://dashtech.keka.com/careers",
+    "company": "Dash Technologies INC",
+    "reference": "https://dashtech.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://databeat.keka.com/careers",
+    "company": "DATABEAT",
+    "reference": "https://databeat.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://dayalgroup.keka.com/careers",
+    "company": "Dayal Group",
+    "reference": "https://dayalgroup.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://denken.keka.com/careers",
+    "company": "Denken Solutions India Pvt Ltd",
+    "reference": "https://denken.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://digit88.keka.com/careers",
+    "company": "Digit88 Technologies Private Limited",
+    "reference": "https://digit88.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://dmudubai.keka.com/careers",
+    "company": "De Montfort University Dubai",
+    "reference": "https://dmudubai.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://dreamtime.keka.com/careers",
+    "company": "Dreamtime",
+    "reference": "https://dreamtime.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://driverlogistics.keka.com/careers",
+    "company": "Driver Logistics LLP",
+    "reference": "https://driverlogistics.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://eccentric.keka.com/careers",
+    "company": "ECCENTRIC ENGINE",
+    "reference": "https://eccentric.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://ekacare.keka.com/careers",
+    "company": "Eka.care",
+    "reference": "https://ekacare.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://entropik.keka.com/careers",
+    "company": "Entropik",
+    "reference": "https://entropik.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://enzigma.keka.com/careers",
+    "company": "Enzigma",
+    "reference": "https://enzigma.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://factentry.keka.com/careers",
+    "company": "FACTENTRY",
+    "reference": "https://factentry.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://fleetpanda.keka.com/careers",
+    "company": "FleetPanda",
+    "reference": "https://fleetpanda.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://fourtyseven.keka.com/careers",
+    "company": "47Billion",
+    "reference": "https://fourtyseven.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://gameberry.keka.com/careers",
+    "company": "Gameberry Labs",
+    "reference": "https://gameberry.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://gamlaa.keka.com/careers",
+    "company": "Gamlaa",
+    "reference": "https://gamlaa.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://getvisitapp.keka.com/careers",
+    "company": "Visit Health",
+    "reference": "https://getvisitapp.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://ginesysone.keka.com/careers",
+    "company": "Ginni Systems Ltd.",
+    "reference": "https://ginesysone.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://gokwik.keka.com/careers",
+    "company": "GoKwik Commerce Solutions Pvt. Ltd.",
+    "reference": "https://gokwik.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://grexa.keka.com/careers",
+    "company": "Grexa AI",
+    "reference": "https://grexa.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://grow.keka.com/careers",
+    "company": "Grow Solutions",
+    "reference": "https://grow.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://gurully.keka.com/careers",
+    "company": "Gurully",
+    "reference": "https://gurully.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://habuild.keka.com/careers",
+    "company": "Habuild",
+    "reference": "https://habuild.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://hasel.keka.com/careers",
+    "company": "HB+",
+    "reference": "https://hasel.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://hatio.keka.com/careers",
+    "company": "Hatio Innovations Private Limited",
+    "reference": "https://hatio.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://hiveminds.keka.com/careers",
+    "company": "Hiveminds Innovative Market Solution Pvt Ltd",
+    "reference": "https://hiveminds.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://hr.keka.com/careers",
+    "company": "Keka Technologies Pvt. Ltd",
+    "reference": "https://hr.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://icmcapital.keka.com/careers",
+    "company": "ICM.com",
+    "reference": "https://icmcapital.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://icreativeaktiv.keka.com/careers",
+    "company": "iCreative Technologies & Aktiv Software",
+    "reference": "https://icreativeaktiv.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://infiniteuptime.keka.com/careers",
+    "company": "Infinite Uptime India Pvt. ltd.",
+    "reference": "https://infiniteuptime.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://innocean.keka.com/careers",
+    "company": "Innocean Worldwide Communication",
+    "reference": "https://innocean.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://iteachschools.keka.com/careers",
+    "company": "iTeach Schools",
+    "reference": "https://iteachschools.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://jupiter.keka.com/careers",
+    "company": "Jupiter Money",
+    "reference": "https://jupiter.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://justopulse.keka.com/careers",
+    "company": "JUSTO",
+    "reference": "https://justopulse.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://ketto.keka.com/careers",
+    "company": "Ketto Online Ventures Pvt Ltd",
+    "reference": "https://ketto.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://kidvento.keka.com/careers",
+    "company": "Kidvento Education and Research",
+    "reference": "https://kidvento.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://kpgroup.keka.com/careers",
+    "company": "KP Group",
+    "reference": "https://kpgroup.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://lambdatest.keka.com/careers",
+    "company": "LambdaTest",
+    "reference": "https://lambdatest.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://leadecservices.keka.com/careers",
+    "company": "LEADEC INDIA",
+    "reference": "https://leadecservices.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://leadership.keka.com/careers",
+    "company": "Leadership For Skilled Education Foundation",
+    "reference": "https://leadership.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://learningcenter.keka.com/careers",
+    "company": "Learning Center",
+    "reference": "https://learningcenter.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://lera.keka.com/careers",
+    "company": "Lera Technologies Pvt. Ltd.",
+    "reference": "https://lera.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://liminal.keka.com/careers",
+    "company": "Liminal",
+    "reference": "https://liminal.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://loop.keka.com/careers",
+    "company": "Loop",
+    "reference": "https://loop.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://luna.keka.com/careers",
+    "company": "Luna PR",
+    "reference": "https://luna.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://lydesign.keka.com/careers",
+    "company": "LEMON YELLOW LLP",
+    "reference": "https://lydesign.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://madhusgarage.keka.com/careers",
+    "company": "MADHUS GARAGE EQUIPMENT",
+    "reference": "https://madhusgarage.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://maxiq.keka.com/careers",
+    "company": "MaxIQ",
+    "reference": "https://maxiq.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://medon.keka.com/careers",
+    "company": "Medon",
+    "reference": "https://medon.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://mellowdesigns.keka.com/careers",
+    "company": "Mellow Designs",
+    "reference": "https://mellowdesigns.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://mittalgroup.keka.com/careers",
+    "company": "Mittal",
+    "reference": "https://mittalgroup.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://montycloud.keka.com/careers",
+    "company": "MontyCloud",
+    "reference": "https://montycloud.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://moolya.keka.com/careers",
+    "company": "Moolya Software Testing",
+    "reference": "https://moolya.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://mozilortech.keka.com/careers",
+    "company": "Mozilor",
+    "reference": "https://mozilortech.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://mpl1.keka.com/careers",
+    "company": "Modmacon",
+    "reference": "https://mpl1.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://neuralgo.keka.com/careers",
+    "company": "GoML",
+    "reference": "https://neuralgo.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://neutrinos.keka.com/careers",
+    "company": "Neutrinos",
+    "reference": "https://neutrinos.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://nonstopio.keka.com/careers",
+    "company": "Nonstopio",
+    "reference": "https://nonstopio.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://nurix.keka.com/careers",
+    "company": "Nurix",
+    "reference": "https://nurix.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://oneture.keka.com/careers",
+    "company": "Oneture Technologies",
+    "reference": "https://oneture.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://perceptyne.keka.com/careers",
+    "company": "Perceptyne Technologies Private Limited",
+    "reference": "https://perceptyne.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://perstorp.keka.com/careers",
+    "company": "Perstorp",
+    "reference": "https://perstorp.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://petfully.keka.com/careers",
+    "company": "Petfully",
+    "reference": "https://petfully.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://procedure.keka.com/careers",
+    "company": "PROCEDURE TECHNOLOGIES PRIVATE LIMITED",
+    "reference": "https://procedure.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://procol.keka.com/careers",
+    "company": "Procol",
+    "reference": "https://procol.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://proshort.keka.com/careers",
+    "company": "PROSHORT",
+    "reference": "https://proshort.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://relanto.keka.com/careers",
+    "company": "Relanto",
+    "reference": "https://relanto.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://rigi.keka.com/careers",
+    "company": "Rigi",
+    "reference": "https://rigi.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://rootquotient.keka.com/careers",
+    "company": "Rootquotient Technologies",
+    "reference": "https://rootquotient.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://rostrumedu.keka.com/careers",
+    "company": "Rostrum Education",
+    "reference": "https://rostrumedu.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://royalhealth.keka.com/careers",
+    "company": "Royal Health Group",
+    "reference": "https://royalhealth.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://salescodeai.keka.com/careers",
+    "company": "SalesCode.ai",
+    "reference": "https://salescodeai.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://sanjhi.keka.com/careers",
+    "company": "SanjhiSikhiya Foundation",
+    "reference": "https://sanjhi.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://savaglobal.keka.com/careers",
+    "company": "SAVA HEALTHCARE",
+    "reference": "https://savaglobal.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://scimplify.keka.com/careers",
+    "company": "Scimplify",
+    "reference": "https://scimplify.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://serviqual.keka.com/careers",
+    "company": "Serviqual - Jobs",
+    "reference": "https://serviqual.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://shopflo.keka.com/careers",
+    "company": "Shopflo",
+    "reference": "https://shopflo.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://shott.keka.com/careers",
+    "company": "Careers at SHOTT Amusement Limited",
+    "reference": "https://shott.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://signzy.keka.com/careers",
+    "company": "Signzy",
+    "reference": "https://signzy.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://skanai.keka.com/careers",
+    "company": "SkanAI",
+    "reference": "https://skanai.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://snoonu.keka.com/careers",
+    "company": "Snoonu",
+    "reference": "https://snoonu.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://softlinkglobal.keka.com/careers",
+    "company": "Softlink Global",
+    "reference": "https://softlinkglobal.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://softmason.keka.com/careers",
+    "company": "Softmason Technologies Inc",
+    "reference": "https://softmason.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://softobiz.keka.com/careers",
+    "company": "Softobiz Technologies Pvt. Ltd.",
+    "reference": "https://softobiz.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://sohodragon.keka.com/careers",
+    "company": "Soho Dragon Solutions India Private Limited",
+    "reference": "https://sohodragon.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://spyneai.keka.com/careers",
+    "company": "SPYNE",
+    "reference": "https://spyneai.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://squadrun.keka.com/careers",
+    "company": "SquadStack",
+    "reference": "https://squadrun.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://sunflowerlab.keka.com/careers",
+    "company": "Sunflower Lab",
+    "reference": "https://sunflowerlab.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://superplum.keka.com/careers",
+    "company": "Superplum Careers",
+    "reference": "https://superplum.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://surveysparrow.keka.com/careers",
+    "company": "SURVEYSPARROW PRIVATE LIMITED",
+    "reference": "https://surveysparrow.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://swaransoft.keka.com/careers",
+    "company": "SWARAN SOFT SUPPORT SOLUTIONS PRIVATE LIMITED",
+    "reference": "https://swaransoft.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://tandemloop.keka.com/careers",
+    "company": "TANDEMLOOP TECHNOLOGIES PRIVATE LIMITED",
+    "reference": "https://tandemloop.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://tap.keka.com/careers",
+    "company": "The Apprentice Project",
+    "reference": "https://tap.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://tcglobal.keka.com/careers",
+    "company": "TC Global",
+    "reference": "https://tcglobal.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://teachmint.keka.com/careers",
+    "company": "Teachmint",
+    "reference": "https://teachmint.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://teaxpress.keka.com/careers",
+    "company": "Teabox - (A Teaxpress Private Limited Brand)",
+    "reference": "https://teaxpress.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://techsolengineers.keka.com/careers",
+    "company": "TECHSOL ENGINEERS",
+    "reference": "https://techsolengineers.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://thenudge.keka.com/careers",
+    "company": "The/Nudge Institute",
+    "reference": "https://thenudge.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://toddle.keka.com/careers",
+    "company": "Toddle",
+    "reference": "https://toddle.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://tohands.keka.com/careers",
+    "company": "Tohands",
+    "reference": "https://tohands.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://toprankers.keka.com/careers",
+    "company": "Toprankers",
+    "reference": "https://toprankers.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://tradelab.keka.com/careers",
+    "company": "Tradelab",
+    "reference": "https://tradelab.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://trenser.keka.com/careers",
+    "company": "Trenser",
+    "reference": "https://trenser.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://tripjack.keka.com/careers",
+    "company": "Trip Jack Pvt Ltd",
+    "reference": "https://tripjack.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://truagency.keka.com/careers",
+    "company": "TRU",
+    "reference": "https://truagency.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://turno.keka.com/careers",
+    "company": "Turno",
+    "reference": "https://turno.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://ucdc.keka.com/careers",
+    "company": "Ummeed Child Development Center",
+    "reference": "https://ucdc.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://unboxrobotics.keka.com/careers",
+    "company": "UNBOXROBOTICS LABS PRIVATE LIMITED",
+    "reference": "https://unboxrobotics.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://universaled.keka.com/careers",
+    "company": "Universal Education",
+    "reference": "https://universaled.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://universaled.keka.com/careers/ebenezerschool",
+    "company": "Ebenezer International School",
+    "reference": "https://universaled.keka.com/careers/ebenezerschool",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://vajrorap.keka.com/careers",
+    "company": "Vajro Inc",
+    "reference": "https://vajrorap.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://valorem.keka.com/careers",
+    "company": "FloBiz",
+    "reference": "https://valorem.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://vegapay.keka.com/careers",
+    "company": "Vegapay Technology Private Limited",
+    "reference": "https://vegapay.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://vinove.keka.com/careers",
+    "company": "Vinove",
+    "reference": "https://vinove.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://vyaparapp.keka.com/careers",
+    "company": "SIMPLY VYAPAR APPS PRIVATE LIMITED",
+    "reference": "https://vyaparapp.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://wbg.keka.com/careers",
+    "company": "Welfare Group Global",
+    "reference": "https://wbg.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://webito.keka.com/careers",
+    "company": "Webito Infotech",
+    "reference": "https://webito.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://wedogood.keka.com/careers",
+    "company": "Careers at WeDoGood",
+    "reference": "https://wedogood.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://wildnet.keka.com/careers",
+    "company": "Wildnet Technologies Limited",
+    "reference": "https://wildnet.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://winfosolutions.keka.com/careers",
+    "company": "Winfo Solutions",
+    "reference": "https://winfosolutions.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://wishlink.keka.com/careers",
+    "company": "Wishlink",
+    "reference": "https://wishlink.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://wohlig.keka.com/careers",
+    "company": "Wohlig",
+    "reference": "https://wohlig.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://woundtech.keka.com/careers",
+    "company": "Woundtech",
+    "reference": "https://woundtech.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://yashrajbio.keka.com/careers",
+    "company": "Yashraj Biotechnology Limited",
+    "reference": "https://yashrajbio.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://zebu.keka.com/careers",
+    "company": "Zebu Animation Studios Private Limited",
+    "reference": "https://zebu.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://zeliot.keka.com/careers",
+    "company": "ZELIOT",
+    "reference": "https://zeliot.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://zippee.keka.com/careers",
+    "company": "Zippee",
+    "reference": "https://zippee.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://zono.keka.com/careers",
+    "company": "ZoTok",
+    "reference": "https://zono.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://zuddl.keka.com/careers",
+    "company": "Zuddl",
+    "reference": "https://zuddl.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://zupersoft.keka.com/careers",
+    "company": "Zuper",
+    "reference": "https://zupersoft.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Keka",
+    "slug": "https://zypp.keka.com/careers",
+    "company": "Zypp Electric",
+    "reference": "https://zypp.keka.com/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://airtel.darwinbox.in/ms/candidate/careers",
+    "company": "Airtel",
+    "reference": "https://airtel.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://bigbasket.darwinbox.in/ms/candidate/careers",
+    "company": "BigBasket",
+    "reference": "https://bigbasket.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://cars24.darwinbox.in/ms/candidate/careers",
+    "company": "Cars24",
+    "reference": "https://cars24.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://delhivery.darwinbox.in/ms/candidate/careers",
+    "company": "Delhivery",
+    "reference": "https://delhivery.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://lighthouse.darwinbox.com/ms/candidate/careers",
+    "company": "Evalueserve (Lighthouse)",
+    "reference": "https://lighthouse.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://mygate.darwinbox.in/ms/candidate/careers",
+    "company": "Mygate",
+    "reference": "https://mygate.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://1mg.darwinbox.in/ms/candidate/careers",
+    "company": "1mg (Tata 1mg)",
+    "reference": "https://1mg.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://meego.darwinbox.com/ms/candidate/careers",
+    "company": "2GO Group",
+    "reference": "https://meego.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://2xpeople.darwinbox.com/ms/candidate/careers",
+    "company": "2X",
+    "reference": "https://2xpeople.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://aartiindustries.darwinbox.in/ms/candidate/careers",
+    "company": "Aarti Industries",
+    "reference": "https://aartiindustries.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://abpnetwork.darwinbox.in/ms/candidate/careers",
+    "company": "ABP Network",
+    "reference": "https://abpnetwork.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://adaglobal.darwinbox.com/ms/candidate/careers",
+    "company": "ADA",
+    "reference": "https://adaglobal.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://addof.darwinbox.com/ms/candidate/careers",
+    "company": "Addof",
+    "reference": "https://addof.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://affle.darwinbox.in/ms/candidate/careers",
+    "company": "Affle",
+    "reference": "https://affle.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://agrostar.darwinbox.in/ms/candidate/careers",
+    "company": "AgroStar",
+    "reference": "https://agrostar.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://ais.darwinbox.in/ms/candidate/careers",
+    "company": "AIS",
+    "reference": "https://ais.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://akrayagroup.darwinbox.com/ms/candidate/careers",
+    "company": "Akraya Group",
+    "reference": "https://akrayagroup.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://alfardan.darwinbox.com/ms/candidate/careers",
+    "company": "Al Fardan Group",
+    "reference": "https://alfardan.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://allcargo.darwinbox.in/ms/candidate/careers",
+    "company": "Allcargo",
+    "reference": "https://allcargo.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://accpeoplehr.darwinbox.com/ms/candidate/careers",
+    "company": "Arabian Construction Company",
+    "reference": "https://accpeoplehr.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://aragen.darwinbox.in/ms/candidate/careers",
+    "company": "Aragen Life Sciences",
+    "reference": "https://aragen.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://arvind.darwinbox.in/ms/candidate/careers",
+    "company": "Arvind",
+    "reference": "https://arvind.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://atherenergy.darwinbox.in/ms/candidate/careers",
+    "company": "Ather Energy",
+    "reference": "https://atherenergy.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://myavaada.darwinbox.in/ms/candidate/careers",
+    "company": "Avaada Group",
+    "reference": "https://myavaada.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://axisclinicals.darwinbox.in/ms/candidate/careers",
+    "company": "AXIS Clinicals Limited",
+    "reference": "https://axisclinicals.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://baazigames.darwinbox.in/ms/candidate/careers",
+    "company": "Baazi Games",
+    "reference": "https://baazigames.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://bel.darwinbox.com/ms/candidate/careers",
+    "company": "Bajaj Electricals",
+    "reference": "https://bel.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://hrisbdirect.darwinbox.in/ms/candidate/careers",
+    "company": "Bajaj Finserv Direct",
+    "reference": "https://hrisbdirect.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://bhartifoundation.darwinbox.in/ms/candidate/careers",
+    "company": "Bharti Airtel Foundation",
+    "reference": "https://bhartifoundation.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://blibli.darwinbox.com/ms/candidate/careers",
+    "company": "Blibli",
+    "reference": "https://blibli.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://hrmsbotree.darwinbox.in/ms/candidate/careers",
+    "company": "Botree Software (HRMS Botree)",
+    "reference": "https://hrmsbotree.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://brigadegroup.darwinbox.in/ms/candidate/careers",
+    "company": "Brigade Group",
+    "reference": "https://brigadegroup.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://bsa.darwinbox.com/ms/candidate/careers",
+    "company": "BSA",
+    "reference": "https://bsa.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://bukuwarung.darwinbox.com/ms/candidate/careers",
+    "company": "Bukuwarung",
+    "reference": "https://bukuwarung.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://busybeesasia.darwinbox.com/ms/candidate/careers",
+    "company": "Busy Bees Asia",
+    "reference": "https://busybeesasia.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://casagrand.darwinbox.in/ms/candidate/careers",
+    "company": "Casagrand",
+    "reference": "https://casagrand.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://cbcsynchrone.darwinbox.com/ms/candidate/careers",
+    "company": "CBC Group",
+    "reference": "https://cbcsynchrone.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://codingninjas.darwinbox.in/ms/candidate/careers",
+    "company": "Coding Ninjas",
+    "reference": "https://codingninjas.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://cr3-care.darwinbox.com/ms/candidate/careers",
+    "company": "CR3 Group",
+    "reference": "https://cr3-care.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://curefit.darwinbox.in/ms/candidate/careers",
+    "company": "Cure.fit (Curefit Healthcare)",
+    "reference": "https://curefit.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://dbx.darwinbox.in/ms/candidate/careers",
+    "company": "Darwinbox (dbx)",
+    "reference": "https://dbx.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://dbox.darwinbox.in/ms/candidate/careers",
+    "company": "Darwinbox Digital Solutions (dbox)",
+    "reference": "https://dbox.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://deepak.darwinbox.in/ms/candidate/careers",
+    "company": "Deepak Group",
+    "reference": "https://deepak.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://doku.darwinbox.com/ms/candidate/careers",
+    "company": "DOKU",
+    "reference": "https://doku.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://duroflex.darwinbox.in/ms/candidate/careers",
+    "company": "Duroflex Group",
+    "reference": "https://duroflex.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://emeritus.darwinbox.in/ms/candidate/careers",
+    "company": "Emeritus",
+    "reference": "https://emeritus.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://enzenespherenet.darwinbox.in/ms/candidate/careers",
+    "company": "Enzene",
+    "reference": "https://enzenespherenet.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://excelra.darwinbox.in/ms/candidate/careers",
+    "company": "Excelra",
+    "reference": "https://excelra.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://ecdhrconnect.darwinbox.com/ms/candidate/careers",
+    "company": "Expo City Dubai Authority",
+    "reference": "https://ecdhrconnect.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://mygalaxy.darwinbox.in/ms/candidate/careers",
+    "company": "Galaxy Surfactants",
+    "reference": "https://mygalaxy.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://geppeoplecentral.darwinbox.com/ms/candidate/careers",
+    "company": "GEP Worldwide (NB Ventures INC)",
+    "reference": "https://geppeoplecentral.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://collegedekhohrms.darwinbox.in/ms/candidate/careers",
+    "company": "GirnarSoft Education Services Pvt. Ltd.",
+    "reference": "https://collegedekhohrms.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://glenmark.darwinbox.in/ms/candidate/careers",
+    "company": "Glenmark",
+    "reference": "https://glenmark.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://glenmarkspring.darwinbox.com/ms/candidate/careers",
+    "company": "Glenmark | Spring",
+    "reference": "https://glenmarkspring.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://greatlearning.darwinbox.in/ms/candidate/careers",
+    "company": "Great Learning",
+    "reference": "https://greatlearning.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://gys.darwinbox.com/ms/candidate/careers",
+    "company": "GYS",
+    "reference": "https://gys.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://hcahr.darwinbox.in/ms/candidate/careers",
+    "company": "HCA Healthcare India",
+    "reference": "https://hcahr.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://hetero.darwinbox.in/ms/candidate/careers",
+    "company": "Hetero",
+    "reference": "https://hetero.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://hrmsmandoindia.darwinbox.in/ms/candidate/careers",
+    "company": "HL Mando India",
+    "reference": "https://hrmsmandoindia.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://healthmetrics.darwinbox.com/ms/candidate/careers",
+    "company": "HMS Vanguard Sdn Bhd",
+    "reference": "https://healthmetrics.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://hoh.darwinbox.in/ms/candidate/careers",
+    "company": "HOH / HFS",
+    "reference": "https://hoh.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://homelane.darwinbox.in/ms/candidate/careers",
+    "company": "Homevista Decor & Furnishings Private Limited",
+    "reference": "https://homelane.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://honasa.darwinbox.in/ms/candidate/careers",
+    "company": "Honasa Consumer (Mamaearth)",
+    "reference": "https://honasa.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://htmediagroup.darwinbox.in/ms/candidate/careers",
+    "company": "HT Group",
+    "reference": "https://htmediagroup.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://iiamihrms.darwinbox.in/ms/candidate/careers",
+    "company": "Invesco Mutual Fund",
+    "reference": "https://iiamihrms.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://iquanti.darwinbox.in/ms/candidate/careers",
+    "company": "iQuanti",
+    "reference": "https://iquanti.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://itchotels.darwinbox.in/ms/candidate/careers",
+    "company": "ITC Hotels",
+    "reference": "https://itchotels.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://myjsw.darwinbox.in/ms/candidate/careers",
+    "company": "JSW (My JSW)",
+    "reference": "https://myjsw.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://mgmhr.darwinbox.in/ms/candidate/careers",
+    "company": "JSW MG Motor India Pvt. Ltd.",
+    "reference": "https://mgmhr.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://koel.darwinbox.in/ms/candidate/careers",
+    "company": "Kirloskar Oil Engines",
+    "reference": "https://koel.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://ring.darwinbox.in/ms/candidate/careers",
+    "company": "Kissht",
+    "reference": "https://ring.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://kopikenangan.darwinbox.com/ms/candidate/careers",
+    "company": "Kopi Kenangan",
+    "reference": "https://kopikenangan.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://kotaksecurities.darwinbox.in/ms/candidate/careers",
+    "company": "Kotak Securities",
+    "reference": "https://kotaksecurities.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://kpncorporation.darwinbox.com/ms/candidate/careers",
+    "company": "KPN Corporation",
+    "reference": "https://kpncorporation.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://myleadschool.darwinbox.in/ms/candidate/careers",
+    "company": "Leadership Boulevard Pvt. Ltd.",
+    "reference": "https://myleadschool.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://leadsquaredhrms.darwinbox.in/ms/candidate/careers",
+    "company": "LeadSquared",
+    "reference": "https://leadsquaredhrms.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://hrlendingkart.darwinbox.in/ms/candidate/careers",
+    "company": "Lendingkart",
+    "reference": "https://hrlendingkart.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://licious.darwinbox.in/ms/candidate/careers",
+    "company": "Licious",
+    "reference": "https://licious.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://linfoxasiahrms.darwinbox.com/ms/candidate/careers",
+    "company": "Linfox International Group",
+    "reference": "https://linfoxasiahrms.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://lionbridge.darwinbox.com/ms/candidate/careers",
+    "company": "Lionbridge Technologies",
+    "reference": "https://lionbridge.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://nectar.darwinbox.in/ms/candidate/careers",
+    "company": "Mahindra Logistics",
+    "reference": "https://nectar.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://mandsmyhr.darwinbox.in/ms/candidate/careers",
+    "company": "Marks & Spencer Reliance India",
+    "reference": "https://mandsmyhr.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://matchmove.darwinbox.com/ms/candidate/careers",
+    "company": "MatchMove",
+    "reference": "https://matchmove.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://onehrad.darwinbox.com/ms/candidate/careers",
+    "company": "Maxicare Healthcare (Philippines)",
+    "reference": "https://onehrad.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://mayapadahospital.darwinbox.com/ms/candidate/careers",
+    "company": "Mayapada Hospital Group",
+    "reference": "https://mayapadahospital.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://mhealth.darwinbox.com/ms/candidate/careers",
+    "company": "MHealth",
+    "reference": "https://mhealth.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://mobikwik.darwinbox.in/ms/candidate/careers",
+    "company": "MobiKwik",
+    "reference": "https://mobikwik.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://mpokket.darwinbox.in/ms/candidate/careers",
+    "company": "mPokket",
+    "reference": "https://mpokket.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://modinity.darwinbox.com/ms/candidate/careers",
+    "company": "Modinity Group",
+    "reference": "https://modinity.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://molit.darwinbox.in/ms/candidate/careers",
+    "company": "MOL",
+    "reference": "https://molit.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://moneyview.darwinbox.in/ms/candidate/careers",
+    "company": "Moneyview",
+    "reference": "https://moneyview.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://mordorintelligence.darwinbox.in/ms/candidate/careers",
+    "company": "Mordor Intelligence",
+    "reference": "https://mordorintelligence.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://hrmsmoreretail.darwinbox.in/ms/candidate/careers",
+    "company": "More Retail",
+    "reference": "https://hrmsmoreretail.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://movin.darwinbox.in/ms/candidate/careers",
+    "company": "MOVIN Express",
+    "reference": "https://movin.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://bluetokaicoffee.darwinbox.in/ms/candidate/careers",
+    "company": "Muhavra Enterprises Private Limited",
+    "reference": "https://bluetokaicoffee.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://mycrisil.darwinbox.com/ms/candidate/careers",
+    "company": "MyCrisil",
+    "reference": "https://mycrisil.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://myhr.darwinbox.in/ms/candidate/careers",
+    "company": "MyHR",
+    "reference": "https://myhr.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://ninjacart.darwinbox.in/ms/candidate/careers",
+    "company": "Ninjacart",
+    "reference": "https://ninjacart.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://nivea.darwinbox.in/ms/candidate/careers",
+    "company": "NIVEA India",
+    "reference": "https://nivea.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://nobroker.darwinbox.in/ms/candidate/careers",
+    "company": "NoBroker",
+    "reference": "https://nobroker.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://noventiq.darwinbox.com/ms/candidate/careers",
+    "company": "NOVENTIQ HOLDINGS PLC",
+    "reference": "https://noventiq.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://stelis.darwinbox.in/ms/candidate/careers",
+    "company": "OneSource Specialty Pharma (Stelis)",
+    "reference": "https://stelis.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://pdax.darwinbox.com/ms/candidate/careers",
+    "company": "PDAX (Philippine Digital Asset Exchange)",
+    "reference": "https://pdax.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://piramal.darwinbox.in/ms/candidate/careers",
+    "company": "Piramal",
+    "reference": "https://piramal.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://pluanghrms.darwinbox.com/ms/candidate/careers",
+    "company": "Pluang",
+    "reference": "https://pluanghrms.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://polycab.darwinbox.in/ms/candidate/careers",
+    "company": "Polycab",
+    "reference": "https://polycab.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://porter.darwinbox.in/ms/candidate/careers",
+    "company": "Porter",
+    "reference": "https://porter.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://hrsr.darwinbox.com/ms/candidate/careers",
+    "company": "PT. Nippon Indosari Corpindo Tbk.",
+    "reference": "https://hrsr.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://lifecycleqhtl.darwinbox.in/ms/candidate/careers",
+    "company": "Quick Heal Technologies Ltd",
+    "reference": "https://lifecycleqhtl.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://qxhrms.darwinbox.com/ms/candidate/careers",
+    "company": "QX Global Group",
+    "reference": "https://qxhrms.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://rategain.darwinbox.com/ms/candidate/careers",
+    "company": "RateGain",
+    "reference": "https://rategain.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://partnerconnect.darwinbox.com/ms/candidate/careers",
+    "company": "RustanCoffee (Starbucks Philippines)",
+    "reference": "https://partnerconnect.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://hrsembcorp.darwinbox.com/ms/candidate/careers",
+    "company": "Sembcorp Group",
+    "reference": "https://hrsembcorp.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://shakeys.darwinbox.com/ms/candidate/careers",
+    "company": "Shakey's Group",
+    "reference": "https://shakeys.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://myshalina.darwinbox.com/ms/candidate/careers",
+    "company": "Shalina Group",
+    "reference": "https://myshalina.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://ss-people.darwinbox.in/ms/candidate/careers",
+    "company": "Shoppers Stop",
+    "reference": "https://ss-people.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://singland.darwinbox.com/ms/candidate/careers",
+    "company": "Singland",
+    "reference": "https://singland.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://singlife.darwinbox.com/ms/candidate/careers",
+    "company": "Singlife",
+    "reference": "https://singlife.darwinbox.com/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
+  },
+  {
+    "source": "Darwinbox",
+    "slug": "https://mysmcdbx.darwinbox.in/ms/candidate/careers",
+    "company": "SMC Group",
+    "reference": "https://mysmcdbx.darwinbox.in/ms/candidate/careers",
+    "directoryReference": "https://github.com/Continuity1/d1_ats_scrapers",
+    "license": "MIT",
+    "candidate": true
   }
 ]

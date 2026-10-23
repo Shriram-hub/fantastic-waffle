@@ -1,4 +1,6 @@
 import { fetchCoreJobs } from "./core.mjs";
+import {fetchIndiaATS,INDIA_ATS} from './india-ats.mjs';
+import {fetchEnterpriseJobs} from './enterprise-direct.mjs';
 import { fetchHimalayas } from "./himalayas.mjs";
 import { fetchPublicFeed } from './public-feeds.mjs';
 import {fetchGoogleJobs} from './google-jobs.mjs';
@@ -21,6 +23,7 @@ export const JOB_SOURCES = [
   "LinkedIn Guest",
   "India & finance boards",
   'SmartRecruiters','Workable','Recruitee','Lever EU','Workday','The Muse','Career Pages','VC Portfolios',
+  ...INDIA_ATS,'Amazon Jobs',
 ];
 export async function fetchJobs(
   source,
@@ -29,6 +32,8 @@ export async function fetchJobs(
   config = {},
   query = "",
 ) {
+  if(INDIA_ATS.includes(source))return fetchIndiaATS(source,board,config,fetcher);
+  if(source==='Amazon Jobs')return fetchEnterpriseJobs(source,query || board,config,fetcher);
   if(['SmartRecruiters','Workable','Recruitee','Workday'].includes(source))return fetchPublicATS(source,board,config,fetcher,config.SEARCH_QUERY || '');
   if(['Career Pages','VC Portfolios'].includes(source))return (await crawlCareerPage(board,config.CAREER_PAGE_LOADER ? {load:config.CAREER_PAGE_LOADER}:{})).jobs.map(j=>({...j,source,board}));
   if(source==='India & finance boards')return fetchRegional(query || board,config,fetcher);

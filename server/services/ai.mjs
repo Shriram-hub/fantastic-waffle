@@ -65,7 +65,7 @@ export async function draftAutopilotPitch(state, job, contact, resumeURL, policy
     body=`Hi ${first},\n\n${hook ? `${hook} ` : ''}I’m interested in the ${clean(job.title)} opening at ${clean(job.company)}. Here is a short role-fit summary:\n${skills.length ? skills.map(s=>`• Résumé skill also mentioned in the listing: ${clean(s)}`).join('\n') : `• ${skillLine}`}${work ? `\n• Relevant résumé evidence: ${work}` : ''}\n\n${resumeLine}\nRole: ${job.url}\n\nWould you be the right person to discuss the application? Thank you for your time.`;
     subject=`${clean(job.title)} at ${clean(job.company)} — ${clean(p.name)}`;
   }
-  return {subject:subject.slice(0,350),body,evidence,angle,method:policy.useAI ? 'AI-selected, source-checked résumé excerpts' : 'Factual persona template'};
+  return {subject:subject.slice(0,350),body,evidence,angle,method:policy.useAI ? 'Model-selected, source-checked résumé excerpts' : 'Factual persona template'};
 }
 export const ResumeSchema = z
   .object({

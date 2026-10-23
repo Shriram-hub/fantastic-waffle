@@ -9,8 +9,10 @@ import {
 } from "../../domain.mjs";
 import { remoteJSON } from "../http.mjs";
 import {contactProviderError} from './errors.mjs';
+import {providerKey} from '../../services/provider-config.mjs';
 async function apolloJSON(url,options,fetcher){try{return await remoteJSON(url,options,fetcher);}catch(error){throw contactProviderError('Apollo',error);}}
 export async function searchApollo(query, key, fetcher = fetch) {
+  key=providerKey(key,'apollo');
   if (!key) fail("Set APOLLO_API_KEY on the server to search Apollo.", 503);
   const domain = text(query.domain, 200).toLowerCase();
   if (
@@ -64,6 +66,7 @@ export async function searchApollo(query, key, fetcher = fetch) {
     .filter((p) => p.apolloId);
 }
 export async function enrichApollo(contact, key, fetcher = fetch) {
+  key=providerKey(key,'apollo');
   if (!key) fail("Set APOLLO_API_KEY on the server first.", 503);
   if (!contact.apolloId || contact.source !== "Apollo")
     fail("Select a contact found through Apollo search.");

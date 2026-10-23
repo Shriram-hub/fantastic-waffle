@@ -5,6 +5,7 @@ import {publicCompanyPages} from './public-pages.mjs';
 import {learnEmailPattern,permuteEmails} from './permutator.mjs';
 import {cleanCompanyName} from './company.mjs';
 import {contactTargeting,prioritizeContact} from '../../services/contact-personas.mjs';
+import {serperSearch,tavilySearch} from './serper-xray.mjs';
 
 export function searchHTMLResults(html,engine) {
   if(/captcha|anomaly\.js|unusual traffic|verify you are human/i.test(html))return [];
@@ -33,6 +34,14 @@ export async function searchCompanyPeople(company,domain,options={}) {
   const queries=[`site:linkedin.com/in (${titles}) "${name}"`,`(site:linkedin.com/posts OR site:linkedin.com/pulse) ("hiring" OR "looking for" OR "open role" OR "join my team") "${name}" "${text(options.job?.title || targeting.label,70).replaceAll('"','')}"`];
   const parse=results=>[...xrayPeople(results,company,domain,targeting),...activeHiringPeople(results,company,domain,targeting)];
   const searchQuery=async q=>{
+  if(options.allowSearch && options.call)for(const [provider,field,search] of [['Serper','SERPER_API_KEY',serperSearch],['Tavily','TAVILY_API_KEY',tavilySearch]]) {
+    const key=options.config?.[field];if(!key)continue;
+    try {
+      const data=await options.call(provider,()=>search(q,key,{fetcher,limit:options.peopleLimit || 20}),q);
+      if(options.store){const {rememberBoards}=await import('../jobs/registry.mjs');const {taskQueue}=await import('../../queue.mjs');await rememberBoards(data.results.map(r=>({url:r.link})),options.store,taskQueue(options.store));}
+      const people=parse(data.results);if(people.length)return people;
+    }catch(error){warnings.push(error.status ? error.message : `${provider} search is unavailable.`);}
+  }
   if(options.allowSearch && options.call)for(const provider of ['SerpApi','Brave']) {
     const key=options.config?.[provider==='SerpApi' ? 'SERPAPI_API_KEY' : 'BRAVE_SEARCH_API_KEY'];if(!key)continue;
     try {
@@ -52,7 +61,7 @@ export async function searchCompanyPeople(company,domain,options={}) {
   };
   const results=await Promise.allSettled((options.targetPersona==='hiring-poster' ? queries.slice(1) : queries).map(searchQuery)),people=results.filter(r=>r.status==='fulfilled').flatMap(r=>r.value).map(p=>prioritizeContact(p,targeting));
   if(!people.length)warnings.push('No source-supported people were returned by public search. Browser-assisted import is available on LinkedIn company pages.');
-  return {people:[...new Map(people.sort((a,b)=>b.priorityScore-a.priorityScore).map(p=>[p.linkedinUrl || p.hiringPost?.url || p.name,p])).values()].slice(0,8),warnings};
+  return {people:[...new Map(people.sort((a,b)=>b.priorityScore-a.priorityScore).map(p=>[p.linkedinUrl || p.hiringPost?.url || p.name,p])).values()].slice(0,options.peopleLimit || 8),warnings};
 }
 
 export function activeHiringPeople(results,company,domain,targeting=contactTargeting()) {
@@ -105,7 +114,7 @@ export function xrayPeople(results,company,domain,targeting=contactTargeting()) 
     if(!/recruit|talent|human resources|\bhr\b|hiring|manager|head of|\bc[tfmo]o\b|founder|director|vice president|partner|principal|lead|senior|controller|\bvp\b/i.test(`${title} ${r.snippet || ''}`) || !title.toLowerCase().includes(cleanCompanyName(company).toLowerCase())) return [];
     const names=name.split(/\s+/);if(names.length<2 || names.length>5) return [];
     return [prioritizeContact({firstName:names[0],lastName:names.at(-1),name,title:parts.slice(1).join(' — ').replace(/\s*\|?\s*LinkedIn$/i,''),linkedinUrl:safeUrl(r.link),companyDomain:domain,company,sources:[{url:safeUrl(r.link)}]},targeting)];
-  }).slice(0,8);
+  }).slice(0,50);
 }
 // Zero-key fallback reads actual published recruiting addresses. Search snippets
 // require the optional search API; no public, unlimited LinkedIn search API exists.
@@ -124,5 +133,5 @@ export async function findPublicContacts(job,company,options={}) {
   }
   if(options.warnings)options.warnings.push(...(searched.warnings || []));
   const targeting=options.targeting || contactTargeting(job);
-  return [...new Map(contacts.map(c=>prioritizeContact(c,targeting)).sort((a,b)=>b.priorityScore-a.priorityScore).map(c=>[c.email || c.hiringPost?.url || c.linkedinUrl,c])).values()].slice(0,12);
+  return [...new Map(contacts.map(c=>prioritizeContact(c,targeting)).sort((a,b)=>b.priorityScore-a.priorityScore).map(c=>[c.email || c.hiringPost?.url || c.linkedinUrl,c])).values()].slice(0,options.peopleLimit || 12);
 }

@@ -2,6 +2,8 @@ import {now} from '../domain.mjs';
 import {searchApollo} from '../providers/contacts/apollo.mjs';
 import {remoteJSON} from '../providers/http.mjs';
 import {contactProviderError} from '../providers/contacts/errors.mjs';
+import {effectiveProviderConfig} from './provider-config.mjs';
+import {providerJSON} from '../providers/contacts/provider-http.mjs';
 
 export async function recordContactProviderFailure(store,provider,error) {
   if(!error.providerStatus)return;
@@ -13,8 +15,9 @@ export async function recordContactProviderFailure(store,provider,error) {
 }
 
 // Read-only checks: Apollo documents People API Search as zero-credit, and
-// Hunter Account Stats is free. No contact is saved and no email is sent.
+// Hunter Account is free. No contact is saved and no email is sent.
 export async function checkContactProviders(store,config={},fetcher=fetch) {
+  config=await effectiveProviderConfig(store,config);
   const cached=store.state.contactProviderChecks;
   if(cached && Date.now()-Date.parse(cached.checkedAt)<60000)return cached;
   const checkedAt=now();
@@ -25,7 +28,7 @@ export async function checkContactProviders(store,config={},fetcher=fetch) {
   };
   const checks=await Promise.all([
     check('Apollo',config.APOLLO_API_KEY,()=>searchApollo({domain:'stripe.com',titles:'Recruiter',limit:1},config.APOLLO_API_KEY,fetcher)),
-    check('Hunter',config.HUNTER_API_KEY,async()=>{const url=new URL('https://api.hunter.io/v2/account-stats');url.searchParams.set('api_key',config.HUNTER_API_KEY);try{const result=await remoteJSON(url.href,{},fetcher);if(!result.data)throw Object.assign(Error('Hunter returned an unexpected account-check response.'),{status:502});}catch(error){throw contactProviderError('Hunter',error);}}),
+    check('Hunter',config.HUNTER_API_KEY,async()=>{const url=new URL('https://api.hunter.io/v2/account');url.searchParams.set('api_key',config.HUNTER_API_KEY);const result=await providerJSON('Hunter',url.href,{},fetcher,10000,[config.HUNTER_API_KEY]);if(!result.data)throw Object.assign(Error('Hunter returned an unexpected account-check response.'),{status:502});}),
   ]);
-  await store.refresh();store.state.contactProviderChecks={checkedAt,checks};await store.save();return store.state.contactProviderChecks;
+  await store.refresh();store.state.contactProviderChecks={checkedAt,checks:[...(store.state.contactProviderChecks?.checks || []).filter(c=>!['Apollo','Hunter'].includes(c.provider)),...checks]};await store.save();return store.state.contactProviderChecks;
 }

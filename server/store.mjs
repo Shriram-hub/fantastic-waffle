@@ -66,6 +66,12 @@ CREATE TABLE IF NOT EXISTS job_source_cache(id TEXT PRIMARY KEY,expires_at INTEG
 CREATE TABLE IF NOT EXISTS discovered_boards(id TEXT PRIMARY KEY,source TEXT NOT NULL,slug TEXT NOT NULL,status TEXT NOT NULL,body TEXT NOT NULL,checked_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS outreach_company_budget(domain TEXT NOT NULL,email TEXT NOT NULL,task_id TEXT NOT NULL,status TEXT NOT NULL,updated_at INTEGER NOT NULL,PRIMARY KEY(domain,email));
 CREATE INDEX IF NOT EXISTS outreach_company_window ON outreach_company_budget(domain,updated_at);
+CREATE TABLE IF NOT EXISTS provider_credentials(id TEXT PRIMARY KEY,secret TEXT NOT NULL,updated_at BIGINT NOT NULL);
+CREATE TABLE IF NOT EXISTS job_catalog(id TEXT PRIMARY KEY,canonical_key TEXT NOT NULL UNIQUE,source TEXT NOT NULL,board TEXT NOT NULL DEFAULT '',work_mode TEXT NOT NULL DEFAULT '',search_terms TEXT NOT NULL,scope TEXT NOT NULL,score INTEGER NOT NULL DEFAULT 0,tier TEXT NOT NULL,eligible INTEGER NOT NULL DEFAULT 0,recommendable INTEGER NOT NULL DEFAULT 0,archived INTEGER NOT NULL DEFAULT 0,published_at BIGINT NOT NULL DEFAULT 0,seen_at BIGINT NOT NULL,body TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS catalog_rank ON job_catalog(scope,archived,score DESC,published_at DESC,id);
+CREATE INDEX IF NOT EXISTS catalog_source ON job_catalog(source,board,seen_at);
+CREATE INDEX IF NOT EXISTS catalog_all_rank ON job_catalog(archived,score DESC,published_at DESC,id);
+CREATE TABLE IF NOT EXISTS directory_sync(id TEXT PRIMARY KEY,status TEXT NOT NULL,body TEXT NOT NULL,updated_at BIGINT NOT NULL);
 `;
 export function openStore(directory) {
   let path = ":memory:";
@@ -147,6 +153,7 @@ export function openStore(directory) {
   }
   function overwrite(state) {
     for (const table of [
+      "job_catalog","directory_sync",
       "discovered_boards","outreach_company_budget","job_source_cache", "job_source_health", "job_search_runs", "job_search_config",
       "autopilot_runs", "autopilot_config", "autopilot_schedule", "autopilot_activity", "search_matrices", "provider_requests",
       "outreach_job_reservations", "worker_health", "outreach_send_log",

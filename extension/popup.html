@@ -2,19 +2,19 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Veloce AI Assistant</title>
+    <title>Veloce Assistant</title>
     <link rel="stylesheet" href="popup.css" />
     <script type="module" src="popup.mjs"></script>
   </head>
   <body>
-    <header><svg width="36" height="36" viewBox="0 0 40 40" aria-hidden="true"><defs><linearGradient id="v" x2="1" y2="1"><stop stop-color="#4F46E5"/><stop offset="1" stop-color="#06B6D4"/></linearGradient></defs><rect width="40" height="40" rx="12" fill="url(#v)"/><path d="m9 12 8 17 14-19h-8l-6 9-3-7H9Z" fill="white"/></svg><div><h1>Veloce AI</h1><small>APPLICATION COPILOT</small></div></header>
+    <header><svg width="36" height="36" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="12" fill="#475569"/><path d="m9 12 8 17 14-19h-8l-6 9-3-7H9Z" fill="white"/></svg><div><h1>Veloce</h1><small>APPLICATION ASSISTANT</small></div></header>
     <p>
       Fill from your saved profile. Review and submit every application
       yourself.
     </p>
     <details id="manual-pair"><summary>Manual pairing (advanced)</summary><form id="pair">
       <label
-        >Veloce AI address<input
+        >Veloce address<input
           name="base"
           type="url"
           value="https://orbit-a1jt.onrender.com"
@@ -31,10 +31,10 @@
     ><button id="refill">Fill the current application again</button
     ><button id="current">Fill this page</button>
     <button id="history">Auto-add &amp; fill all history entries</button>
-    <button id="company-contacts">Pull visible company recruiters to Veloce AI</button>
+    <button id="company-contacts">Pull visible company recruiters to Veloce</button>
     <button id="suggest">Suggest supported answers with Gemini</button>
     <details><summary>Import my LinkedIn profile</summary><label class="check"><input id="own-profile" type="checkbox"/>This is my own LinkedIn profile</label><button id="linkedin">Sync My LinkedIn Profile</button><small>Open your profile and expand the sections you want imported.</small></details>
-    <p>Start up to 10 selected jobs from Veloce AI. Each tab waits for your review and submission.</p><button id="pause-batch">Pause batch</button><button id="resume-batch">Resume batch</button><button id="skip-batch">Skip current application</button>
+    <p>Start up to 10 selected jobs from Veloce. Each tab waits for your review and submission.</p><button id="pause-batch">Pause batch</button><button id="resume-batch">Resume batch</button><button id="skip-batch">Skip current application</button>
     <button id="forget">Forget connection</button>
     <p id="status" role="status"></p>
     <p id="result"></p>

@@ -8,7 +8,7 @@ import { initialState } from '../fixtures.mjs';
 import { fail } from '../domain.mjs';
 
 const tables = ['workspace_meta', 'user_profiles', 'resumes', ...Object.values(collections)];
-const runtimeTables = [...tables, 'tasks', 'task_logs', 'mail_accounts', 'oauth_states', 'inbox_messages', 'resume_versions', 'embeddings', 'apply_tasks', 'extension_tokens', 'send_leases', 'send_budget', 'public_resumes', 'outreach_send_log', 'outreach_job_reservations', 'worker_health', 'unsubscribe_tokens', 'ai_cache', 'resume_objects', 'companies', 'search_matrices', 'autopilot_config', 'autopilot_schedule', 'autopilot_runs', 'autopilot_activity', 'provider_requests', 'job_search_config', 'job_search_runs', 'job_source_health', 'job_source_cache', 'discovered_boards', 'outreach_company_budget', 'migrations'];
+const runtimeTables = [...tables, 'provider_credentials','job_catalog','directory_sync', 'tasks', 'task_logs', 'mail_accounts', 'oauth_states', 'inbox_messages', 'resume_versions', 'embeddings', 'apply_tasks', 'extension_tokens', 'send_leases', 'send_budget', 'public_resumes', 'outreach_send_log', 'outreach_job_reservations', 'worker_health', 'unsubscribe_tokens', 'ai_cache', 'resume_objects', 'companies', 'search_matrices', 'autopilot_config', 'autopilot_schedule', 'autopilot_runs', 'autopilot_activity', 'provider_requests', 'job_search_config', 'job_search_runs', 'job_source_health', 'job_source_cache', 'discovered_boards', 'outreach_company_budget', 'migrations'];
 export function postgresSQL(sql) {
   let result = sql.replace(/INSERT OR IGNORE INTO/gi, 'INSERT INTO');
   if (/INSERT OR IGNORE INTO/i.test(sql)) result += ' ON CONFLICT DO NOTHING';
@@ -158,7 +158,7 @@ export async function openPostgresStore(config = process.env, suppliedPool) {
     return {base,state,readOnlyJobs};
   };
   const overwrite = async (state) => {
-    for (const table of [...new Set(['autopilot_runs', ...[...runtimeTables].reverse().filter(t => !['companies','contacts'].includes(t)), 'contacts', 'companies'])]) if (table !== 'migrations') await db.exec(`DELETE FROM ${table}`);
+    for (const table of [...new Set(['autopilot_runs', ...[...runtimeTables].reverse().filter(t => !['companies','contacts','provider_credentials'].includes(t)), 'contacts', 'companies'])]) if (table !== 'migrations') await db.exec(`DELETE FROM ${table}`);
     for (const [table, values] of Object.entries(entries(state))) for (const row of values) await write(table,row.id,row.value,false);
   };
   if (config.DATABASE_AUTO_MIGRATE !== 'false') await pool.query(await readFile(new URL('./runtime.sql',import.meta.url),'utf8'));

@@ -1,3 +1,7 @@
+See [workspace keys and provider verification](API_KEYS.md#workspace-keys-and-bulk-discovery-october-2026)
+for the new bulk harvester, Serper/Tavily search and Prospeo/GetProspect/Minelead
+waterfall. The original small-batch workflow below remains available.
+
 # Contact discovery and career tools
 
 ## Find contacts without Apollo
@@ -19,7 +23,8 @@ and public company careers/contact pages. Apollo remains an advanced option.
 6. Select contacts and use **Verify selected** or **Draft to verified contacts**.
    Drafts open for review and never send automatically from this workflow.
 
-Hunter searches hiring/executive departments before applying its result limit.
+Hunter requests an unfiltered first page and ranks functional managers, recruiters
+and peers locally before applying the retained-contact limit.
 It requests at most ten source records per company, compatible with the Free
 plan's first page, and retains the chosen number of relevant contacts. Recent
 verified results retain their date and references. A Hunter company-name lookup
@@ -40,7 +45,7 @@ by email and preserve suppression.
 ## Budgets and delivery
 
 **Check provider connections** tests Apollo's zero-credit People Search endpoint
-and Hunter's free Account Stats endpoint, caches the outcome for one minute,
+and Hunter's free Account endpoint, caches the outcome for one minute,
 and displays a safe diagnosis without account identity or API keys.
 
 - **Automation → Max contact API calls per day** limits reserved lookup attempts

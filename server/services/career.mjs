@@ -76,7 +76,7 @@ const icsEscape=v=>String(v || '').replaceAll('\\','\\\\').replaceAll('\r','').r
 function fold(line){let output='',width=0;for(const char of line){const size=Buffer.byteLength(char);if(width+size>74){output+='\r\n ';width=1;}output+=char;width+=size;}return output;}
 export function plannerCalendar(store) {
   const stamp=value=>new Date(value).toISOString().replace(/[-:]/g,'').replace(/\.\d{3}/,'');
-  const lines=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Veloce AI//Career Planner//EN','CALSCALE:GREGORIAN','METHOD:PUBLISH'];
+  const lines=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Veloce//Career Planner//EN','CALSCALE:GREGORIAN','METHOD:PUBLISH'];
   for(const task of careerData(store).tasks.filter(t=>!t.done && !t.archived && t.dueAt && Number.isFinite(Date.parse(t.dueAt)))) {
     const job=store.state.jobs.find(j=>j.id===task.jobId);
     lines.push('BEGIN:VEVENT',`UID:${task.id}@orbit-career`, `DTSTAMP:${stamp(Date.now())}`,`DTSTART:${stamp(task.dueAt)}`,`DTEND:${stamp(Date.parse(task.dueAt)+30*60000)}`,`SUMMARY:${icsEscape(task.title)}`,`DESCRIPTION:${icsEscape([task.kind,job && `${job.company} / ${job.title}`,task.notes,job?.url].filter(Boolean).join('\n'))}`,'BEGIN:VALARM','TRIGGER:-PT15M','ACTION:DISPLAY',`DESCRIPTION:${icsEscape(task.title)}`,'END:VALARM','END:VEVENT');

@@ -6,12 +6,13 @@ import curated from './boards.json' with {type:'json'};
 import {fetchJobs} from './index.mjs';
 import {workdayBoard} from './public-ats.mjs';
 import {careerURL,crawlCareerPage} from './career-pages.mjs';
-const publicATS=['Greenhouse','Lever','Ashby','SmartRecruiters','Workable','Recruitee','Lever EU','Workday','Career Pages'];
-const validBoard=b=>publicATS.includes(b?.source) && (b.source==='Workday' ? !!workdayBoard(b.slug) : b.source==='Career Pages' ? !!careerURL(b.slug) : /^[\w-]{1,80}$/.test(b.slug));
+import {indiaBoard,INDIA_ATS} from './india-ats.mjs';
+const publicATS=['Greenhouse','Lever','Ashby','SmartRecruiters','Workable','Recruitee','Lever EU','Workday','Career Pages',...INDIA_ATS];
+const validBoard=b=>publicATS.includes(b?.source) && (INDIA_ATS.includes(b.source)?!!indiaBoard(b.source,b.slug):b.source==='Workday' ? !!workdayBoard(b.slug) : b.source==='Career Pages' ? !!careerURL(b.slug) : /^[\w-]{1,80}$/.test(b.slug));
 const curatedKeys=new Set(curated.map(b=>`${b.source}:${b.slug}`));
 
 export async function knownBoards(store) {
-  return (await store.db.prepare("SELECT body FROM discovered_boards WHERE status='active' ORDER BY id LIMIT 500").all()).map(r=>JSON.parse(r.body));
+  return (await store.db.prepare("SELECT body FROM discovered_boards WHERE status IN ('active','candidate') ORDER BY checked_at,id LIMIT 500").all()).map(r=>JSON.parse(r.body));
 }
 export async function rememberBoards(jobs,store,queue) {
   const found=new Map();
@@ -55,7 +56,7 @@ export async function addCareerURL(value,store,queue) {
   const board=boardFromURL(url) || {source:'Career Pages',slug:url},key=hash([board.source,board.slug]);
   const old=await store.db.prepare('SELECT status,checked_at FROM discovered_boards WHERE id=?').get(key);
   if(old && ['pending','active'].includes(old.status))return {id:key,board,status:old.status,existing:true};
-  const total=await store.db.prepare('SELECT count(*) AS count FROM discovered_boards').get();if(Number(total.count)>=500 && !old)fail('The monitored career-page limit is 500.',409);
+  const total=await store.db.prepare('SELECT count(*) AS count FROM discovered_boards').get();if(Number(total.count)>=100000 && !old)fail('The monitored employer-directory limit is 100,000.',409);
   const body={...board,reference:url,addedBy:'owner',addedAt:new Date().toISOString()};
   await store.db.prepare("INSERT INTO discovered_boards(id,source,slug,status,body,checked_at) VALUES(?,?,?,'pending',?,?) ON CONFLICT(id) DO UPDATE SET status='pending',body=excluded.body,checked_at=excluded.checked_at").run(key,board.source,board.slug,JSON.stringify(body),Date.now());
   const task=await queue.enqueue('boards.verify',{id:key,board:body},{dedupeKey:`career-url:${key}:${Math.floor(Date.now()/3600000)}`});
