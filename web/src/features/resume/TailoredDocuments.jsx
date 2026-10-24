@@ -1,0 +1,5 @@
+import React,{useState} from 'react';
+import {useApp} from '../../shared/workspace.jsx';
+import {Heading,Field,Empty} from '../../shared/ui.jsx';
+import {JobDocuments} from './JobDocuments.jsx';
+export function TailoredDocuments(){const {data}=useApp(),jobs=data.jobs.filter(j=>!j.isDemo && !j.archived),[jobId,setJobId]=useState('');return <><Heading title="Documents with a clear point of view." subtitle="Your experience, tailored to the role. Edit, check keywords and export a private PDF snapshot."/>{jobs.length ? <><Field label="Choose a role"><select value={jobId} onChange={e=>setJobId(e.target.value)}><option value="">Select an opportunity</option>{jobs.map(j=><option key={j.id} value={j.id}>{j.company} · {j.title}</option>)}</select></Field>{jobId ? <JobDocuments key={jobId} jobId={jobId}/> : <Empty title="Make your next application specific.">Choose a role to build a résumé and cover letter from your saved experience.</Empty>}</> : <Empty title="Your documents start with a role.">Discover jobs and save your profile to begin.</Empty>}</>;}

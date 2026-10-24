@@ -1,0 +1,5 @@
+import React,{useState} from 'react';
+import {useApp,api,fmt} from './workspace.jsx';
+import {Button} from './ui.jsx';
+export function WorkerStatus(){const {worker={status:'offline'},connected,perform,notify}=useApp();return <button className={`worker-status ${worker.status}`} title={`Worker heartbeat: ${fmt(worker.heartbeatAt)}. ${connected ? 'Live connection active.' : 'Live connection reconnecting.'} Click to process due tasks.`} onClick={()=>perform(async()=>{const r=await api('/queue/flush',{});notify(r.message);})}><span className="status-dot"/><span>Worker <strong>{worker.status==='processing' ? 'Processing' : worker.status==='idle' ? 'Idle' : worker.status==='active' ? 'Active' : 'Offline'}</strong></span></button>;}
+export function QueueNowButton(){const {perform,notify}=useApp(),[busy,setBusy]=useState(false);return <Button small disabled={busy} onClick={()=>perform(async()=>{setBusy(true);try{const r=await api('/queue/flush',{});notify(`${r.due} due tasks · ${r.message}`);}finally{setBusy(false);}})}>{busy ? 'Waking worker…' : 'Run Queue'}</Button>;}

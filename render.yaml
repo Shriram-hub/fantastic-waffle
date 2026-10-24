@@ -1,0 +1,33 @@
+# Reproducible new install. Existing services can retain their runtime and use
+# these environment values through the Dashboard/MCP instead of Blueprint sync.
+services:
+  - type: web
+    name: orbit-career
+    runtime: node
+    plan: free
+    region: ohio
+    branch: codex/orbit-prototype
+    buildCommand: npm ci && npm run build
+    startCommand: node server/index.mjs
+    healthCheckPath: /api/health
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: HOST
+        value: 0.0.0.0
+      - key: ENABLE_EMBEDDED_WORKER
+        value: "true"
+      - key: JOB_CATALOG_ENABLED
+        value: "true"
+      - key: JOB_DATABASE_BUDGET_MB
+        value: "440"
+      - key: ENABLE_LIVE_SEND
+        value: "false"
+      - key: DATABASE_URL
+        sync: false
+      - key: WORKSPACE_PASSWORD
+        generateValue: true
+      # Render generates a base64-encoded 256-bit (32-byte) value.
+      - key: TOKEN_ENCRYPTION_KEY
+        generateValue: true

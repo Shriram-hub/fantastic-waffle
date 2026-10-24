@@ -1,0 +1,34 @@
+import {now} from '../domain.mjs';
+import {searchApollo} from '../providers/contacts/apollo.mjs';
+import {remoteJSON} from '../providers/http.mjs';
+import {contactProviderError} from '../providers/contacts/errors.mjs';
+import {effectiveProviderConfig} from './provider-config.mjs';
+import {providerJSON} from '../providers/contacts/provider-http.mjs';
+
+export async function recordContactProviderFailure(store,provider,error) {
+  if(!error.providerStatus)return;
+  const safe=contactProviderError(provider,error);
+  await store.refresh();
+  const previous=store.state.contactProviderChecks || {checks:[]};
+  store.state.contactProviderChecks={checkedAt:now(),checks:[...previous.checks.filter(c=>c.provider!==provider),{provider,configured:true,ok:false,httpStatus:error.providerStatus,message:safe.message,endpoint:'Discovery'}]};
+  await store.save();
+}
+
+// Read-only checks: Apollo documents People API Search as zero-credit, and
+// Hunter Account is free. No contact is saved and no email is sent.
+export async function checkContactProviders(store,config={},fetcher=fetch) {
+  config=await effectiveProviderConfig(store,config);
+  const cached=store.state.contactProviderChecks;
+  if(cached && Date.now()-Date.parse(cached.checkedAt)<60000)return cached;
+  const checkedAt=now();
+  const check=async(provider,key,operation)=>{
+    if(!key)return {provider,configured:false,ok:false,message:'Server key not configured.'};
+    try{await operation();return {provider,configured:true,ok:true,message:provider==='Apollo' ? 'People Search endpoint accepted this key.' : 'Hunter accepted this key. Search and verification remain subject to plan credits.'};}
+    catch(error){return {provider,configured:true,ok:false,httpStatus:error.providerStatus || null,message:error.status ? error.message : `${provider} could not be reached.`};}
+  };
+  const checks=await Promise.all([
+    check('Apollo',config.APOLLO_API_KEY,()=>searchApollo({domain:'stripe.com',titles:'Recruiter',limit:1},config.APOLLO_API_KEY,fetcher)),
+    check('Hunter',config.HUNTER_API_KEY,async()=>{const url=new URL('https://api.hunter.io/v2/account');url.searchParams.set('api_key',config.HUNTER_API_KEY);const result=await providerJSON('Hunter',url.href,{},fetcher,10000,[config.HUNTER_API_KEY]);if(!result.data)throw Object.assign(Error('Hunter returned an unexpected account-check response.'),{status:502});}),
+  ]);
+  await store.refresh();store.state.contactProviderChecks={checkedAt,checks:[...(store.state.contactProviderChecks?.checks || []).filter(c=>!['Apollo','Hunter'].includes(c.provider)),...checks]};await store.save();return store.state.contactProviderChecks;
+}

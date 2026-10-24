@@ -1,0 +1,303 @@
+import {SlideOver} from '../../shared/SlideOver.jsx';
+import {WorkspaceAppearance} from './WorkspaceAppearance.jsx';
+import {ProviderKeys} from './ProviderKeys.jsx';
+import {AlertSettings} from './AlertSettings.jsx';
+import {MailboxChecks} from './MailboxChecks.jsx';
+import {extensionVersion} from '../../shared/extension-version.mjs';
+import {pairBrowserExtension} from '../../shared/browser-batch.mjs';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useApp, api, stages, split, fmt } from '../../shared/workspace.jsx';
+import { Button, Badge, Heading, Empty, Panel, Field, Company, Modal, ConfirmAction, Sample } from '../../shared/ui.jsx';
+import {SetupChecklist} from './SetupChecklist.jsx';
+export function Connections({section='all'}) {
+  const { data, accounts, integrations, setup={}, perform, notify, setModal } = useApp(),
+    [drawer,setDrawer]=useState(''),[settings, setSettings] = useState({
+      ...data.settings,
+      greenhouseBoards: (data.settings.greenhouseBoards || []).join(", "),
+      leverBoards: (data.settings.leverBoards || []).join(", "),
+      ashbyBoards: (data.settings.ashbyBoards || []).join(", "),
+      sendTimeZone: data.settings.sendTimeZone || "UTC",
+      dailySendLimit: data.settings.dailySendLimit || 30,
+    });
+  const update = (k, v) => setSettings((s) => ({ ...s, [k]: v }));
+  return (
+    <>
+      <Heading
+        title="Your tools, working together."
+        subtitle="Explicit connections. Server-side secrets. A clear view of what is configured."
+      ><Button onClick={()=>setDrawer('assistant')}>Browser assistant</Button><Button onClick={()=>setDrawer('help')}>Connection help</Button><Button onClick={()=>setDrawer('controls')}>Workspace controls</Button></Heading>
+      {section==='all' && <><WorkspaceAppearance/><ProviderKeys/><SetupChecklist/><AlertSettings/></>}
+      <div className="provider-grid">
+        <section className="connection-card">
+          <div className="spread">
+            <span className="provider-mark">G</span>
+            <Badge
+              value={
+                accounts.some((a) => a.provider === "google")
+                  ? "Connected"
+                  : integrations.googleOAuth
+                    ? "Ready to connect"
+                    : "Needs server setup"
+              }
+            />
+          </div>
+          <h3>Google / Gmail</h3>
+          <p>
+            Read application updates, watch mailbox history through Pub/Sub, and
+            send reviewed messages from your account.
+          </p>
+          <a className="btn small" href="/api/oauth/google/start">
+            Connect Google
+          </a>
+        </section>
+        <section className="connection-card">
+          <div className="spread">
+            <span className="provider-mark blue">M</span>
+            <Badge
+              value={
+                accounts.some((a) => a.provider === "microsoft")
+                  ? "Connected"
+                  : integrations.microsoftOAuth
+                    ? "Ready to connect"
+                    : "Needs server setup"
+              }
+            />
+          </div>
+          <h3>Microsoft / Outlook</h3>
+          <p>
+            Use Graph delta sync and authenticated webhook notifications. Tokens
+            are encrypted on the server.
+          </p>
+          <a className="btn small" href="/api/oauth/microsoft/start">
+            Connect Microsoft
+          </a>
+        </section>
+      </div>
+      <SlideOver open={drawer==='help'} onClose={()=>setDrawer('')} title="Connection help">      <section className="notice mb"><strong>Mail connects through Google or Microsoft OAuth</strong><p>Veloce sends and scans through HTTPS APIs, so Gmail App Password formatting and Render’s SMTP port restrictions do not apply. Connect the mailbox, then use the self-test buttons below. Register the exact callback URL shown in setup in Google Cloud.</p></section>
+      <section className="notice mb"><strong>Free job discovery is included</strong><p>Greenhouse, Lever, Ashby and public feeds work without API keys. Optional JSEARCH_API_KEY or SERPAPI_API_KEY broadens coverage through Google Jobs. Save these in Render → Environment, then enable Google Jobs in search sources.</p><p>JSearch: {setup.jsearchConfigured ? 'key saved' : 'not configured'} · SerpApi: {setup.serpapiConfigured ? 'key saved' : 'not configured'}. Source health shows whether live provider requests succeed.</p></section>
+<div className="provider-grid">        {[
+          ["Apollo", "Contact search & selected enrichment", "apollo"],
+          ["Hunter", "Work-email verification", "hunter"],
+          ["Adzuna", "Aggregator search using your target roles", "adzuna"],
+          [
+            setup.geminiConfigured ? "Gemini & embeddings" : "Model & embeddings",
+            "Structured extraction and semantic matching",
+            "ai",
+          ],
+        ].map(([name, description, key]) => (
+          <section className="connection-card" key={key}>
+            <div className="spread">
+              <span className="provider-mark">{name[0]}</span>
+              <Badge
+                value={
+                  integrations[key] ? "Key configured" : "Needs server key"
+                }
+              />
+            </div>
+            <h3>{name}</h3>
+            <p>{description}. Save supported keys above; advanced integrations can also use Render environment variables.</p>
+          </section>
+        ))}</div></SlideOver>
+      <div className="content-grid mt">
+        <form
+          className="form-section"
+          onSubmit={(e) => {
+            e.preventDefault();
+            perform(
+              () =>
+                api(
+                  "/settings",
+                  {
+                    ...settings,
+                    greenhouseBoards: split(settings.greenhouseBoards),
+                    leverBoards: split(settings.leverBoards),
+                    ashbyBoards: split(settings.ashbyBoards),
+                  },
+                  "PUT",
+                ),
+              "Settings saved.",
+            );
+          }}
+        >
+          <h2>Sending & inbox settings</h2>
+
+          <div className="stack">
+            <details className="subtle-accordion"><summary>Additional company board slugs</summary>{["greenhouse", "lever", "ashby"].map((source) => (
+              <Field
+                key={source}
+                label={`${source[0].toUpperCase() + source.slice(1)} company slugs`}
+                hint="Comma-separated; up to ten."
+              >
+                <input
+                  className="input"
+                  value={settings[`${source}Boards`]}
+                  onChange={(e) => update(`${source}Boards`, e.target.value)}
+                />
+              </Field>
+            ))}</details>
+            <Field
+              label="Sending time zone (IANA)"
+              hint="This is the campaign window’s time zone. Default UTC; no recipient location is guessed."
+            >
+              <input
+                className="input"
+                value={settings.sendTimeZone}
+                onChange={(e) => update("sendTimeZone", e.target.value)}
+              />
+            </Field>
+            <Field label="Daily send cap per account (1–50)">
+              <input
+                className="input"
+                type="number"
+                min="1"
+                max="50"
+                value={settings.dailySendLimit}
+                onChange={(e) =>
+                  update("dailySendLimit", Number(e.target.value))
+                }
+              />
+            </Field>
+            <label className="checkbox-group">
+              <input
+                type="checkbox"
+                checked={settings.inboxAutoUpdate || false}
+                onChange={(e) => update("inboxAutoUpdate", e.target.checked)}
+              />
+              Automatically advance uniquely matched inbox updates
+            </label>
+            <p className="hint">
+              Ambiguous, older, regressive, and terminal-stage changes remain in
+              review.
+            </p>
+            <label className="checkbox-group">
+              <input
+                type="checkbox"
+                checked={settings.inboxUseAI || false}
+                onChange={(e) => update("inboxUseAI", e.target.checked)}
+              />
+              Use the configured model for email classification
+            </label>
+            <p className="hint">
+              If enabled, matched email content is sent to your model provider
+              and may incur API usage charges.
+            </p>
+          </div>
+          <div className="form-actions">
+            <Button primary type="submit">
+              Save settings
+            </Button>
+          </div>
+        </form>
+        <div>
+          <Panel title="Connected mailboxes">
+            {accounts.map((a) => (
+              <div className="task-item" key={a.id}>
+                <strong>{a.email}</strong>
+                <p>
+                  {a.provider} · Last sync {fmt(a.lastSync)}
+                  <br />
+                  Watch expires {fmt(a.watchExpires)}
+                </p>
+                <MailboxChecks account={a}/>
+                <div className="btn-row mt">
+                  <Button
+                    small
+                    onClick={() =>
+                      perform(
+                        () => api(`/mail/${a.id}/sync`, {}),
+                        "Sync queued.",
+                      )
+                    }
+                  >
+                    Sync
+                  </Button>
+                  <Button
+                    small
+                    onClick={() =>
+                      perform(
+                        () => api(`/mail/${a.id}/watch`, {}),
+                        "Watch setup / renewal queued.",
+                      )
+                    }
+                  >
+                    Enable push watch
+                  </Button>
+                  <Button
+                    small
+                    onClick={() =>
+                      perform(
+                        () => api(`/mail/${a.id}/disconnect`, {}),
+                        "Mailbox disconnected.",
+                      )
+                    }
+                  >
+                    Disconnect
+                  </Button>
+                </div>
+              </div>
+            ))}
+            {!accounts.length && (
+              <Empty title="Bring your inbox into view.">
+                OAuth setup requires server credentials and registered callback
+                URLs.
+              </Empty>
+            )}
+          </Panel>
+          <SlideOver open={drawer==='assistant'} onClose={()=>setDrawer('')} title="Browser application assistant"><section className="form-section">
+            <h2>Browser application assistant</h2>
+            <p>
+              Download and extract the assistant. Open chrome://extensions,
+              enable Developer mode, and load the veloce-ai-extension folder.
+              The download includes this app’s address and a one-use installation code valid for 15 minutes. After installation, refresh Veloce and click Pair extension below if needed. No workspace password is included.
+              Tokens expire in 24 hours. To update an existing installation, replace the entire extracted folder, reload it at chrome://extensions, then refresh LinkedIn.
+            </p>
+            <div className="btn-row">
+              <a className="btn primary" href="/api/extension/download">Download Chrome extension {extensionVersion}</a>
+              <Button onClick={()=>perform(async()=>notify(await pairBrowserExtension()))}>Pair extension with this workspace</Button>
+              <Button
+                onClick={() =>
+                  perform(async () => {
+                    const result = await api("/extension/token", {});
+                    setModal({ type: "token", token: result.token });
+                  })
+                }
+              >
+                Generate pairing token
+              </Button>
+              <Button
+                onClick={() =>
+                  perform(
+                    () => api("/extension/token", {}, "DELETE"),
+                    "Extension tokens revoked.",
+                  )
+                }
+              >
+                Revoke tokens
+              </Button>
+            </div>
+          </section></SlideOver>
+          <SlideOver open={drawer==='controls'} onClose={()=>setDrawer('')} title="Workspace controls"><section className="form-section">
+            <h2>Workspace controls</h2>
+            <Button onClick={()=>setModal({type:"clear-demo"})}>Clear demo / seed data</Button>
+            <p>
+              Reset replaces profile, files, records, queued tasks, and mailbox
+              connections.
+            </p>
+            <div className="btn-row">
+              <Button onClick={() => setModal({ type: "reset", demo: false })}>
+                Start fresh
+              </Button>
+              <Button onClick={() => setModal({ type: "reset", demo: true })}>
+                Load sample workspace
+              </Button>
+            </div>
+          </section></SlideOver>
+        </div>
+      </div>
+      <div className="notice">
+        Queue driver: {integrations.queueDriver}. This is one private personal workspace.
+        OAuth connects your mailboxes; separate user accounts are a future milestone.
+      </div>
+    </>
+  );
+}

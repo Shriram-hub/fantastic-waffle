@@ -1,0 +1,74 @@
+{
+  "manifest_version": 3,
+  "name": "Veloce Application Assistant",
+  "version": "0.13.0",
+  "description": "Find company contacts on LinkedIn, review email suggestions and autofill applications from your approved Veloce profile.",
+  "permissions": [
+    "storage",
+    "scripting",
+    "tabs",
+    "webNavigation"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1/*",
+    "http://localhost/*",
+    "https://*.greenhouse.io/*",
+    "https://*.lever.co/*",
+    "https://*.myworkdayjobs.com/*",
+    "https://*.ashbyhq.com/*",
+    "https://*.smartrecruiters.com/*",
+    "https://*.taleo.net/*",
+    "https://*.icims.com/*",
+    "https://*.myworkdaysite.com/*",
+    "https://*.naukri.com/*",
+    "https://*.linkedin.com/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.mjs",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Veloce \u00b7 Application Assistant"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.greenhouse.io/*",
+        "https://*.lever.co/*",
+        "https://*.myworkdayjobs.com/*",
+        "https://*.ashbyhq.com/*",
+        "https://*.smartrecruiters.com/*",
+        "https://*.taleo.net/*",
+        "https://*.icims.com/*",
+        "https://*.myworkdaysite.com/*",
+        "https://*.naukri.com/*",
+        "https://www.linkedin.com/jobs/*"
+      ],
+      "js": [
+        "confirmation.js",
+        "copilot.js"
+      ],
+      "all_frames": true,
+      "run_at": "document_idle",
+      "match_about_blank": true
+    },
+    {
+      "matches": [
+        "https://*.linkedin.com/*",
+        "https://www.linkedin.com/in/*",
+        "https://www.linkedin.com/search/results/people/*"
+      ],
+      "js": [
+        "linkedin.js",
+        "contact-ui.js",
+        "copilot.js"
+      ],
+      "all_frames": false,
+      "run_at": "document_idle"
+    }
+  ]
+}

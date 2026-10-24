@@ -1,0 +1,48 @@
+{
+  "name": "veloce-ai-workspace",
+  "version": "0.6.0",
+  "private": true,
+  "type": "module",
+  "description": "A career workspace with relational persistence, background workers, mailbox sync, and reviewed outreach.",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server/index.mjs",
+    "prestart": "npm run build",
+    "api": "node --env-file-if-exists=.env --watch server/index.mjs",
+    "worker": "node --env-file-if-exists=.env server/worker.mjs",
+    "dev": "node scripts/dev.mjs",
+    "web": "vite",
+    "build": "vite build",
+    "test": "node --test tests/*.test.mjs",
+    "check": "node scripts/check.mjs",
+    "db:export-postgres": "node --env-file-if-exists=.env scripts/export-postgres.mjs"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1152.0",
+    "@fontsource/inter": "5.3.0",
+    "@fontsource/jetbrains-mono": "5.3.0",
+    "@fontsource/noto-sans": "5.3.0",
+    "@fontsource/noto-sans-devanagari": "5.3.0",
+    "@fontsource/plus-jakarta-sans": "5.3.0",
+    "bullmq": "^6.3.16",
+    "drizzle-orm": "^0.45.4",
+    "ioredis": "^6.0.0",
+    "jose": "^6.2.12",
+    "pdfkit": "0.20.2",
+    "pg": "^8.23.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "unpdf": "1.9.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.10",
+    "@tailwindcss/vite": "^4.3.3",
+    "@vitejs/plugin-react": "^6.1.2",
+    "jsdom": "26.1.0",
+    "tailwindcss": "^4.3.3",
+    "vite": "^8.3.4"
+  }
+}
