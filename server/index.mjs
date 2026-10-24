@@ -1,3 +1,4 @@
+import {classifyReply} from './services/reply-classifier.mjs';
 import {verifyProvider} from './services/provider-verification.mjs';
 import {serperSearch} from './providers/contacts/serper-xray.mjs';
 import {providerCall} from './services/provider-budget.mjs';
@@ -569,6 +570,7 @@ export function createApp({
             status: "Needs review",
             createdAt: now()
           };
+          Object.assign(item,classifyReply(item));if(['ooo','bounce'].includes(item.category))item.proposedStage=null;
           s.inbox.unshift(item);
           await store.save();
           return json(res, 201, {

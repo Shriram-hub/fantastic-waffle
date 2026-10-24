@@ -473,6 +473,7 @@ export function upgradeRoutes(store, config, fetcher) {
     if (mailbox) {
       if (!(await store.db.prepare("SELECT id FROM mail_accounts WHERE id=?").get(mailbox[1]))) fail("Mailbox not found.", 404);
       if (mailbox[2] === "disconnect") {
+        for(const task of await store.db.prepare("SELECT id FROM tasks WHERE kind='inbox.reply' AND status='queued' AND json_extract(payload,'$.accountId')=?").all(mailbox[1]))await queue.cancel(task.id);
         await store.db.prepare("DELETE FROM mail_accounts WHERE id=?").run(mailbox[1]);
         await store.db.prepare("DELETE FROM autopilot_schedule WHERE id=?").run(`mailbox:${mailbox[1]}`);
         await store.db.prepare("UPDATE tasks SET status='cancelled' WHERE status='queued' AND json_extract(payload,'$.accountId')=?").run(mailbox[1]);

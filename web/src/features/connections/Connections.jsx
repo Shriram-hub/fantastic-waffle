@@ -1,3 +1,4 @@
+import {SlideOver} from '../../shared/SlideOver.jsx';
 import {WorkspaceAppearance} from './WorkspaceAppearance.jsx';
 import {ProviderKeys} from './ProviderKeys.jsx';
 import {AlertSettings} from './AlertSettings.jsx';
@@ -8,9 +9,9 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp, api, stages, split, fmt } from '../../shared/workspace.jsx';
 import { Button, Badge, Heading, Empty, Panel, Field, Company, Modal, ConfirmAction, Sample } from '../../shared/ui.jsx';
 import {SetupChecklist} from './SetupChecklist.jsx';
-export function Connections() {
+export function Connections({section='all'}) {
   const { data, accounts, integrations, setup={}, perform, notify, setModal } = useApp(),
-    [settings, setSettings] = useState({
+    [drawer,setDrawer]=useState(''),[settings, setSettings] = useState({
       ...data.settings,
       greenhouseBoards: (data.settings.greenhouseBoards || []).join(", "),
       leverBoards: (data.settings.leverBoards || []).join(", "),
@@ -24,13 +25,8 @@ export function Connections() {
       <Heading
         title="Your tools, working together."
         subtitle="Explicit connections. Server-side secrets. A clear view of what is configured."
-      />
-      <WorkspaceAppearance/>
-      <ProviderKeys/>
-      <SetupChecklist/>
-      <AlertSettings/>
-      <section className="notice mb"><strong>Mail connects through Google or Microsoft OAuth</strong><p>Veloce sends and scans through HTTPS APIs, so Gmail App Password formatting and Render’s SMTP port restrictions do not apply. Connect the mailbox, then use the self-test buttons below. Register the exact callback URL shown in setup in Google Cloud.</p></section>
-      <section className="notice mb"><strong>Free job discovery is included</strong><p>Greenhouse, Lever, Ashby and public feeds work without API keys. Optional JSEARCH_API_KEY or SERPAPI_API_KEY broadens coverage through Google Jobs. Save these in Render → Environment, then enable Google Jobs in search sources.</p><p>JSearch: {setup.jsearchConfigured ? 'key saved' : 'not configured'} · SerpApi: {setup.serpapiConfigured ? 'key saved' : 'not configured'}. Source health shows whether live provider requests succeed.</p></section>
+      ><Button onClick={()=>setDrawer('assistant')}>Browser assistant</Button><Button onClick={()=>setDrawer('help')}>Connection help</Button><Button onClick={()=>setDrawer('controls')}>Workspace controls</Button></Heading>
+      {section==='all' && <><WorkspaceAppearance/><ProviderKeys/><SetupChecklist/><AlertSettings/></>}
       <div className="provider-grid">
         <section className="connection-card">
           <div className="spread">
@@ -76,7 +72,10 @@ export function Connections() {
             Connect Microsoft
           </a>
         </section>
-        {[
+      </div>
+      <SlideOver open={drawer==='help'} onClose={()=>setDrawer('')} title="Connection help">      <section className="notice mb"><strong>Mail connects through Google or Microsoft OAuth</strong><p>Veloce sends and scans through HTTPS APIs, so Gmail App Password formatting and Render’s SMTP port restrictions do not apply. Connect the mailbox, then use the self-test buttons below. Register the exact callback URL shown in setup in Google Cloud.</p></section>
+      <section className="notice mb"><strong>Free job discovery is included</strong><p>Greenhouse, Lever, Ashby and public feeds work without API keys. Optional JSEARCH_API_KEY or SERPAPI_API_KEY broadens coverage through Google Jobs. Save these in Render → Environment, then enable Google Jobs in search sources.</p><p>JSearch: {setup.jsearchConfigured ? 'key saved' : 'not configured'} · SerpApi: {setup.serpapiConfigured ? 'key saved' : 'not configured'}. Source health shows whether live provider requests succeed.</p></section>
+<div className="provider-grid">        {[
           ["Apollo", "Contact search & selected enrichment", "apollo"],
           ["Hunter", "Work-email verification", "hunter"],
           ["Adzuna", "Aggregator search using your target roles", "adzuna"],
@@ -98,8 +97,7 @@ export function Connections() {
             <h3>{name}</h3>
             <p>{description}. Save supported keys above; advanced integrations can also use Render environment variables.</p>
           </section>
-        ))}
-      </div>
+        ))}</div></SlideOver>
       <div className="content-grid mt">
         <form
           className="form-section"
@@ -121,13 +119,10 @@ export function Connections() {
             );
           }}
         >
-          <h2>Sources & automation settings</h2>
-          <p>
-            Remotive, Arbeitnow, and Himalayas are public feeds. Company-board slugs choose
-            specific employers.
-          </p>
+          <h2>Sending & inbox settings</h2>
+
           <div className="stack">
-            {["greenhouse", "lever", "ashby"].map((source) => (
+            <details className="subtle-accordion"><summary>Additional company board slugs</summary>{["greenhouse", "lever", "ashby"].map((source) => (
               <Field
                 key={source}
                 label={`${source[0].toUpperCase() + source.slice(1)} company slugs`}
@@ -139,7 +134,7 @@ export function Connections() {
                   onChange={(e) => update(`${source}Boards`, e.target.value)}
                 />
               </Field>
-            ))}
+            ))}</details>
             <Field
               label="Sending time zone (IANA)"
               hint="This is the campaign window’s time zone. Default UTC; no recipient location is guessed."
@@ -248,7 +243,7 @@ export function Connections() {
               </Empty>
             )}
           </Panel>
-          <section className="form-section">
+          <SlideOver open={drawer==='assistant'} onClose={()=>setDrawer('')} title="Browser application assistant"><section className="form-section">
             <h2>Browser application assistant</h2>
             <p>
               Download and extract the assistant. Open chrome://extensions,
@@ -280,8 +275,8 @@ export function Connections() {
                 Revoke tokens
               </Button>
             </div>
-          </section>
-          <section className="form-section">
+          </section></SlideOver>
+          <SlideOver open={drawer==='controls'} onClose={()=>setDrawer('')} title="Workspace controls"><section className="form-section">
             <h2>Workspace controls</h2>
             <Button onClick={()=>setModal({type:"clear-demo"})}>Clear demo / seed data</Button>
             <p>
@@ -296,7 +291,7 @@ export function Connections() {
                 Load sample workspace
               </Button>
             </div>
-          </section>
+          </section></SlideOver>
         </div>
       </div>
       <div className="notice">

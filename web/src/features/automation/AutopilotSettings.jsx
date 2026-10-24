@@ -5,7 +5,7 @@ import {AutopilotReview} from './AutopilotReview.jsx';
 import {AutopilotActivity} from './AutopilotActivity.jsx';
 import {DiscoverySources} from '../jobs/DiscoverySources.jsx';
 
-export function AutopilotSettings() {
+export function AutopilotSettings({showActivity=true,showSources=true}) {
   const {autopilot,accounts=[],perform,busy,go}=useApp();
   const [draft,setDraft]=useState(autopilot?.policy || null),[ack,setAck]=useState(false),[review,setReview]=useState(false),[retryConsent,setRetryConsent]=useState(false);
   useEffect(()=>{if(autopilot){setDraft(autopilot.policy);setAck(false);}},[autopilot ? autopilot.policy.id || 'default' : null]);
@@ -13,7 +13,7 @@ export function AutopilotSettings() {
   const set=(key,value)=>{setDraft(d=>({...d,[key]:value}));setAck(false);};
   const blockers=Object.entries(autopilot.blockers).flatMap(([stage,items])=>items.map(message=>({stage,message})));
   return <>
-    <DiscoverySources/>
+    {showSources && <DiscoverySources/>}
     <Panel title="Autopilot Mode" subtitle="Optional outreach: find company contacts and prepare a focused pitch for matching roles. Job search works with this switched off."
       action={<Badge value={autopilot.policy.enabled ? 'Enabled' : 'Paused'}/> }>
       <form className="panel-body" onSubmit={event=>{event.preventDefault();perform(()=>api('/autopilot',{...draft,acknowledged:ack},'PUT'),'Autopilot settings saved.');}}>
@@ -46,7 +46,7 @@ export function AutopilotSettings() {
       {autopilot.matrix && <div className="panel-body"><strong>Your search plan</strong><p>{autopilot.matrix.target_roles.join(' · ') || 'Add target roles in My profile.'}</p><p>{autopilot.matrix.locations.join(' · ')} · {autopilot.matrix.ats_boards_to_watch.length} company boards, rotated each sweep</p>{autopilot.matrix.derivedRoles && <p className="small muted">Roles derived from résumé skills. Set your own target roles in My profile to refine them.</p>}</div>}
       <div className="panel-body spread"><p>{autopilot.reviewCount} prepared pitches · {autopilot.schedulerConfigured ? 'Cloud scheduler configured' : 'Scheduler runs while the server is awake'}</p><Button disabled={!autopilot.reviewCount} onClick={()=>setReview(true)}>Review pitches</Button></div>
     </Panel>
-    <AutopilotActivity/>
+    {showActivity && <AutopilotActivity/>}
     {!!autopilot.heldLookups?.length && <Panel title="Held provider lookups" subtitle="An interrupted request may already have used provider credits. Check your Apollo/Hunter usage before allowing another attempt."><div className="panel-body"><p>{autopilot.heldLookups.length} held requests. Today's original reservations still count toward the daily cap.</p><label className="check"><input type="checkbox" checked={retryConsent} onChange={e=>setRetryConsent(e.target.checked)}/>I checked provider usage and approve retrying these held requests; more credits may be consumed.</label><Button disabled={!retryConsent || !autopilot.policy.enabled || busy} onClick={()=>perform(async()=>{await api('/autopilot/retry-lookups',{approved:true,ids:autopilot.heldLookups.map(r=>r.id)});setRetryConsent(false);},'Held lookups released for retry.')}>Retry held lookups</Button></div></Panel>}
     {autopilot.runs.filter(r=>r.status==='blocked').slice(0,5).map(r=><div className="notice mb" key={r.id}><strong>Contact lookup needs attention</strong><p>{r.body.reason}</p></div>)}
     {review && <AutopilotReview close={()=>setReview(false)}/>}

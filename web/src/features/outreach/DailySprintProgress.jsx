@@ -1,0 +1,9 @@
+import React,{useEffect,useRef,useState} from 'react';
+import {useApp,api} from '../../shared/workspace.jsx';
+import {Button} from '../../shared/ui.jsx';
+export function DailySprintProgress({onReady}){
+  const {dailySprint,setDailySprint,setModal}=useApp(),[status,setStatus]=useState(null),[error,setError]=useState(''),loaded=useRef(''),ready=useRef(onReady);ready.current=onReady;
+  useEffect(()=>{if(!dailySprint?.id)return;let disposed=false,timer;async function refresh(){try{const r=await api(`/workbench/daily-sprint/${dailySprint.id}`);if(disposed)return;setStatus(r);setError('');if(r.campaign && loaded.current!==r.campaign.id){loaded.current=r.campaign.id;await ready.current(r.campaign);}if(r.run.status==='queued')timer=setTimeout(refresh,5000);}catch(e){if(!disposed)setError(e.message);}}refresh();return()=>{disposed=true;clearTimeout(timer);};},[dailySprint?.id]);
+  if(!dailySprint)return null;const run=status?.run || dailySprint,done=run.targets.filter(t=>['ready-for-review','needs-verification','failed','needs-domain'].includes(t.status)).length;
+  return <section className="sprint-progress"><div className="spread"><strong>Daily 15-Minute Outbound Sprint</strong><Button small onClick={()=>setDailySprint(null)}>Close sprint view</Button></div><progress aria-label="Sprint preparation progress" value={done} max={run.targets.length}/><p>{done}/{run.targets.length} companies prepared · up to {run.targets.length*3} contacts · {run.note || 'Preparing contacts, documents and per-role pitches in the background.'}</p>{error && <p role="alert">{error}</p>}<details className="subtle-accordion"><summary>Company preparation details</summary>{run.targets.map(t=><div className="spread" key={t.jobId}><span>{t.company} · {t.status || 'queued'}</span><Button small onClick={()=>setModal({type:'auto-pitch',id:t.jobId})}>Review pitch & documents</Button></div>)}</details></section>;
+}

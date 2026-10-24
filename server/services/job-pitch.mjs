@@ -48,10 +48,10 @@ async function reserveJobPitch(jobId,data,store,queue,config) {
   if(!PERSONA_FILTERS.includes(targetPersona) || !PITCH_ANGLES.includes(angle))fail('Choose a valid persona and pitch angle.');
   const domain=data.companyDomain ? companyDomain(data.companyDomain) : '';
   if(data.companyDomain && (!domain || data.confirmedDomain!==true))fail('Confirm a corporate domain, without a URL or job-board host.');
-  const scope=sourceHash(s,j),signature=hash({jobId,scope,domain,targetPersona,pitchAngle:angle,allowCredits:data.allowCredits===true,allowSearch:data.allowSearch===true,useAI:data.useAI===true});
+  const scope=sourceHash(s,j),signature=hash({jobId,scope,domain,targetPersona,pitchAngle:angle,allowCredits:data.allowCredits===true,allowSearch:data.allowSearch===true,useAI:data.useAI===true,contactLimit:data.contactLimit===3?3:5});
   const previous=(s.jobPitches || []).find(r=>r.signature===signature && !['failed','needs-domain'].includes(r.status));
   if(previous)return {pitch:pitchSummary(previous,store),existing:true};
-  const run={id:id(),jobId,signature,sourceHash:scope,status:'queued',createdAt:now(),contactIds:[],options:{domain,targetPersona,pitchAngle:angle,allowCredits:data.allowCredits===true,allowSearch:data.allowSearch===true,useAI:data.useAI===true}};
+  const run={id:id(),jobId,signature,sourceHash:scope,status:'queued',createdAt:now(),contactIds:[],options:{domain,targetPersona,pitchAngle:angle,allowCredits:data.allowCredits===true,allowSearch:data.allowSearch===true,useAI:data.useAI===true,contactLimit:data.contactLimit===3?3:5}};
   if(!s.applications.some(a=>a.jobId===jobId))s.applications.push({id:id(),jobId,stage:'Saved',notes:'Company pitch prepared from job feed',createdAt:now(),updatedAt:now(),isDemo:false,history:[{stage:'Saved',at:now(),source:'Company pitch preparation'}]});
   s.jobPitches=[run,...(s.jobPitches || []).slice(0,49)];
   const task=await queue.enqueue('job.auto-pitch',{pitchId:run.id},{dedupeKey:`job-pitch:${run.id}`,maxAttempts:1});run.taskId=task.id;await store.save(true);
@@ -66,7 +66,7 @@ export async function buildJobPitch(task,store,queue,config,fetcher=fetch,depend
     await fresh();await stage('finding-contacts');
     const company=run.options.domain ? {name:job.company,domain:run.options.domain,source:'User-confirmed corporate domain'} : await resolveCompany(job,fetcher,store);
     if(!company || company.requiresDomainReview){run.company=company;run.status='needs-domain';run.warning='Confirm the company’s official domain to continue. DNS alone cannot identify the employer.';await store.save();return {status:'Needs domain review'};}
-    const found=await findCompanyContacts(job,company,{store,config,fetcher,lookupMx:dependencies.lookupMx,pages:dependencies.contactPages,allowCredits:run.options.allowCredits,allowWarmSearch:run.options.allowSearch,limit:5,dailyLimit:Math.min(100,Number(config.CONTACT_API_DAILY_LIMIT) || 20),targetPersona:run.options.targetPersona || 'all'});
+    const found=await findCompanyContacts(job,company,{store,config,fetcher,lookupMx:dependencies.lookupMx,pages:dependencies.contactPages,allowCredits:run.options.allowCredits,allowWarmSearch:run.options.allowSearch,limit:run.options.contactLimit || 5,dailyLimit:Math.min(100,Number(config.CONTACT_API_DAILY_LIMIT) || 20),targetPersona:run.options.targetPersona || 'all'});
     await fresh();
     Object.assign(store.state.jobs.find(j=>j.id===job.id),{companyDomain:company.domain,companyDomainSource:'confirmed-pitch-resolution'});
     await store.db.prepare('INSERT INTO companies(domain,name,body) VALUES(?,?,?) ON CONFLICT(domain) DO UPDATE SET body=excluded.body').run(company.domain,job.company,JSON.stringify(company));

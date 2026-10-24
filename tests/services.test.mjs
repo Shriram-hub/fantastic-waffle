@@ -439,3 +439,35 @@ test('an explicit unsubscribe reply suppresses the contact across campaigns',asy
   await ingestMessage({id:'unsubscribe-reply',from:'HR <hr@company.com>',subject:'Re: Hello',body:'Please unsubscribe me.',receivedAt:new Date().toISOString()},store);
   assert.equal(store.state.contacts[0].suppressed,true);
 });
+
+test('spintax expands before merge values, remains deterministic per recipient and tightening preserves resume links under ninety words',async()=>{
+  const {mergeMail,expandSpintax,safeSpintax,tightenMail}=await import('../shared/mail-merge.mjs');
+  const template=safeSpintax('Hi {{firstName}},\nI would welcome a short conversation. {{company}}'),contact={name:'Riley Chen',email:'riley@company.com',company:'{A|B} Holdings'};
+  assert.match(template,/\{Hi\|Hello\|Hey\}/);const first=mergeMail(template,contact,{});assert.equal(first,mergeMail(template,contact,{}));assert.match(first,/^(Hi|Hello|Hey) Riley/);assert.ok(first.includes('{A|B} Holdings'),'Contact data is not executable spintax');
+  const greetings=new Set(Array.from({length:30},(_,i)=>mergeMail('{Hi|Hello|Hey} {{firstName}}',{name:'Riley',email:`p${i}@company.com`},{}).split(' ')[0]));assert.equal(greetings.size,3);assert.equal(expandSpintax('{{firstName}}'), '{{firstName}}');
+  const long='Hi Riley,\nMy resume: https://candidate.example/resume\n'+Array(160).fill('evidence').join(' '),tight=tightenMail(long);assert.ok(tight.split(/\s+/).length<90);assert.equal(tight.match(/https:\/\/candidate.example\/resume/g).length,1);assert.ok(tightenMail('Short note.').includes('Short note.'));
+});
+test('deliverability content checks flag exact word/link/phrase conditions without promising inbox placement',async()=>{
+  const {scoreDeliverability}=await import('../server/services/deliverability.mjs');
+  const safe=scoreDeliverability({subject:'Analyst opening',body:'{Hi|Hello} {{firstName}}, may I ask about the analyst opening?'});assert.equal(safe.score,100);assert.match(safe.note,/does not predict inbox placement/);
+  const risky=scoreDeliverability({subject:'URGENT guarantee',body:Array(126).fill('word').join(' ')+' Free click here https://one.test https://two.test https://three.test'});assert.equal(risky.links,3);assert.ok(risky.score<50);assert.equal(risky.warnings.length,3);assert.equal(scoreDeliverability({}).score,50);
+});
+test('reply classifier prioritizes interviews and OOO, ignores quoted addresses, and records referrals without self-certifying mailboxes',async t=>{
+  const {classifyReply}=await import('../server/services/inbox.mjs');
+  assert.equal(classifyReply({subject:'Re: Analyst role',body:'Could you share your availability for a call?'}).category,'interview');
+  assert.equal(classifyReply({subject:'Re: Analyst role',body:'Happy to refer you to our team.'}).category,'positive');
+  assert.equal(classifyReply({subject:'Re: Interview',body:'Unfortunately we are not moving forward.'}).category,'other');
+  const store=openEmptyStore(':memory:');t.after(()=>store.close());store.db.prepare("INSERT INTO companies(domain,name,body) VALUES('company.com','Company','{}')").run();store.state.contacts=[{id:'recruiter',name:'Riley Chen',email:'riley@company.com',company:'Company',companyDomain:'company.com',isDemo:false}];
+  const message={id:'ooo',from:'Riley <riley@company.com>',subject:'Automatic reply: interview',body:'I am out of office until 28 October 2026. Please contact colleague@company.com or external@another.com.\nOn Monday someone wrote:\nquoted@company.com',receivedAt:'2026-10-24T10:00:00Z'};
+  const result=await ingestMessage(message,store);assert.equal(result.item.category,'ooo');assert.equal(result.item.proposedStage,null);assert.equal(result.item.outOfOffice.returnDate,'2026-10-28');assert.equal(result.item.referralContactIds.length,2);
+  for(const email of ['colleague@company.com','external@another.com']){const c=store.state.contacts.find(c=>c.email===email);assert.equal(c.emailStatus,'unverified');assert.equal(c.emailObserved,true);assert.match(c.verification.reference,/mail:ooo/);}
+  assert.equal(store.state.contacts.find(c=>c.email==='external@another.com').requiresDomainReview,true);assert.ok(!store.state.contacts.some(c=>c.email==='quoted@company.com'));await ingestMessage(message,store);assert.equal(store.state.inbox.length,1);assert.equal(store.state.contacts.length,3);
+});
+test('compensation uses matching advertised annual pay only, exposes evidence, never guesses bonus, and validates targets',async t=>{
+  const {annualSalary,negotiationKit}=await import('../server/services/career.mjs').then(async m=>({...m,...await import('../server/services/negotiation.mjs')}));
+  assert.deepEqual(annualSalary({salary:'INR 12–18 LPA'},'INR'),{low:1200000,high:1800000,midpoint:1500000,currency:'INR',component:'Advertised pay · base/bonus not separated'});assert.equal(annualSalary({salary:'USD 100k–120k per year'},'INR'),null);assert.equal(annualSalary({salary:'INR 500 per hour'},'INR'),null);assert.equal(annualSalary({salary:'INR 50,000 per month'},'INR').midpoint,600000);
+  const store=openEmptyStore(':memory:');t.after(()=>store.close());store.state.jobs=Array.from({length:5},(_,i)=>({id:`salary-${i}`,company:`Company ${i}`,title:'Financial Analyst',location:'Mumbai',salary:`INR ${10+i*2}–${12+i*2} LPA`,url:`https://company.example/jobs/${i}`,isDemo:false,publishedAt:new Date().toISOString()}));store.state.profile.expectedSalary='INR 1800000 annually';
+  const kit=await negotiationKit({role:'Financial Analyst',location:'Mumbai',targetSalary:1800000},store);assert.equal(kit.sampleSize,5);assert.deepEqual(kit.percentiles,{25:1300000,50:1500000,75:1700000,90:1820000});assert.equal(kit.bonusPercentiles,null);assert.match(kit.email,/INR 1,800,000 per year/);assert.equal(kit.sources.length,5);assert.match(kit.method,/not a population salary survey/);
+  store.state.jobs.pop();const thin=await negotiationKit({role:'Financial Analyst',location:'Mumbai'},store);assert.equal(thin.percentiles,null);assert.match(thin.email,/INR 1800000 annually/);assert.ok(!thin.note.includes('estimated at'));
+  for(const targetSalary of ['invalid',0,-1,'1e100'])await assert.rejects(negotiationKit({role:'Financial Analyst',location:'Mumbai',targetSalary},store),/valid annual/);
+});

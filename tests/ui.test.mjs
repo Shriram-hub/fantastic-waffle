@@ -49,6 +49,11 @@ test("React views render populated/empty states and escape untrusted profile and
       setModal() {},
       go() {},
     };
+    const {workspaces,workspaceFor}=await import('../web/src/shared/navigation.mjs');
+    assert.deepEqual(workspaces.map(w=>w.title),['Overview','Jobs & Companies','Outreach & Contacts','Profile & Interview Prep','Settings & Autopilot']);
+    const allRoutes=workspaces.flatMap(w=>w.tabs.map(([route])=>route));assert.equal(new Set(allRoutes).size,18);
+    for(const w of workspaces){for(const [route,label] of w.tabs){assert.equal(workspaceFor(route).id,w.id);const html=renderToStaticMarkup(React.createElement(views.WorkspaceTabs,{route,go(){}}));assert.equal((html.match(/role="tab"/g)||[]).length,w.tabs.length);assert.equal((html.match(/aria-selected="true"/g)||[]).length,1);assert.ok(html.includes(label.replaceAll('&','&amp;')));}}
+    for(const route of allRoutes){const html=renderToStaticMarkup(React.createElement(views.WorkspaceContext.Provider,{value:app},React.createElement(views.WorkspaceView,{route})));assert.ok(html.length>150,route+' remains reachable');if(route==='outreach'){assert.ok(html.includes('Select. Preview. Launch.'));assert.ok(!html.includes('Find company contacts'));}if(route==='contacts'){assert.ok(!html.includes('Find company contacts'));assert.ok(html.includes('contact'));}if(route==='jobs'){assert.match(html,/hidden="" class="slide-over"/);assert.match(html,/Edit Preferences/);assert.match(html,/Manage Sources/);}if(route==='connections'){assert.ok(!html.includes('Workspace appearance'));}}
     for (const name of [
       "Overview",
       "Jobs",
@@ -129,4 +134,13 @@ test('shipped interface, extension and server sources contain no decorative Unic
 
 test('extension mail-studio handoffs accept only saved contact IDs and never approve or send a campaign',async()=>{
   const {contactHandoff}=await import('../web/src/shared/contact-handoff.mjs');assert.deepEqual(contactHandoff('#outreach?contacts=one,unknown,one,two',[{id:'one'},{id:'two',suppressed:true}]),['one']);assert.equal(contactHandoff('#jobs?contacts=one',[{id:'one'}]),null);assert.equal(contactHandoff('#outreach'),null);
+});
+
+test('single-key triage focuses rows and invokes existing tools while inputs, editors and dialogs keep their keys',async()=>{
+  const {JSDOM}=await import('jsdom'),{handleTriageShortcut}=await import('../web/src/shared/commands.mjs');
+  const dom=new JSDOM('<main><article data-triage="job" data-job-id="job" tabindex="0"></article><article data-triage="contact" data-contact-id="person" tabindex="0"><input type="checkbox" checked></article><input id="editor"><div contenteditable="" id="rich"></div><dialog id="dialog"></dialog></main>');
+  const doc=dom.window.document,events=[],app={data:{jobs:[{id:'job',company:'Company',companyDomain:'company.com',url:'https://company.com/jobs/1'}],contacts:[{id:'person',company:'Company'}]},setModal:m=>events.push(m),go:route=>events.push(route),setDiscoveryTarget:t=>events.push(t),setMailerSelection:s=>events.push(s)},openUrl=url=>events.push(url);let help=0;
+  function key(value,target=doc.body){const event=new dom.window.KeyboardEvent('keydown',{key:value,bubbles:true,cancelable:true});target.dispatchEvent(event);return handleTriageShortcut(event,app,{root:doc,openUrl,showHelp:()=>help++});}
+  assert.equal(key('j'),true);assert.equal(doc.activeElement.dataset.jobId,'job');key('p');assert.deepEqual(events.pop(),{type:'auto-pitch',id:'job'});key('a');assert.equal(events.pop(),'https://company.com/jobs/1');key('e');assert.equal(events.pop(),'contact-search');assert.equal(events.pop().domain,'company.com');key('j');assert.equal(doc.activeElement.dataset.contactId,'person');key('m');assert.equal(events.pop(),'outreach');assert.deepEqual(events.pop().ids,['person']);key('k');assert.equal(doc.activeElement.dataset.jobId,'job');key('?');assert.equal(help,1);
+  assert.equal(key('j',doc.getElementById('editor')),false);assert.equal(key('p',doc.getElementById('rich')),false);doc.getElementById('dialog').setAttribute('open','');assert.equal(key('j'),false);dom.window.close();
 });

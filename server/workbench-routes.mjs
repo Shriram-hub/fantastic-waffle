@@ -2,10 +2,16 @@ import {fail} from './domain.mjs';
 import {companyDirectory,lookupCompanies,startCompanyAction} from './services/company-explorer.mjs';
 import {MAIL_PRESETS,MERGE_TAGS,pasteContacts,prepareQuickBatch,launchQuickBatch,batchProgress,controlQuickBatch} from './services/quick-mailer.mjs';
 import {companyLogos} from './services/company-logos.mjs';
+import {draftInboxReply,queueInboxReply} from './services/inbox-replies.mjs';
+import {startDailySprint,dailySprintStatus} from './services/daily-sprint.mjs';
 export function workbenchRoutes(store,queue,config,fetcher=fetch) {
   const logos=companyLogos(fetcher);
   return async(req,res,url,{json,bodyJSON})=>{
     const path=url.pathname;
+    if(path==='/api/workbench/daily-sprint' && req.method==='POST'){json(res,202,await startDailySprint(await bodyJSON(req),store,queue,config));return true;}
+    const sprint=path.match(/^\/api\/workbench\/daily-sprint\/([^/]+)$/);if(sprint && req.method==='GET'){json(res,200,dailySprintStatus(sprint[1],store));return true;}
+    const reply=path.match(/^\/api\/inbox\/([^/]+)\/(draft-reply|send-reply)$/);
+    if(reply && req.method==='POST'){const data=await bodyJSON(req);json(res,reply[2]==='send-reply'?202:200,reply[2]==='draft-reply'?await draftInboxReply(reply[1],data,store,config,fetcher):await queueInboxReply(reply[1],data,store,queue,config));return true;}
     const logo=path.match(/^\/api\/companies\/([a-z0-9]{24})\/logo$/);
     if(logo && req.method==='GET'){const company=store.state.companyExplorer?.companies.find(c=>c.id===logo[1]),asset=company?.logoUrl?await logos({companyLogo:company.logoUrl}):null;if(!asset)fail('Company logo unavailable.',404);res.writeHead(200,{'Content-Type':asset.type,'Content-Length':asset.bytes.length,'Cache-Control':'private, max-age=3600','X-Content-Type-Options':'nosniff'});res.end(asset.bytes);return true;}
     if(path==='/api/companies' && req.method==='GET'){json(res,200,await companyDirectory(store,Object.fromEntries(url.searchParams)));return true;}

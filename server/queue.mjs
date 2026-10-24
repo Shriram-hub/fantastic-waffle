@@ -42,7 +42,7 @@ export function taskQueue(store) {
   function reconcileExpired() {
     for (const task of db
       .prepare(
-        "SELECT id,kind,payload FROM tasks WHERE status='unknown' AND lease_until IS NOT NULL AND kind IN ('campaign.send','campaign.followup','alert.send','mail.test-send')",
+        "SELECT id,kind,payload FROM tasks WHERE status='unknown' AND lease_until IS NOT NULL AND kind IN ('campaign.send','campaign.followup','alert.send','mail.test-send','inbox.reply')",
       )
       .all()) {
       db.prepare("UPDATE outreach_send_log SET status='unknown',updated_at=? WHERE task_id=? AND status='sending'").run(Date.now(),task.id);
@@ -50,6 +50,10 @@ export function taskQueue(store) {
         row = db
           .prepare("SELECT body FROM campaigns WHERE id=?")
           .get(payload.campaignId || "");
+      if(task.kind==='inbox.reply'){
+        const row=db.prepare('SELECT body FROM inbox_updates WHERE id=?').get(payload.messageId);
+        if(row){const item=JSON.parse(row.body);if(item.replyDelivery?.status==='sending'){item.replyDelivery.status='unknown';item.replyDelivery.error='Worker lease expired. Reconcile with the sent mailbox.';db.prepare('UPDATE inbox_updates SET body=? WHERE id=?').run(JSON.stringify(item),payload.messageId);}}
+      }
       if (row) {
         const campaign = JSON.parse(row.body),
           delivery = campaign.deliveries.find(
@@ -75,10 +79,10 @@ export function taskQueue(store) {
     db.exec("BEGIN IMMEDIATE");
     try {
       db.prepare(
-        "UPDATE tasks SET status='unknown',error='Worker lease expired during an outbound send. Reconcile with the provider.',updated_at=? WHERE status='running' AND lease_until<? AND kind IN ('campaign.send','campaign.followup','alert.send','mail.test-send')",
+        "UPDATE tasks SET status='unknown',error='Worker lease expired during an outbound send. Reconcile with the provider.',updated_at=? WHERE status='running' AND lease_until<? AND kind IN ('campaign.send','campaign.followup','alert.send','mail.test-send','inbox.reply')",
       ).run(clock, clock);
       db.prepare(
-        "UPDATE tasks SET status=CASE WHEN attempts>=max_attempts THEN 'failed' ELSE 'queued' END,lease_token=NULL,updated_at=? WHERE status='running' AND lease_until<? AND kind NOT IN ('campaign.send','campaign.followup','alert.send','mail.test-send')",
+        "UPDATE tasks SET status=CASE WHEN attempts>=max_attempts THEN 'failed' ELSE 'queued' END,lease_token=NULL,updated_at=? WHERE status='running' AND lease_until<? AND kind NOT IN ('campaign.send','campaign.followup','alert.send','mail.test-send','inbox.reply')",
       ).run(clock, clock);
       reconcileExpired();
       const row = wantedId
@@ -109,7 +113,7 @@ export function taskQueue(store) {
   }
   function finish(task, result, error) {
     const clock = Date.now(),
-      outbound = ["campaign.send", "campaign.followup", "alert.send", "mail.test-send"].includes(task.kind),
+      outbound = ["campaign.send", "campaign.followup", "alert.send", "mail.test-send", "inbox.reply"].includes(task.kind),
       status = error
         ? outbound
           ? "unknown"
@@ -151,10 +155,10 @@ export function taskQueue(store) {
       db.exec("BEGIN IMMEDIATE");
       try {
         db.prepare(
-          "UPDATE tasks SET status='unknown',error='Outbound send lease expired; reconcile before retrying.',lease_token=NULL,updated_at=? WHERE status='running' AND lease_until<? AND kind IN ('campaign.send','campaign.followup','alert.send','mail.test-send')",
+          "UPDATE tasks SET status='unknown',error='Outbound send lease expired; reconcile before retrying.',lease_token=NULL,updated_at=? WHERE status='running' AND lease_until<? AND kind IN ('campaign.send','campaign.followup','alert.send','mail.test-send','inbox.reply')",
         ).run(clock, clock);
         db.prepare(
-          "UPDATE tasks SET status=CASE WHEN attempts>=max_attempts THEN 'failed' ELSE 'queued' END,lease_token=NULL,updated_at=? WHERE status='running' AND lease_until<? AND kind NOT IN ('campaign.send','campaign.followup','alert.send','mail.test-send')",
+          "UPDATE tasks SET status=CASE WHEN attempts>=max_attempts THEN 'failed' ELSE 'queued' END,lease_token=NULL,updated_at=? WHERE status='running' AND lease_until<? AND kind NOT IN ('campaign.send','campaign.followup','alert.send','mail.test-send','inbox.reply')",
         ).run(clock, clock);
         reconcileExpired();
         db.exec("COMMIT");
@@ -192,6 +196,7 @@ export function taskQueue(store) {
     cancel(id) {
       const changed=db.prepare("UPDATE tasks SET status='cancelled',updated_at=? WHERE id=? AND status='queued'").run(Date.now(),id).changes;
       if(changed){db.prepare("UPDATE outreach_send_log SET status='cancelled',updated_at=? WHERE task_id=? AND status='queued'").run(Date.now(),id);db.prepare("UPDATE outreach_company_budget SET status='cancelled',updated_at=? WHERE task_id=? AND status='queued'").run(Date.now(),id);}
+      if(changed){const task=this.get(id);if(task.kind==='inbox.reply'){const row=db.prepare('SELECT body FROM inbox_updates WHERE id=?').get(task.payload.messageId);if(row){const item=JSON.parse(row.body);if(item.replyDelivery?.taskId===id){item.replyDelivery.status='cancelled';db.prepare('UPDATE inbox_updates SET body=? WHERE id=?').run(JSON.stringify(item),item.id);}}}}
       return changed;
     },
     retry(id) {
@@ -199,7 +204,7 @@ export function taskQueue(store) {
       if (
         !t ||
         t.status !== "failed" ||
-        ["campaign.send", "campaign.followup", "alert.send", "mail.test-send"].includes(t.kind)
+        ["campaign.send", "campaign.followup", "alert.send", "mail.test-send", "inbox.reply"].includes(t.kind)
       )
         fail("Only failed non-sending tasks can be retried.", 409);
       db.prepare(

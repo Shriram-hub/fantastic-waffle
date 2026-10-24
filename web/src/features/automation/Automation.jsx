@@ -2,15 +2,16 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp, api, stages, split, fmt } from '../../shared/workspace.jsx';
 import { Button, Badge, Heading, Empty, Panel, Field, Company, Modal, ConfirmAction, Sample } from '../../shared/ui.jsx';
 import { AutopilotSettings } from './AutopilotSettings.jsx';
-export function Automation() {
+export function Automation({showSettings=true}) {
   const { tasks, data, perform, setModal } = useApp();
+  const [queueView,setQueueView]=useState('browser');
   return (
     <>
       <Heading
         title="Work in motion."
         subtitle="Background imports, parsing, matching, outreach, and browser-assisted applications."
       />
-      <AutopilotSettings/>
+      {showSettings && <AutopilotSettings/>}<div className="focus-switch" role="group" aria-label="Worker queues"><Button active={queueView==='browser'} onClick={()=>setQueueView('browser')}>Browser applications</Button><Button active={queueView==='tasks'} onClick={()=>setQueueView('tasks')}>Background tasks</Button></div><div hidden={queueView!=='browser'}>
       <Panel
         title="Browser application queue"
         subtitle="The extension fills supported fields. You review and submit yourself."
@@ -64,7 +65,7 @@ export function Automation() {
           </Empty>
         )}
       </Panel>
-      <Panel
+      </div><div hidden={queueView!=='tasks'}><Panel
         title="Background tasks"
         subtitle="Discovery, contact lookups, drafts, and sends run in the hosted background worker."
       >
@@ -98,7 +99,7 @@ export function Automation() {
                   Cancel
                 </Button>
               )}
-              {t.status === "failed" && !t.kind.startsWith("campaign.") && (
+              {t.status === "failed" && !t.kind.startsWith("campaign.") && t.kind!=='inbox.reply' && (
                 <Button
                   small
                   onClick={() => perform(() => api(`/tasks/${t.id}/retry`, {}))}
@@ -114,7 +115,7 @@ export function Automation() {
             Imports, matching, parsing, and email jobs will appear here.
           </Empty>
         )}
-      </Panel>
+      </Panel></div>
     </>
   );
 }

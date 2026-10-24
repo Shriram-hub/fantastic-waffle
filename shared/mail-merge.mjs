@@ -14,8 +14,19 @@ export function mergeVariables(contact={},profile={}) {
 }
 export function mergeMail(value,contact,profile) {
   const vars=mergeVariables(contact,profile);
-  return String(value || '').replace(/\{\{\s*([^{}]+?)\s*\}\}/g,(_,key)=>{
+  return expandSpintax(value,`${contact?.email || contact?.id || contact?.name || ''}:${String(value || '')}`).replace(/\{\{\s*([^{}]+?)\s*\}\}/g,(_,key)=>{
     if(!Object.hasOwn(vars,key))throw Error(`Unknown template variable: ${key}`);
     return String(vars[key]);
   });
+}
+export function expandSpintax(value,seed=''){
+  let n=2166136261;for(const ch of String(seed))n=Math.imul(n^ch.charCodeAt(0),16777619)>>>0;
+  let index=0;return String(value || '').replace(/(?<!\{)\{([^{}]*\|[^{}]*)\}(?!\})/g,(_,body)=>{const options=body.split('|').slice(0,20);n=Math.imul(n^(++index),16777619)>>>0;return options[n%options.length];});
+}
+export function safeSpintax(value){return String(value || '').replace(/^Hi\b/,'{Hi|Hello|Hey}').replace(/I would welcome a short conversation\./,'{I would welcome a short conversation.|I would value a brief conversation.}');}
+export function tightenMail(value,maxWords=89){
+  const source=String(value || '').replace(/\b(?:just wanted to|I wanted to|I am writing to|at this point in time|in order to)\s*/gi,'').trim(),words=source.split(/\s+/);if(words.length<=maxWords)return source;
+  // Keep each URL intact without duplicating whole, potentially long link lines.
+  const links=[...new Set(source.match(/https?:\/\/[^\s<>]+|\{\{(?:resumeLink|resume_url)\}\}/g) || [])].slice(0,Math.max(1,maxWords-1)),linkSet=new Set(links),prose=source.split(/\s+/).filter(word=>!linkSet.has(word)),allowance=Math.max(0,maxWords-links.length);
+  return `${prose.slice(0,allowance).join(' ').replace(/[,:;]$/,'')}…${links.length?`\n\n${links.join('\n')}`:''}`.trim();
 }

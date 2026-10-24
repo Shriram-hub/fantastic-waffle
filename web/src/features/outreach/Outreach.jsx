@@ -5,7 +5,7 @@ import {JobDocuments} from '../resume/JobDocuments.jsx';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp, api, stages, split, fmt } from '../../shared/workspace.jsx';
 import { Button, Badge, Heading, Empty, Panel, Field, Company, Modal, ConfirmAction, Sample } from '../../shared/ui.jsx';
-export function Outreach() {
+export function Outreach({mode='all'}) {
   const { data, accounts, perform, setModal, notify } = useApp(),
     [draft, setDraft] = useState({
       name: "",
@@ -39,7 +39,7 @@ export function Outreach() {
         title="A thoughtful hello goes further."
         subtitle="Personalize your introduction. Preview every recipient. Send with measured pacing."
       ><QueueNowButton/></Heading>
-      <QuickMassMailer/><details className="advanced-campaigns"><summary>Advanced campaign editor & saved campaigns</summary><div className="two-column">
+      {mode!=='sequences' && <QuickMassMailer/>}<details className="advanced-campaigns" open={mode==='sequences'}><summary>Advanced campaign editor & saved campaigns</summary><div className="two-column">
         <form
           onSubmit={(e) => {
             e.preventDefault();

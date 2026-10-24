@@ -8,14 +8,16 @@ export function Button({
   primary = false,
   small = false,
   disabled = false,
+  active,
   ...rest
 }) {
   return (
     <button
       type={type}
-      className={`btn${primary ? " primary" : ""}${small ? " small" : ""}`}
+      className={`btn${primary ? " primary" : ""}${small ? " small" : ""}${active ? " active" : ""}`}
       onClick={onClick}
       disabled={disabled}
+      aria-pressed={active===undefined?undefined:active}
       {...rest}
     >
       {children}

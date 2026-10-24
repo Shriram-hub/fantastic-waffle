@@ -1,3 +1,5 @@
+import {finishDailySprint} from './services/daily-sprint.mjs';
+import {sendInboxReply} from './services/inbox-replies.mjs';
 import {recoverBounceAlternative} from './services/bounce-recovery.mjs';
 import {probeCompany,fetchCompanyJobs} from './services/company-explorer.mjs';
 import {workerHeartbeat} from './services/worker-health.mjs';
@@ -69,6 +71,8 @@ function providerHandlers(store, queue, config = {}, fetcher = fetch, dependenci
     async 'contacts.bounce-recover'(task){return recoverBounceAlternative(task,store,config,fetcher,dependencies.lookupMx);},
     async 'contacts.browser-import'(task){return importBrowserContacts(task,store,config,fetcher,dependencies);},
     async 'job.auto-pitch'(task){return buildJobPitch(task,store,queue,config,fetcher,dependencies);},
+    async 'workbench.sprint'(task){return finishDailySprint(task,store);},
+    async 'inbox.reply'(task){return sendInboxReply(task,store,config,fetcher);},
     async 'mail.test-send'(task) {
       const a=await store.db.prepare('SELECT id,email,metadata FROM mail_accounts WHERE id=?').get(task.payload.accountId);if(!a)return {status:'cancelled'};
       let result;

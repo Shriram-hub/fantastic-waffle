@@ -46,6 +46,9 @@ export async function putCatalogJobs(jobs,plan,store,config={}) {
   snapshots.delete(store);return {count:stored,full:!room};
 }
 export async function catalogJob(id,store){const row=await store.db.prepare('SELECT id,canonical_key,body FROM job_catalog WHERE id=? AND archived=0').get(id);return row?decode(row):null;}
+export async function catalogSalaryCandidates(store,role){
+  const term=String(role || '').toLowerCase().split(/\s+/).slice(0,2).join(' '),rows=await store.db.prepare('SELECT id,canonical_key,body FROM job_catalog WHERE archived=0 AND search_terms LIKE ? ORDER BY published_at DESC LIMIT 300').all(`%${term}%`);return rows.map(decode);
+}
 export async function retainCatalogJob(id,store) {
   let job=store.state.jobs.find(j=>j.id===id);if(job)return job;
   job=await catalogJob(id,store);if(!job || job.archived)fail('This indexed job is no longer active.',404);

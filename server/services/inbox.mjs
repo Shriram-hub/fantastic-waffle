@@ -3,6 +3,8 @@ import {companyDomain} from '../providers/contacts/company.mjs';
 import {observeCompanyEmails} from './company-patterns.mjs';
 import {stopFollowups} from './sequences.mjs';
 import { id, now, suggestStage, safeUrl } from "../domain.mjs";
+import {classifyReply} from './reply-classifier.mjs';
+export {classifyReply,REPLY_CATEGORIES} from './reply-classifier.mjs';
 export const INBOX_SYNC_INTERVAL=15*60000;
 // Polling is also a fallback when Gmail Pub/Sub or Graph webhooks are not set up.
 export async function scheduleMailboxSync(store,queue,clock=Date.now()) {
@@ -100,13 +102,15 @@ export async function ingestMessage(message, store) {
       duplicate: true
     };
   }
-  if (!shouldClassify(message, s)) {
+  const reply=classifyReply(message),known=s.contacts.find(c=>c.email?.toLowerCase()===sender && !c.isDemo),related=!!known || shouldClassify(message,s);
+  if (!related) {
     await store.save();
     return {
       ignored: true
     };
   }
   const result = classifyEmail(message, s);
+  if(['ooo','bounce'].includes(reply.category))result.proposedStage=null;
   if(result.applicationId && ['Interview','Interview scheduled','Offer','Rejected'].includes(result.proposedStage)) {
     const application=s.applications.find(a=>a.id===result.applicationId),job=s.jobs.find(j=>j.id===application?.jobId);
     if(job) for(const campaign of s.campaigns.filter(c=>c.jobId===job.id || job.companyDomain && c.autopilot?.domain===job.companyDomain)) for(const delivery of campaign.deliveries || []) {
@@ -114,7 +118,7 @@ export async function ingestMessage(message, store) {
       await stopFollowups(delivery,store);
     }
   }
-  if (!result.proposedStage && !result.deadline) {
+  if (!result.proposedStage && !result.deadline && reply.category==='other') {
     await store.save();
     return {
       ignored: true
@@ -137,6 +141,16 @@ export async function ingestMessage(message, store) {
     ambiguous: result.ambiguous,
     candidateIds: result.candidates
   };
+  Object.assign(item,reply,{accountId:message.accountId || null,providerId:message.providerId || null,threadId:message.threadId || null,internetMessageId:message.internetMessageId || null});
+  if(reply.category==='ooo' && known){
+    item.referralContactIds=[];
+    for(const email of reply.outOfOffice.alternatives.filter(e=>e!==sender && e!==s.profile.email?.toLowerCase())){
+      let contact=s.contacts.find(c=>c.email?.toLowerCase()===email);if(contact?.suppressed)continue;
+      if(!contact){const domain=email.split('@')[1],same=domain===(known.companyDomain || sender.split('@')[1]),corporate=companyDomain(domain);
+        if(corporate)await store.db.prepare('INSERT OR IGNORE INTO companies(domain,name,body) VALUES(?,?,?)').run(corporate,same?known.company || corporate:corporate,JSON.stringify({domain:corporate,name:same?known.company || corporate:corporate,source:'Incoming email referral',requiresDomainReview:!same}));
+        contact={id:id(),name:'Out-of-office referral',email,company:same?known.company:'',companyDomain:corporate,title:'Referred contact · review identity',emailStatus:'unverified',emailObserved:true,emailInferred:false,source:'Out-of-office referral',sources:[{url:`mail:${message.id}`}],requiresDomainReview:!same,verification:{provider:'Incoming email referral',status:'unverified',at:now(),reference:`mail:${message.id}`,result:'Published by an email sender; the referred mailbox has not been verified.'},isDemo:false,suppressed:false,createdAt:now()};s.contacts.push(contact);}item.referralContactIds.push(contact.id);
+    }
+  }
   if (s.settings.inboxAutoUpdate && result.applicationId && result.proposedStage) {
     const a = s.applications.find(a => a.id === result.applicationId);
     const oldTime = a.lastEmailAt ? Date.parse(a.lastEmailAt) : 0;

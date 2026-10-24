@@ -2,6 +2,7 @@ import {fail,text,now} from './domain.mjs';
 import {careerData,careerStatus,saveCareerTask,saveCareerStory,prepFingerprint,plannerCalendar,INTERVIEW_TRACKS,interviewQuestions,evaluateInterviewAnswer} from './services/career.mjs';
 import {retainCatalogJob} from './services/job-catalog.mjs';
 import {companyDossier} from './services/company-explorer.mjs';
+import {negotiationKit} from './services/negotiation.mjs';
 
 export function careerRoutes(store,queue,config,fetcher=fetch) {
   return async(req,res,url,{json,bodyJSON})=>{
@@ -11,6 +12,7 @@ export function careerRoutes(store,queue,config,fetcher=fetch) {
     if(path==='/api/career/calendar.ics' && req.method==='GET') {res.writeHead(200,{'Content-Type':'text/calendar; charset=utf-8','Content-Disposition':'attachment; filename="orbit-career-planner.ics"'});res.end(plannerCalendar(store));return true;}
     if(!['POST','PATCH'].includes(req.method))fail('Career endpoint not found.',404);
     const data=await bodyJSON(req);
+    if(path==='/api/career/negotiation-kit' && req.method==='POST'){json(res,200,await negotiationKit(data,store));return true;}
     if(path==='/api/career/evaluate-answer' && req.method==='POST') {
       if(data.jobId)await retainCatalogJob(data.jobId,store);
       json(res,200,await evaluateInterviewAnswer(data,store,config,fetcher));return true;

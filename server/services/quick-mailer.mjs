@@ -5,6 +5,7 @@ import {queueCampaign,businessSlot} from './outreach.mjs';
 import {ensureCampaignLinks} from './engagement.mjs';
 import {warmHook} from './warm-connections.mjs';
 import {documentFingerprint} from './job-documents.mjs';
+import {scoreDeliverability} from './deliverability.mjs';
 export {MAIL_PRESETS,MERGE_TAGS};
 export function contactedEmails(state) {
   const contacts=new Map(state.contacts.map(c=>[c.id,c]));
@@ -33,18 +34,19 @@ export async function prepareQuickBatch(data,store,config={}) {
   const sequence=normalizeSequence(data.sequence,accountId),deliveryMode=data.deliveryMode==='test'?'test':'paced';
   if(deliveryMode==='test' && contacts.length>5)fail('Instant test mode supports at most five reviewed recipients.');
   const old=data.campaignId?store.state.campaigns.find(c=>c.id===data.campaignId):null;
+  if(old?.sprintProfileHash && old.sprintProfileHash!==hash([store.state.profile,store.state.resume?.contentHash || store.state.resume?.text]))fail('Your profile changed. Start a fresh sprint before reviewing these drafts.',409);
   if(old?.deliveries.length)fail('This batch already has delivery history. Start a new draft.',409);
   const blocked=contacts.filter(c=>c.isDemo || !c.email || c.suppressed || c.requiresDomainReview || c.emailStatus!=='verified');
   if(blocked.length)fail(`${blocked.length} selected contact(s) need verified mailboxes or domain review before launch. MX-only addresses are not mailbox-verified.`,409);
   const previously=contactedEmails(store.state);if(contacts.some(c=>previously.has(c.email.toLowerCase())))fail('A selected address already has pending or accepted outreach. Refresh the uncontacted filter.',409);
   const campaign=old || {id:id(),createdAt:now(),deliveries:[]};
-  const next={...campaign,name:text(data.name,150) || `Mail batch ${now().slice(0,10)}`,subject:data.subject.trim(),body:data.body,contactIds:contacts.map(c=>c.id),attachResume:data.attachResume===true,trackResume:data.trackResume===true,attachCoverLetter:false,documentSetId:document?.id || null,jobId:job?.id || null,accountId,sequence,deliveryMode,pacing:{min:2,max:5},studio:true,status:'Draft'};
+  const next={...campaign,personalizedMessages:data.keepPersonalized===false?{}:campaign.personalizedMessages,name:text(data.name,150) || `Mail batch ${now().slice(0,10)}`,subject:data.subject.trim(),body:data.body,contactIds:contacts.map(c=>c.id),attachResume:data.attachResume===true,trackResume:data.trackResume===true,attachCoverLetter:false,documentSetId:document?.id || null,jobId:job?.id || null,accountId,sequence,deliveryMode,pacing:{min:2,max:5},studio:true,status:'Draft'};
   for(const c of contacts)c.warmOpener=warmHook(c,store.state);
   // Validate merge tags and attachments before generating any tracked links.
   previewCampaign(next,store.state);
   if(next.trackResume && old && (old.documentSetId!==next.documentSetId || old.jobId!==next.jobId))next.resumeLinks={};
   await ensureCampaignLinks(next,store,config);
-  const preview=previewCampaign(next,store.state);
+  const preview=previewCampaign(next,store.state);preview.messages=preview.messages.map(message=>({...message,writingChecks:scoreDeliverability(message)}));
   if(/\{\{[^{}]+\}\}/.test(preview.messages.map(m=>`${m.subject}\n${m.body}`).join('\n')))fail('Resolve all template variables before sending.');
   if(!next.trackResume && /\{\{\s*(?:resumeLink|resume_url)\s*\}\}/.test(next.body) && !store.state.profile.resumeUrl)fail('Enable the tracked resume link or save a public resume URL in your profile.');
   if(old)Object.assign(old,next);else store.state.campaigns.unshift(next);

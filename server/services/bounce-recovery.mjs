@@ -20,7 +20,7 @@ export async function recordBounceRecovery(message,store){
     if(!contact || failure.originalId && delivery.internetMessageId && failure.originalId!==delivery.internetMessageId)continue;
     await stopFollowups(delivery,store);campaign.status='Needs attention';Object.assign(delivery,{bounceStatus:'hard-bounce',bounceMessageId:message.id,bouncedAt:now()});
     Object.assign(contact,{emailStatus:'invalid',verification:{provider:'Delivery status notification',status:'invalid',reference:`mail:${message.id}`,at:now(),result:'Hard address failure reported for an accepted message.'},bounceRecovery:{status:'Needs verification and review',messageId:message.id,bouncedEmail:failure.email,alternatives:(contact.alternateEmails || []).filter(email=>email!==failure.email),requiresApproval:true,createdAt:now()}});
-    store.state.inbox.unshift({id:hash(['bounce',message.id]),messageId:message.id,from:message.from,subject:message.subject,body:String(message.body || '').slice(0,6000),applicationId:null,proposedStage:null,status:'Needs review',type:'Delivery failure',contactId:contact.id,createdAt:now(),receivedAt:message.receivedAt || now(),links:[]});
+    store.state.inbox.unshift({id:hash(['bounce',message.id]),messageId:message.id,from:message.from,subject:message.subject,body:String(message.body || '').slice(0,6000),applicationId:null,proposedStage:null,status:'Needs review',category:'bounce',type:'Delivery failure',contactId:contact.id,createdAt:now(),receivedAt:message.receivedAt || now(),links:[]});
     await store.save();await activity(store,'contacts',`${contact.company}: a hard bounce stopped follow-ups. Alternate addresses need verification and a fresh outreach review.`,1);return {handled:true,contactId:contact.id};
   }
   return null;

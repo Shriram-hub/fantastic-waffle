@@ -1,5 +1,8 @@
+import {WorkspaceView} from './shared/WorkspaceView.jsx';
+import {WorkspaceTabs} from './shared/WorkspaceTabs.jsx';
+import {SlideOver} from './shared/SlideOver.jsx';
+import {handleTriageShortcut,TRIAGE_SHORTCUTS} from './shared/commands.mjs';
 import {contactHandoff} from './shared/contact-handoff.mjs';
-import './workbench.css';
 import {CompanyExplorer} from './features/jobs/CompanyExplorer.jsx';
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { WorkspaceContext as Context, api } from './shared/workspace.jsx';
@@ -15,7 +18,7 @@ import { Automation } from './features/automation/Automation.jsx';
 import { Connections } from './features/connections/Connections.jsx';
 import {CareerWorkspace} from './features/career/CareerWorkspace.jsx';
 import { ModalContent } from './features/modals/ModalContent.jsx';
-import {navGroups,names,navigationCount} from './shared/navigation.mjs';
+import {navGroups,names,navigationCount,workspaceFor} from './shared/navigation.mjs';
 import {CommandPalette} from './shared/CommandPalette.jsx';
 import {applyTheme,applyBrand,savedPreference,DEFAULT_BRAND} from './shared/theme.mjs';
 import {WorkerStatus} from './shared/QueueNowButton.jsx';
@@ -26,6 +29,7 @@ import {workspaceLoader,connectWorkspaceEvents} from './shared/workspace-loader.
 export default function App() {
   const [theme,setTheme]=useState(()=>savedPreference('veloce-theme','dark'));
   const [collapsed,setCollapsed]=useState(()=>savedPreference('veloce-sidebar','expanded')==='collapsed');
+  const [dailySprint,setDailySprint]=useState(null),[discoveryTarget,setDiscoveryTarget]=useState(null),[shortcuts,setShortcuts]=useState(false),triageApp=useRef(null);
   const [palette,setPalette]=useState(false),[worker,setWorker]=useState({status:'offline'});
   const toggleTheme=()=>setTheme(t=>t==='dark' ? 'light' : 'dark');
   useEffect(()=>applyTheme(theme),[theme]);
@@ -125,6 +129,7 @@ export default function App() {
     window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);
   },[session?.authenticated]);
   useEffect(()=>{if(!data)return;const ids=contactHandoff(location.hash,data.contacts);if(ids?.length){setMailerSelection({ids,at:Date.now()});setRoute('outreach');history.replaceState(null,'','#outreach');}},[data?.contacts]);
+  useEffect(()=>{const key=event=>{if(session?.authenticated && triageApp.current)handleTriageShortcut(event,triageApp.current,{showHelp:()=>setShortcuts(true)});};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);},[session?.authenticated]);
   useEffect(()=>applyBrand(data?.settings?.brand),[data?.settings?.brand?.name,data?.settings?.brand?.accent]);
   if(session && !session.authenticated)return <SignIn session={session} initialError={authError} onSignedIn={checkSession}/>;
   if (error && !data)return <WorkspaceError message={error.message} reference={error.reference} busy={retrying} onRetry={()=>session ? (setRetrying(true),reload().catch(setError).finally(()=>setRetrying(false))) : checkSession()}/>;
@@ -136,7 +141,7 @@ export default function App() {
       </div>
     );
   const app = {
-    cacheJobs,careerJobId,setCareerJobId,careerMockStart,setCareerMockStart,mailerCompany,setMailerCompany:value=>{setMailerCompany(value);setMailerSelection(null);},mailerSelection,setMailerSelection,theme,toggleTheme,worker,connected,
+    dailySprint,setDailySprint,discoveryTarget,setDiscoveryTarget,cacheJobs,careerJobId,setCareerJobId,careerMockStart,setCareerMockStart,mailerCompany,setMailerCompany:value=>{setMailerCompany(value);setMailerSelection(null);},mailerSelection,setMailerSelection,theme,toggleTheme,worker,connected,
     data,
     integrations,
     accounts,
@@ -152,21 +157,8 @@ export default function App() {
     perform,
     busy,
   };
-  const View =
-    {
-      overview: Overview,
-      jobs: Jobs,
-      companies:CompanyExplorer,
-      applications: Applications,
-      profile: Profile,
-      documents:TailoredDocuments,
-      contacts: Contacts,
-      outreach: Outreach,
-      inbox: Inbox,
-      automation: Automation,
-      connections: Connections,
-      career:CareerWorkspace,
-    }[route] || Overview;
+  triageApp.current=app;
+  const activeWorkspace=workspaceFor(route);
   const brand={...DEFAULT_BRAND,...data.settings.brand};if(brand.name==='Veloce AI')brand.name=DEFAULT_BRAND.name;
   const mailbox=accounts[0];
   return <Context.Provider value={app}>
@@ -176,7 +168,7 @@ export default function App() {
       <aside className={`sidebar ${mobile ? 'open' : ''}`}>
         <div className="brand"><BrandMark/><div className="brand-copy"><strong>{brand.name}</strong><small>CANDIDATE PIPELINE</small></div><button className="icon-button collapse-sidebar" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} onClick={()=>setCollapsed(v=>!v)}><Icon name="sidebar"/></button></div>
         <button className="workspace-switch" onClick={()=>go('connections')} title="Workspace settings"><span className="workspace-mark">{(data.profile.name || 'My').slice(0,1)}</span><span className="workspace-copy"><strong>{data.profile.name ? `${data.profile.name.split(' ')[0]}’s workspace` : 'My workspace'}</strong><small>{data.isDemo ? 'Sample environment' : 'Personal workspace'}</small></span><span className="workspace-arrow">⌄</span></button>
-        <div className="nav-scroll"><nav className="nav" aria-label="Workspace">{navGroups.map(group=><div className="nav-group" key={group.label}><p className="nav-label">{group.label}</p>{group.routes.map(key=>{const count=navigationCount(key,app);return <button key={key} className={`nav-item ${route===key ? 'active' : ''}`} onClick={()=>go(key)} aria-current={route===key ? 'page' : undefined} title={names[key]}><Icon name={key}/><span className="nav-name">{names[key]}</span>{count>0 && <span className="nav-count">{count>999 ? '999+' : count}</span>}</button>;})}</div>)}</nav></div>
+        <div className="nav-scroll"><nav className="nav" aria-label="Workspace">{navGroups.map(group=><div className="nav-group" key={group.label}>{group.routes.map(key=>{const count=navigationCount(key,app);return <button key={key} className={`nav-item ${activeWorkspace.id===key ? 'active' : ''}`} onClick={()=>go(key)} aria-current={activeWorkspace.id===key ? 'page' : undefined} title={group.label} aria-label={group.label}><Icon name={key}/><span className="nav-name">{group.label}</span>{count>0 && <span className="nav-count">{count>999 ? '999+' : count}</span>}</button>;})}</div>)}</nav></div>
         <button className="sidebar-command" onClick={()=>setPalette(true)} title="Search workspace"><Icon name="command"/><span>Search anything</span><kbd>⌘ K</kbd></button>
         <div className="profile-mini"><span className="avatar">{data.profile.name?.split(' ').map(x=>x[0]).slice(0,2).join('') || 'ME'}</span><button onClick={()=>go('profile')}><strong>{data.profile.name || 'Complete your profile'}</strong><small>{accounts.length ? 'Mailbox connected' : 'Connect a mailbox'}</small></button><span className={`status-dot ${connected ? '' : 'warning'}`} title={connected ? 'Live updates connected' : 'Live updates reconnecting'}/></div>
       </aside>
@@ -186,9 +178,10 @@ export default function App() {
       </header><main id="main" tabIndex={-1}>
         {authError && <div className="banner" role="alert">{authError}<button onClick={()=>setAuthError('')}>Dismiss</button></div>}
         {data.isDemo && <div className="banner"><span><strong>Sample workspace.</strong> Jobs, contacts, and events are fictional.</span><button onClick={()=>setModal({type:'reset',demo:false})}>Start my workspace →</button></div>}
-        <View key={route}/><footer className="page-footer"><span>{brand.name} <span className="footer-dot">·</span> Candidate Pipeline & Outbound Desk</span><span><span className={`status-dot ${connected ? '' : 'warning'}`}/>{connected ? 'Workspace synced' : 'Reconnecting live updates'}</span></footer>
+        <WorkspaceTabs route={route} go={go}/><section className="focused-workspace" aria-label={names[route] || 'Overview'}><WorkspaceView key={route} route={route}/></section><footer className="page-footer"><span>{brand.name} <span className="footer-dot">·</span> Candidate Pipeline & Outbound Desk</span><span><span className={`status-dot ${connected ? '' : 'warning'}`}/>{connected ? 'Workspace synced' : 'Reconnecting live updates'}</span></footer>
       </main></div>
     </div>
+    <SlideOver open={shortcuts} onClose={()=>setShortcuts(false)} title="Keyboard shortcuts"><dl className="shortcut-list">{TRIAGE_SHORTCUTS.map(([key,label])=><div key={key}><dt><kbd>{key}</kbd></dt><dd>{label}</dd></div>)}</dl><p className="hint">Shortcuts pause while typing or while a dialog is open.</p></SlideOver>
     {modal && <ModalContent modal={modal} close={()=>setModal(null)}/>}
     {palette && <CommandPalette close={()=>setPalette(false)}/>}
     {notice && <div className={`notification ${notice.error ? 'error' : ''}`} role="status"><span>{notice.message}</span><button onClick={()=>setNotice(null)} aria-label="Dismiss notification">×</button></div>}
@@ -205,7 +198,7 @@ export {QuickMassMailer} from './features/outreach/QuickMassMailer.jsx';
 export {CompanyExplorer};
 export {StoryBank} from './features/career/StoryBank.jsx';
 
-export {CommandPalette,TailoredDocuments};
+export {CommandPalette,TailoredDocuments,WorkspaceTabs,WorkspaceView};
 
 function mergeFeedCache(state,jobs,newFirst=false) {
   const pinned=new Set([...state.applications,...state.contacts,...state.campaigns].map(item=>item.jobId));

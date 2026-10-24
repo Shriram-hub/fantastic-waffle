@@ -5,6 +5,7 @@ import {candidateProfile} from './candidate-profile.mjs';
 import {INTERVIEW_TRACKS,QUESTION_BANK,inferTrack,interviewQuestions} from './interview-bank.mjs';
 import {withDeadline,boundedFetcher} from '../providers/deadline.mjs';
 export {INTERVIEW_TRACKS,QUESTION_BANK,inferTrack,interviewQuestions};
+export {negotiationKit} from './negotiation.mjs';
 
 export function candidateEvidence(state) {
   const master=candidateProfile(state.profile),stories=(state.career?.stories || []).filter(s=>!s.archived && !s.practiceOnly);

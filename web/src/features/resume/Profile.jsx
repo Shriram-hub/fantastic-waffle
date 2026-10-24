@@ -1,3 +1,4 @@
+import {SlideOver} from '../../shared/SlideOver.jsx';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp, api, stages, split, fmt } from '../../shared/workspace.jsx';
 import { Button, Badge, Heading, Empty, Panel, Field, Company, Modal, ConfirmAction, Sample } from '../../shared/ui.jsx';
@@ -9,7 +10,7 @@ export function Profile() {
       skills: data.profile.skills.join(", "),
       interests: data.profile.interests.join(", "),
     }),
-    [qa, setQa] = useState(data.settings.qaBank || []),
+    [qa, setQa] = useState(data.settings.qaBank || []),[drawer,setDrawer]=useState(''),
     r = data.resume;
   const changed=useRef(new Set());
   const change = (key, value) => {changed.current.add(key);setDraft((v) => ({ ...v, [key]: value }));};
@@ -29,8 +30,8 @@ export function Profile() {
       <Heading
         title="Your profile & résumé"
         subtitle="Your experience guides your search. Save changes to update job matching automatically."
-      />
-      <div className="profile-grid">
+      ><Button onClick={()=>setDrawer('resume')}>Résumé files & links</Button><Button onClick={()=>setDrawer('answers')}>Autofill answer bank</Button></Heading>
+      <div className="profile-grid focused-profile">
         <div>
           <MasterProfileVault/>
           <details className="form-section"><summary>Search and outreach details</summary>
@@ -113,7 +114,7 @@ export function Profile() {
             </div>
           </form>
           </details>
-          <section className="form-section">
+          <SlideOver open={drawer==='answers'} onClose={()=>setDrawer('')} title="Your approved answer bank"><section className="form-section">
             <h2>Your approved answer bank</h2>
             <p>
               Exact question labels and answers for browser-assisted forms.
@@ -175,9 +176,9 @@ export function Profile() {
                 Save answers
               </Button>
             </div>
-          </section>
+          </section></SlideOver>
         </div>
-        <div className="profile-side">
+        <SlideOver open={drawer==='resume'} onClose={()=>setDrawer('')} title="Résumé files & links"><div className="profile-side">
           <section className="form-section">
             <h2>Your résumé, ready to go.</h2>
             <p>PDF, DOCX, or TXT · Up to 5 MB</p>
@@ -318,7 +319,7 @@ export function Profile() {
                 ))}
             </section>
           )}
-        </div>
+        </div></SlideOver>
       </div>
     </>
   );

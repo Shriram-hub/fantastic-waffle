@@ -4,11 +4,11 @@ import {Button,Field} from '../../shared/ui.jsx';
 import {Icon} from '../../shared/Icon.jsx';
 import {SourceOptions,defaultSources} from './DiscoverySources.jsx';
 const fields=[['Software & AI','Software Engineer, AI Engineer'],['Finance','Financial Analyst, Accountant'],['Data','Data Analyst, Data Scientist'],['Marketing','Digital Marketing Specialist, Content Writer'],['Design','Product Designer, UX Designer'],['Business & operations','Business Analyst, Operations Analyst']];
-export function SearchPreferences({compact=false}) {
+export function SearchPreferences({compact=false,forceOpen=false}) {
   const {search,data,perform,busy,go}=useApp();
   const prefs=search?.preferences || {roles:data.profile.interests || [],location:data.profile.location || '',country:'',workMode:data.profile.workMode || 'Any',experience:'Any',enabled:true};
   const personalized=search?.plan.personalized || !!prefs.roles.length;
-  const [open,setOpen]=useState(!personalized),[roles,setRoles]=useState(prefs.roles.join(', ')),[location,setLocation]=useState(prefs.location),[country,setCountry]=useState(prefs.country),[mode,setMode]=useState(prefs.workMode),[experience,setExperience]=useState(prefs.experience),[freshness,setFreshness]=useState(prefs.freshness || '7d');
+  const [open,setOpen]=useState(forceOpen || !personalized),[roles,setRoles]=useState(prefs.roles.join(', ')),[location,setLocation]=useState(prefs.location),[country,setCountry]=useState(prefs.country),[mode,setMode]=useState(prefs.workMode),[experience,setExperience]=useState(prefs.experience),[freshness,setFreshness]=useState(prefs.freshness || '7d');
   const [sources,setSources]=useState({...defaultSources,...prefs.sources});
   useEffect(()=>setSources({...defaultSources,...prefs.sources}),[JSON.stringify(prefs.sources)]);
   useEffect(()=>{setRoles(prefs.roles.join(', '));setLocation(prefs.location);setCountry(prefs.country);setMode(prefs.workMode);setExperience(prefs.experience);setFreshness(prefs.freshness || '7d');},[JSON.stringify(prefs)]);
