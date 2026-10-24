@@ -60,7 +60,7 @@ function extractLinkedInProspect() {
   if(!name || name.split(/\s+/).length<2)throw Error('The profile header is still loading. Wait a moment, then try Get email again.');
   const explicit=header?.querySelector('[aria-label*="Current company" i]'),companyText=explicit?.getAttribute('aria-label')?.match(/Current company\s*:?\s*(.+)/i)?.[1];
   const companyLink=header?.querySelector('a[href*="/company/"]');
-  let company=flat(companyText || text(explicit) || text(header?.querySelector('.pv-text-details__right-panel-item-text')) || text(companyLink) || companyLink?.getAttribute('aria-label') || companyLink?.querySelector('img')?.getAttribute('alt') || '').replace(/\s+logo$/i,''),title=flat(text(header?.querySelector('.text-body-medium,[data-anonymize="headline"],.pv-text-details__left-panel .text-body-medium')) || embedded?.occupation || embedded?.headline);
+  let company=flat(companyText || text(explicit) || text(header?.querySelector('.pv-text-details__right-panel-item-text')) || text(companyLink) || companyLink?.getAttribute('aria-label') || companyLink?.querySelector('img')?.getAttribute('alt') || '').replace(/\s+logo$/i,'').replace(/^Current company\s*[:,.]?\s*/i,'').replace(/[.,;]\s*(?:Click(?:ing)?|Select|Go|Skip|Open|View|Press|Tap)\b.*$/i,'').replace(/\s+(?:Click(?:ing)?|Tap) (?:to|this|here)\b.*$/i,''),title=flat(text(header?.querySelector('.text-body-medium,[data-anonymize="headline"],.pv-text-details__left-panel .text-body-medium')) || embedded?.occupation || embedded?.headline);
   if(!title && heading){let next=heading.nextElementSibling || heading.parentElement?.nextElementSibling;for(let i=0;next && i<4;i++,next=next.nextElementSibling){const line=flat(text(next));if(line && line!==name && line.length<250 && !/connections|followers|contact info|^\d+/.test(line)){title=line;break;}}}
   const experience=document.getElementById('experience')?.closest('section') || [...document.querySelectorAll('section')].find(s=>/^Experience$/i.test(text(s.querySelector('h2'))));
   if(!company && experience){const rows=[...experience.querySelectorAll('li')];for(const row of rows.filter(r=>/\bPresent\b|\bCurrent\b/i.test(text(r)))){const link=row.querySelector('a[href*="/company/"]'),candidate=flat(text(link?.querySelector('[aria-hidden="true"]') || link) || text(row.querySelector('.t-14.t-normal span[aria-hidden="true"],.artdeco-entity-lockup__subtitle')));if(candidate){company=candidate.split(/\s*[·|]\s*/)[0];break;}}}
@@ -83,5 +83,5 @@ function extractLinkedInProfile() {
   return {url:`${location.origin}${location.pathname}`,profile:{personal:{fullName},links:{linkedinUrl:`${location.origin}${location.pathname}`},summary:{headline}},text};
 }
 
-globalThis.VeloceLinkedIn=Object.freeze({version:'0.11.0',extractLinkedInCompanyPeople,extractLinkedInProspect,extractLinkedInProfile});
+globalThis.VeloceLinkedIn=Object.freeze({version:'0.11.1',extractLinkedInCompanyPeople,extractLinkedInProspect,extractLinkedInProfile});
 })();

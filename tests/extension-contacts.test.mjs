@@ -54,3 +54,7 @@ test('every shipped content script is classic-safe and its package includes the 
 test('professional credentials and pronouns do not become a name component in inferred email addresses',async t=>{
   const dom=new JSDOM('<main><section><h1>Dr. Maya Singh, CFA (She/Her)</h1><p>Director at Deloitte</p><button aria-label="Current company Deloitte"></button></section></main>',{url:'https://www.linkedin.com/in/maya-singh',runScripts:'outside-only'});t.after(()=>dom.window.close());dom.window.eval(await readFile('extension/linkedin.js','utf8'));const p=dom.window.VeloceLinkedIn.extractLinkedInProspect();assert.equal(p.profiles[0].name,'Maya Singh');assert.equal(p.profiles[0].lastName,'Singh');assert.equal(p.company,'Deloitte');
 });
+
+test('LinkedIn employer accessibility instructions are trimmed before domain resolution',async t=>{
+  const dom=new JSDOM('<main><section><h1>Maya Singh</h1><div class="text-body-medium">Finance Director</div><button aria-label="Current company: Deloitte. Click to skip to experience card"><img alt="Deloitte logo"></button></section></main>',{url:'https://www.linkedin.com/in/maya-singh',runScripts:'outside-only'});t.after(()=>dom.window.close());dom.window.eval(await readFile('extension/linkedin.js','utf8'));assert.equal(dom.window.VeloceLinkedIn.extractLinkedInProspect().company,'Deloitte');dom.window.document.querySelector('button').setAttribute('aria-label','Current company: Deloitte. Clicking this button will take you to experience');assert.equal(dom.window.VeloceLinkedIn.extractLinkedInProspect().company,'Deloitte');
+});

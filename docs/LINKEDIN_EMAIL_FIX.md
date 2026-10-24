@@ -1,4 +1,4 @@
-# LinkedIn email finder 0.11.0
+# LinkedIn email finder 0.11.1
 
 The previous release could miss profile navigation from LinkedIn's feed because the content script only matched profile/company URLs at document creation. Profile extraction also relied on a narrow employer selector, and returned no email to the drawer until its queued worker completed.
 

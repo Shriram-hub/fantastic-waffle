@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Veloce Application Assistant",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "description": "Find company contacts on LinkedIn, review email suggestions and autofill applications from your approved Veloce profile.",
   "permissions": [
     "storage",
