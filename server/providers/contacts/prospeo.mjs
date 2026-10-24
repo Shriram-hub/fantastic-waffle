@@ -6,7 +6,7 @@ import {fail} from '../../domain.mjs';
 const request=(path,body,key,fetcher)=>providerJSON('Prospeo',`https://api.prospeo.io/${path}`,{method:'POST',headers:{'X-KEY':key,'Content-Type':'application/json'},body:JSON.stringify(body)},fetcher,20000,[key]);
 export async function findProspeoEmail(person,domain,key,fetcher=fetch) {
   key=providerKey(key,'prospeo');domain=cleanHunterDomain(domain);if(!key || !domain)fail('Configure Prospeo and use a corporate domain.',503);
-  const result=await request('enrich-person',{only_verified_email:true,enrich_mobile:false,data:person.person_id?{person_id:person.person_id}:{full_name:person.name || person.full_name,company_website:domain}},key,fetcher);
+  const result=await request('enrich-person',{only_verified_email:true,enrich_mobile:false,data:person.person_id?{person_id:person.person_id}:{full_name:person.name || person.full_name,company_website:domain,...(person.linkedinUrl?{linkedin_url:person.linkedinUrl}:{})}},key,fetcher);
   const p=result.person || result.results?.[0]?.person;if(!p?.email?.revealed)return null;
   return normalizeProviderContact({...p,email:p.email.email},domain,'Prospeo',{verified:p.email.status==='VERIFIED',reference:person.linkedinUrl || p.linkedin_url || 'https://prospeo.io/'});
 }

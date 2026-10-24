@@ -158,7 +158,7 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
         if(!parser)return {extractionError:'The LinkedIn reader could not load. Reload the extension, then refresh LinkedIn.'};
         for(let attempt=0;attempt<9;attempt++)try{
           const data=options.isProfile ? parser.extractLinkedInProspect() : await parser.extractLinkedInCompanyPeople(options);
-          return {data};
+          return {data:await parser.enrichLinkedInContext(data,{includeContactInfo:options.isProfile && !options.contextOnly})};
         }catch(error){
           if(!options.isProfile || attempt===8 || !/loading/i.test(error.message))return {extractionError:error.message || 'Could not read this LinkedIn page.'};
           await new Promise(resolve=>setTimeout(resolve,250));
@@ -168,10 +168,13 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
       if(result?.error)throw Error(result.error.message || String(result.error));
       if(!result?.result?.data)throw Error('LinkedIn did not return page data. Refresh this profile tab and try again.');
       const data=result.result.data,fresh=await chrome.tabs.get(tabId);if(new URL(fresh.url).pathname!==u.pathname)throw Error('The LinkedIn page changed during lookup. Retry on the new profile.');
-      if(contextOnly){const context=await request('contact-context',{company:message.company || data.company,intent:message.intent,sourceUrl:tab.url});return {...data,...context,domain:context.domain || data.domain || '',requiresDomainReview:!context.domain || context.requiresDomainReview===true,profileName:data.profiles?.[0]?.name || '',title:data.profiles?.[0]?.title || ''};}
-      if(message.company?.trim())data.company=message.company.trim();
+      if(message.company?.trim() && message.company.trim().toLowerCase()!==data.company?.toLowerCase()){
+        // A corrected employer must not reuse the previous company's domain evidence.
+        delete data.verifiedCompanyDomain;delete data.domainEvidence;delete data.companyLinkedinUrl;data.domain='';data.company=message.company.trim();
+      }
+      if(contextOnly){const context=await request('contact-context',{company:message.company || data.company,intent:message.intent,sourceUrl:tab.url,verifiedCompanyDomain:data.verifiedCompanyDomain,companyLinkedinUrl:data.companyLinkedinUrl,domainEvidence:data.domainEvidence});return {...data,...context,domain:context.domain || data.verifiedCompanyDomain || data.domain || '',requiresDomainReview:!context.domain || context.requiresDomainReview===true,profileName:data.profiles?.[0]?.name || '',title:data.profiles?.[0]?.title || ''};}
       if(!data.company)return {needsCompany:true,profileName:data.profiles[0]?.name,message:'Enter the current company shown on this page, then click Get email again.'};
-      return request('import-browser-profiles',{...data,domain:message.domain || data.domain || '',domainConfirmed:message.domainConfirmed===true,allowCredits:message.allowCredits===true,allowSearch:message.allowSearch===true});
+      return request('import-browser-profiles',{...data,domain:message.domainConfirmed && message.domain || data.verifiedCompanyDomain || message.domain || data.domain || '',domainConfirmed:message.domainConfirmed===true,allowCredits:message.allowCredits===true,allowSearch:message.allowSearch===true});
     }
     if(message.type==='workspace-batch') {
       if(!sender.url || !base || new URL(sender.url).origin!==base)throw Error('Start a batch from your paired Veloce workspace.');

@@ -25,6 +25,7 @@ export async function findHunterEmail(person,domain,key,fetcher=fetch) {
   const checked=data.verification?.status,status=data.accept_all || checked==='accept_all' ? 'catch-all' : data.disposable || data.webmail ? 'invalid' : checked==='valid' ? 'verified' : checked==='invalid' ? 'invalid' : 'unverified';
   return {...person,email:data.email.toLowerCase(),companyDomain:domain,emailStatus:status,verification:{provider:'Hunter Email Finder',status,at:now(),reference:person.linkedinUrl,result:status==='verified' ? 'Finder returned a verified corporate mailbox' : 'Mailbox verification still required'}};
 }
+export const findPersonEmailWithHunter=({domain,firstName,lastName,apiKey},fetcher=fetch)=>findHunterEmail({name:`${firstName || ''} ${lastName || ''}`.trim()},domain,apiKey,fetcher);
 async function hunterSearch(query, key, limit = 3, fetcher = fetch) {
   key=providerKey(key,'hunter');
   if(!key)fail('Configure HUNTER_API_KEY to use Hunter discovery.',503);

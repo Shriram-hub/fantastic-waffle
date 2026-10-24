@@ -1,14 +1,27 @@
 import {withDeadline,boundedFetcher} from '../providers/deadline.mjs';
 import {activity} from './autopilot-policy.mjs';
-import {searchEmailEvidence} from '../providers/contacts/serper-xray.mjs';
-import {providerCall} from './provider-budget.mjs';
-import {id,now,text,hash,safeUrl,fail} from '../domain.mjs';
+import {id,now,text,hash,safeUrl,emailValid,fail} from '../domain.mjs';
 import {companyDomain,resolveCompany} from '../providers/contacts/company.mjs';
-import {companyPattern,suggestCorporateEmails,observeCompanyEmails,extractPatternFromSnippets} from './company-patterns.mjs';
+import {companyPattern,suggestCorporateEmails,observeCompanyEmails} from './company-patterns.mjs';
 import {checkContactDomains} from '../providers/contacts/dns.mjs';
 import {profileURL,uniquePeople} from '../../shared/contact-discovery.mjs';
-import {findCompanyContacts} from './contact-discovery.mjs';
+import {observedEmail,resolvePersonEmail} from './person-email.mjs';
 import {effectiveProviderConfig} from './provider-config.mjs';
+
+function linkedInDomainEvidence(data){
+  const domain=companyDomain(data.verifiedCompanyDomain),e=data.domainEvidence;
+  if(!domain || e?.kind!=='linkedin-company-website')return null;
+  try{const website=new URL(e.website),reference=new URL(e.reference),company=new URL(data.companyLinkedinUrl || e.reference);if(!/^https?:$/.test(website.protocol) || website.username || website.password || website.port || companyDomain(website.hostname)!==domain || reference.protocol!=='https:' || reference.username || reference.password || reference.port || !/(^|\.)linkedin\.com$/.test(reference.hostname) || !/^\/company\/[^/]+\/about\/?$/.test(reference.pathname) || reference.pathname.split('/')[2]!==company.pathname.split('/')[2])return null;
+    return {domain,name:text(data.company,150),requiresDomainReview:false,source:'LinkedIn company Website field',reference:reference.href,website:website.href};
+  }catch{return null;}
+}
+function browserPerson(p){
+  if(!p || typeof p!=='object')fail('Use valid visible profile records.');const url=profileURL(p.linkedinUrl || p.profileUrl);if(!url)fail('Every profile needs a public LinkedIn /in/ link.');
+  const name=text(p.name || p.fullName || [p.firstName,p.lastName].filter(Boolean).join(' '),150).split(/[,|·•]/)[0].replace(/\([^)]*\)/g,' ').replace(/^(?:Dr|Prof|Mr|Ms|Mrs|CA)\.?\s+/i,'').replace(/\b(?:CFA|MBA|CPA|ACA|CA|Ph\.?D|PMP|FRM|ACCA|LLB|B\.?Tech|M\.?Tech)\b\.?/gi,(match,offset,whole)=>whole.trim().split(/\s+/).length>2?' ':match).replace(/\s+(?:Ex-\S+|1st|2nd|3rd\+?)\b.*$/i,'').replace(/\s+/g,' ').trim();
+  const kind=p.emailEvidence?.kind,directEmail=String(p.directEmail || '').trim().toLowerCase();
+  const direct=emailValid(directEmail) && ['linkedin-contact-info','linkedin-profile-text'].includes(kind) && profileURL(p.emailEvidence?.reference)===url;
+  return {name,title:text(p.title,200),location:text(p.location,150),linkedinUrl:url,...(direct?{directEmail,emailEvidence:{kind,reference:url,mailboxVerified:false}}:{})};
+}
 
 export async function queueBrowserContacts(data,store,queue,{tokenId=null,prepareInline=false,config={},fetcher=fetch,lookupMx}={}) {
   if(store.state.isDemo)fail('Start a personal workspace before importing real contacts.');
@@ -19,10 +32,10 @@ export async function queueBrowserContacts(data,store,queue,{tokenId=null,prepar
   if(data.domain && !companyDomain(data.domain))fail('Use a corporate domain without paths or personal-email services.');
   if(data.allowSearch!==undefined && typeof data.allowSearch!=='boolean')fail('Choose whether to use search credits.');
   if(data.allowCredits!==undefined && typeof data.allowCredits!=='boolean')fail('Choose whether to use email-finder credits.');
-  const profiles=uniquePeople(data.profiles.map(p=>{if(!p || typeof p!=='object')fail('Use valid visible profile records.');const url=profileURL(p.linkedinUrl || p.profileUrl);if(!url)fail('Every profile needs a public LinkedIn /in/ link.');return {name:text(p.name || p.fullName || [p.firstName,p.lastName].filter(Boolean).join(' '),150),title:text(p.title,200),location:text(p.location,150),linkedinUrl:url};}).filter(p=>p.name.split(/\s+/).length>=2));
+  const profiles=uniquePeople(data.profiles.map(browserPerson).filter(p=>p.name.split(/\s+/).length>=2));
   if(source.pathname.startsWith('/in/') && (profiles.length!==1 || profiles[0].linkedinUrl!==profileURL(source.href)))fail('Get email can only import the person on this profile page.');
   if(!profiles.length)fail('No complete visible names were found.');
-  const payload={company,domain:companyDomain(data.domain),domainConfirmed:data.domainConfirmed===true,profiles,sourceUrl:source.origin+source.pathname,allowCredits:data.allowCredits===true,allowSearch:data.allowSearch===true,tokenId},signature=hash(payload),dedupeKey=`browser-import:${Math.floor(Date.now()/86400000)}:${signature}`;
+  const payload={company,domain:companyDomain(data.domain),domainConfirmed:data.domainConfirmed===true,linkedInCompany:linkedInDomainEvidence(data),companyLinkedinUrl:safeUrl(data.companyLinkedinUrl),profiles,sourceUrl:source.origin+source.pathname,allowCredits:data.allowCredits===true,allowSearch:data.allowSearch===true,tokenId},signature=hash(payload),dedupeKey=`browser-import:${Math.floor(Date.now()/86400000)}:${signature}`;
   const existing=await store.db.prepare('SELECT id FROM tasks WHERE dedupe_key=?').get(dedupeKey);
   if(existing){const task=await queue.get(existing.id);if(task.status==='failed' && prepareInline)await queue.retry(task.id);return {...await browserImportResult(task.id,store,queue,tokenId),count:profiles.length};}
   if(prepareInline){const prepared=await prepareBrowserPeople(payload,store,config,fetcher,{lookupMx}),saved=await persistBrowserPeople(prepared,store,payload);Object.assign(payload,{preparedCompany:prepared.company,preparedHealth:prepared.contacts[0]?.domainVerification,preparedContactIds:saved.contactIds});}
@@ -31,13 +44,18 @@ export async function queueBrowserContacts(data,store,queue,{tokenId=null,prepar
   return {contacts,taskId:task.id,count:profiles.length,status:task.status,message:contacts.length?`${contacts.length} contacts saved. Suggestions are ready; optional mailbox verification continues in the background.`:`${profiles.length} visible profile(s) queued. Domain and pattern checks do not verify individual mailboxes.`};
 }
 async function prepareBrowserPeople(data,store,config,fetcher,{lookupMx,worker=false}={}) {
-  let company=data.preparedCompany || (data.domain?{domain:data.domain,name:data.company,requiresDomainReview:!data.domainConfirmed,source:data.domainConfirmed?'User-confirmed corporate website':'Browser domain suggestion',reference:`https://${data.domain}`} : await withDeadline(signal=>resolveCompany({company:data.company},boundedFetcher(fetcher,signal),store),3500).catch(()=>null));
+  // A company URL observed on LinkedIn takes precedence over a hostname guessed from its name.
+  const observed=data.linkedInCompany,explicit=data.domain && (!observed || data.domain!==observed.domain && data.domainConfirmed);
+  let company=data.preparedCompany || (explicit?{domain:data.domain,name:data.company,requiresDomainReview:!data.domainConfirmed,source:data.domainConfirmed?'User-confirmed corporate website':'Browser domain suggestion',reference:`https://${data.domain}`} : observed || await withDeadline(signal=>resolveCompany({company:data.company},boundedFetcher(fetcher,signal),store),3500).catch(()=>null));
   if(company)company={...await companyPattern(store,company.domain),...company};
   const profiles=data.profiles.map(p=>({...p,company:data.company,emailStatus:'unverified',source:'Browser-visible LinkedIn profile',companyAssociation:'Company selected from the visible page; review current employment',sources:[{url:data.sourceUrl},{url:p.linkedinUrl}]}));
-  if(worker && company && data.allowSearch){const effective=await effectiveProviderConfig(store,config),found=await searchEmailEvidence(company.domain,effective,{fetcher,call:(provider,fn,key)=>providerCall(store,`email-evidence-v1:${hash(effective[provider==='Serper'?'SERPER_API_KEY':'TAVILY_API_KEY'] || '')}:${company.domain}:${Math.floor(Date.now()/86400000)}:${key}`,provider,Math.min(500,Number(effective.CONTACT_SEARCH_DAILY_LIMIT)||100),fn)}),evidence=extractPatternFromSnippets(found.results,company.domain,profiles);if(evidence.pattern)company.snippetPattern={...evidence,sampleCount:0};for(const person of profiles){const result=found.results.find(r=>`${r.title || ''} ${r.snippet || ''}`.toLowerCase().includes(person.name.toLowerCase()));if(!result)continue;const direct=extractPatternFromSnippets([result],company.domain).observedEmails.filter(e=>! /^(careers?|hr|info|support|jobs|contact|talent)@/i.test(e.email));if(direct.length===1)Object.assign(person,{email:direct[0].email,emailObserved:true,emailInferred:false,verification:{provider:'Public indexed page',status:'unverified',at:now(),reference:direct[0].reference,result:'A public snippet mentions this name and address. Review the source; mailbox verification is separate.'}});}}
-  let contacts=company?suggestCorporateEmails(profiles,company):profiles;
-  contacts=data.preparedHealth && data.preparedHealth.status!=='unknown'?contacts.map(c=>({...c,domainVerification:data.preparedHealth})):await checkContactDomains(contacts,{lookupMx,fetcher});
-  if(worker && company && data.allowCredits){const effective=await effectiveProviderConfig(store,config),found=await findCompanyContacts({company:data.company,title:'Career opportunities'},company,{store,config:effective,fetcher,lookupMx,allowCredits:true,allowPublic:false,seedOnly:true,seedContacts:contacts,limit:contacts.length,targetCount:contacts.length,tryAlternates:true,domainHealth:contacts[0]?.domainVerification,dailyLimit:Math.min(100,Number(effective.CONTACT_API_DAILY_LIMIT)||20)});contacts=found.contacts;}
+  let contacts;
+  if(worker){
+    const effective=await effectiveProviderConfig(store,config);contacts=[];
+    // Keep provider calls bounded; every request has a durable reservation and daily budget.
+    for(let offset=0;offset<profiles.length;offset+=4){const batch=await Promise.allSettled(profiles.slice(offset,offset+4).map(person=>resolvePersonEmail(person,company,{store,config:effective,fetcher,allowCredits:data.allowCredits,allowSearch:data.allowSearch,domainHealth:data.preparedHealth})));for(let i=0;i<batch.length;i++)contacts.push(batch[i].status==='fulfilled'?batch[i].value:{...(company?suggestCorporateEmails([profiles[offset+i]],company)[0]:profiles[offset+i]),lookupWarnings:['Exact-person lookup could not complete. Any naming suggestion remains unverified.']});}
+  }else contacts=company?suggestCorporateEmails(profiles.map(p=>p.directEmail?observedEmail(p,p.directEmail,p.emailEvidence):p),company):profiles.map(p=>p.directEmail?observedEmail(p,p.directEmail,p.emailEvidence):p);
+  contacts=data.preparedHealth && data.preparedHealth.status!=='unknown'?contacts.map(c=>({...c,domainVerification:data.preparedHealth.domain===(c.email || '').split('@')[1]?data.preparedHealth:c.domainVerification})):await checkContactDomains(contacts,{lookupMx,fetcher});
   return {company,contacts};
 }
 async function persistBrowserPeople({company,contacts},store,data) {
@@ -57,10 +75,10 @@ async function persistBrowserPeople({company,contacts},store,data) {
 export async function importBrowserContacts(task,store,config={},fetcher=fetch,dependencies={}) {
   const prepared=await prepareBrowserPeople(task.payload,store,config,fetcher,{...dependencies,worker:true});return persistBrowserPeople(prepared,store,task.payload);
 }
-function browserContactRows(ids,store){return ids.map(id=>store.state.contacts.find(c=>c.id===id)).filter(c=>c && !c.suppressed).map(({id,name,title,email,emailStatus,alternateEmails,company,companyDomain,domainVerification,requiresDomainReview,emailInferred,confidence,verification})=>({id,name,title,email,emailStatus,alternateEmails:alternateEmails || [],company,companyDomain,domainVerification,requiresDomainReview,emailInferred,confidence,verification}));}
-export async function browserContactContext(company,store,config={},fetcher=fetch){
+function browserContactRows(ids,store){return ids.map(id=>store.state.contacts.find(c=>c.id===id)).filter(c=>c && !c.suppressed).map(({id,name,title,email,emailStatus,alternateEmails,company,companyDomain,domainVerification,requiresDomainReview,emailInferred,emailObserved,emailEvidence,emailPattern,emailResolution,confidence,confidenceMeaning,lookupWarnings,verification})=>({id,name,title,email,emailStatus,alternateEmails:alternateEmails || [],company,companyDomain,domainVerification,requiresDomainReview,emailInferred,emailObserved,emailEvidence,emailPattern,emailResolution,confidence,confidenceMeaning,lookupWarnings,verification}));}
+export async function browserContactContext(company,store,config={},fetcher=fetch,evidence={}){
   const name=text(company,150),effective=await effectiveProviderConfig(store,config),available={mailboxConfigured:!!(effective.HUNTER_API_KEY || effective.PROSPEO_API_KEY || effective.GETPROSPECT_API_KEY),searchConfigured:!!(effective.SERPER_API_KEY || effective.TAVILY_API_KEY)};if(name.length<2)return {...available,company:'',domain:'',requiresDomainReview:true};
-  const found=await withDeadline(signal=>resolveCompany({company:name},boundedFetcher(fetcher,signal),store),3500).catch(()=>null);
+  const found=linkedInDomainEvidence({...evidence,company:name}) || await withDeadline(signal=>resolveCompany({company:name},boundedFetcher(fetcher,signal),store),3500).catch(()=>null);
   return {...available,company:name,domain:found?.domain || '',requiresDomainReview:!found || found.requiresDomainReview===true,source:found?.source || 'Enter corporate domain'};
 }
 export async function browserImportResult(taskId,store,queue,tokenId) {

@@ -8,7 +8,7 @@ export function learnEmailPattern(contacts,domain,previous={}) {
   const observations=new Map((previous.observations || []).map(o=>[o.email,o]));
   for(const c of contacts) {
     const email=String(c.email || '').toLowerCase(),parts=String(c.name || '').trim().split(/\s+/),f=letters(c.firstName || parts[0]),l=letters(c.lastName || parts.at(-1));
-    const inferred=/pattern|permutation|suggested|guess/i.test(c.source || '') || c.emailInferred===true;
+    const inferred=/pattern|permutation|suggested|guess/i.test(c.source || '') || c.emailInferred===true || c.emailEvidence?.kind==='person-finder' && c.emailStatus!=='verified';
     if(inferred && c.emailStatus!=='verified' || !email.endsWith(`@${domain}`) || parts.length<2 && !c.lastName || !f || !l || /hiring|team|support|recruit|contact/i.test(c.name || '') || !c.sources?.some(s=>s.url) && !c.verification?.reference && !['verified','observed'].includes(c.emailStatus))continue;
     const matches=patterns.filter(p=>render(p,f,l)===email.split('@')[0]);if(!matches.length)continue;
     observations.set(email,{email,patterns:matches,name:c.name || `${c.firstName} ${c.lastName}`,reference:c.sources?.[0]?.url || c.verification?.reference || c.source,at:new Date().toISOString()});

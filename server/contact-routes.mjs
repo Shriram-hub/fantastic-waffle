@@ -26,7 +26,7 @@ export function contactRoutes(store,queue,config,fetcher=fetch) {
       await store.save();json(res,200,{ok:true});return true;
     }
     if(path==='/api/contacts/import-browser-profiles' && req.method==='POST'){json(res,202,await queueBrowserContacts(await bodyJSON(req),store,queue,{prepareInline:true,config,fetcher}));return true;}
-    if(path==='/api/contacts/browser-context' && req.method==='POST'){const data=await bodyJSON(req);json(res,200,await browserContactContext(data.company,store,config,fetcher));return true;}
+    if(path==='/api/contacts/browser-context' && req.method==='POST'){const data=await bodyJSON(req);json(res,200,await browserContactContext(data.company,store,config,fetcher,data));return true;}
     if(path==='/api/contacts/browser-import-result' && req.method==='POST'){const data=await bodyJSON(req);json(res,200,await browserImportResult(data.taskId,store,queue));return true;}
     if(path==='/api/contacts/providers/check' && req.method==='POST'){await bodyJSON(req);json(res,200,await checkContactProviders(store,config,fetcher));return true;}
     if(path==='/api/contacts/discovery' && req.method==='GET'){json(res,200,await contactDiscoveryStatus(store,config));return true;}

@@ -1,5 +1,5 @@
 (()=>{
-  if(window.top!==window || globalThis.__veloceCopilotVersion==='0.11.2')return;globalThis.__orbitCopilotInstalled=true;globalThis.__veloceCopilotVersion='0.11.2';
+  if(window.top!==window || globalThis.__veloceCopilotVersion==='0.12.0')return;globalThis.__orbitCopilotInstalled=true;globalThis.__veloceCopilotVersion='0.12.0';
   const host=document.createElement('div');host.id='orbit-career-copilot';host.style.cssText='all:initial!important;position:fixed!important;right:20px!important;bottom:20px!important;left:auto!important;top:auto!important;z-index:2147483647!important;display:block!important;';
   const root=host.attachShadow({mode:'open'}),style=document.createElement('style');
   style.textContent=`

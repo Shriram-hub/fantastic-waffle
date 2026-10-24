@@ -32,3 +32,12 @@ export async function searchEmailEvidence(domain,config,{fetcher=fetch,call=(_p,
   for(const [provider,key,search] of [['Serper',config.SERPER_API_KEY,serperSearch],['Tavily',config.TAVILY_API_KEY,tavilySearch]])if(key)try{return await call(provider,()=>search(q,key,{fetcher,limit:10}),`email-evidence:${domain}`);}catch{}
   return {results:[]};
 }
+
+export async function searchPersonEmailEvidence(person,domain,config,{fetcher=fetch,call=(_p,fn)=>fn()}={}) {
+  const name=text(person.name,150).replace(/["\\]/g,' '),q=`"${name}" "@${domain}"`,warnings=[];
+  for(const [provider,key,search] of [['Serper',config.SERPER_API_KEY,serperSearch],['Tavily',config.TAVILY_API_KEY,tavilySearch]])if(key)try{
+    const found=await call(provider,()=>search(q,key,{fetcher,limit:10}),`person-email:${name}:${domain}`);
+    if(found.results.length)return {...found,warnings};
+  }catch(error){warnings.push(error.status?error.message:`${provider} public email search is unavailable.`);}
+  return {results:[],warnings};
+}
