@@ -150,9 +150,24 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
         await chrome.tabs.create({url:`${workspace}/#outreach?contacts=${encodeURIComponent([...new Set(message.contactIds)].join(','))}`,active:true});return {message:'Opened selected contacts in the mass mail studio. Review and approve the exact batch before sending.'};
       }
       const isProfile=u.pathname.startsWith('/in/'),contextOnly=message.type==='linkedin-page-context';
-      const [result]=await chrome.scripting.executeScript({target:{tabId},func:isProfile?extractLinkedInProspect:extractLinkedInCompanyPeople,args:isProfile?[]:[{targetCount:Math.min(100,Number(message.targetCount)||100),duration:contextOnly?0:5000,contextOnly,company:message.company || ''}]});
-      if(!result?.result)throw Error('The page has not loaded any supported profiles.');
-      const data=result.result,fresh=await chrome.tabs.get(tabId);if(new URL(fresh.url).pathname!==u.pathname)throw Error('The LinkedIn page changed during lookup. Retry on the new profile.');
+      // Install the classic parser in the tab's isolated world, then return errors as data.
+      // Chrome can omit InjectionResult.result when an injected function throws.
+      await chrome.scripting.executeScript({target:{tabId},files:['linkedin.js']});
+      const [result]=await chrome.scripting.executeScript({target:{tabId},func:async options=>{
+        const parser=globalThis.VeloceLinkedIn;
+        if(!parser)return {extractionError:'The LinkedIn reader could not load. Reload the extension, then refresh LinkedIn.'};
+        for(let attempt=0;attempt<9;attempt++)try{
+          const data=options.isProfile ? parser.extractLinkedInProspect() : await parser.extractLinkedInCompanyPeople(options);
+          return {data};
+        }catch(error){
+          if(!options.isProfile || attempt===8 || !/loading/i.test(error.message))return {extractionError:error.message || 'Could not read this LinkedIn page.'};
+          await new Promise(resolve=>setTimeout(resolve,250));
+        }
+      },args:[{isProfile,targetCount:Math.min(100,Number(message.targetCount)||100),duration:contextOnly?0:5000,contextOnly,company:message.company || ''}]});
+      if(result?.result?.extractionError)throw Error(result.result.extractionError);
+      if(result?.error)throw Error(result.error.message || String(result.error));
+      if(!result?.result?.data)throw Error('LinkedIn did not return page data. Refresh this profile tab and try again.');
+      const data=result.result.data,fresh=await chrome.tabs.get(tabId);if(new URL(fresh.url).pathname!==u.pathname)throw Error('The LinkedIn page changed during lookup. Retry on the new profile.');
       if(contextOnly){const context=await request('contact-context',{company:message.company || data.company,intent:message.intent,sourceUrl:tab.url});return {...data,...context,domain:context.domain || data.domain || '',requiresDomainReview:!context.domain || context.requiresDomainReview===true,profileName:data.profiles?.[0]?.name || '',title:data.profiles?.[0]?.title || ''};}
       if(message.company?.trim())data.company=message.company.trim();
       if(!data.company)return {needsCompany:true,profileName:data.profiles[0]?.name,message:'Enter the current company shown on this page, then click Get email again.'};

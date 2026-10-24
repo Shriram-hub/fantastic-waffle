@@ -1,5 +1,5 @@
 (()=>{
-  if(window.top!==window || globalThis.__veloceCopilotVersion==='0.11.1')return;globalThis.__orbitCopilotInstalled=true;globalThis.__veloceCopilotVersion='0.11.1';
+  if(window.top!==window || globalThis.__veloceCopilotVersion==='0.11.2')return;globalThis.__orbitCopilotInstalled=true;globalThis.__veloceCopilotVersion='0.11.2';
   const host=document.createElement('div');host.id='orbit-career-copilot';host.style.cssText='all:initial!important;position:fixed!important;right:20px!important;bottom:20px!important;left:auto!important;top:auto!important;z-index:2147483647!important;display:block!important;';
   const root=host.attachShadow({mode:'open'}),style=document.createElement('style');
   style.textContent=`
@@ -57,7 +57,7 @@
     if(linkedin && !supported && !location.pathname.startsWith('/jobs/')){host.style.setProperty('display','none','important');}else host.style.setProperty('display','block','important');
     if(!profile){inlineHost?.remove();inlineHost=null;return;}
     if(inlineHost?.isConnected)return;
-    const heading=document.querySelector('main h1,h1');if(!heading)return;
+    const heading=document.querySelector('main h1,[role="main"] h1,[data-view-name*="profile-top-card"] h2,main h2,[role="main"] h2,main [role="heading"],h1');if(!heading)return;
     const header=heading.closest('section,[data-view-name*="profile-top-card"],.pv-top-card') || heading.parentElement,actions=header?.querySelector('.pv-top-card-v2-ctas,.pvs-profile-actions,button[aria-label*="Message" i],button[aria-label*="Connect" i]');
     inlineHost=document.createElement('span');inlineHost.id='veloce-inline-email';inlineHost.style.cssText='display:inline-block!important;margin:8px!important;position:relative!important;z-index:10!important;';
     const shadow=inlineHost.attachShadow({mode:'open'}),css=document.createElement('style');css.textContent=':host{all:initial}button{font:600 12px/1.5 Inter,system-ui,sans-serif;background:#4f46e5;color:white;border:1px solid #8b83ff;border-radius:24px;padding:9px 15px;cursor:pointer}button:focus-visible{outline:2px solid #06b6d4;outline-offset:2px}';

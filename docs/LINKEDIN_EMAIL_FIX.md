@@ -1,4 +1,4 @@
-# LinkedIn email finder 0.11.1
+# LinkedIn email finder 0.11.2
 
 The previous release could miss profile navigation from LinkedIn's feed because the content script only matched profile/company URLs at document creation. Profile extraction also relied on a narrow employer selector, and returned no email to the drawer until its queued worker completed.
 
@@ -36,3 +36,10 @@ Alternative suggestions are retained. **Verify alternate and save** uses configu
 Download the complete updated package from **Connections**. Replace the old unpacked folder, reload it at `chrome://extensions`, and refresh LinkedIn. The package includes the two new classic-script files, so replacing only the manifest or service-worker file is insufficient. Re-pair through Connections if the session expired.
 
 Tests cover classic-script execution, three LinkedIn layouts and hydration fallback, immediate API results, alternate verification, bounded credit use, signed launch intents, bounce review and selected-contact handoff. Browser checks exercise feed-to-profile navigation and the inline button through the actual API using an isolated test world. This environment's headless renderer cannot install Manifest V3 extensions; native service-worker registration and an authenticated live LinkedIn account were not exercised here. No real outreach was sent during validation.
+
+
+### Profile-loading correction (0.11.2)
+
+Get Email now installs the bundled reader in the current tab's isolated world before extraction, returns extraction errors explicitly instead of losing them in Chrome's InjectionResult, and retries a loading profile for up to two seconds. The reader supports h2 and ARIA headings as well as h1. Metadata fallback requires a canonical URL matching the active profile so stale SPA metadata cannot identify another person. The download and pairing labels read the manifest version.
+
+Validation includes redesigned profile fixtures, delayed rendering, Chrome injection errors, all existing tests and the Vite build. These fixtures do not establish compatibility with every signed-in LinkedIn layout.

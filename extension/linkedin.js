@@ -56,9 +56,18 @@ function extractLinkedInProspect() {
   const normalizeName=v=>flat(v).replace(/^(?:Dr|Prof|Mr|Ms|Mrs|CA)\.?\s+/i,'').replace(/,\s*(?:CFA|CPA|CA|MBA|Ph\.?D|FRM)\b.*$/i,'').replace(/^View\s+/i,'').replace(/[’']s\s+profile.*$/i,'').replace(/\s*\((?:he\/him|she\/her|they\/them|he\/they|she\/they)[^)]*\)/gi,'').replace(/\s*[·•|].*$/,'').replace(/\s+(?:1st|2nd|3rd\+?).*$/,'').trim();
   let embedded=null,visited=0,bytes=0;
   for(const code of [...document.querySelectorAll('code')].slice(0,30)){const raw=String(code.textContent || '').trim().replace(/^<!--\s*|\s*-->$/g,'');bytes+=raw.length;if(bytes>1000000)break;try{const pending=[JSON.parse(raw)];while(pending.length && visited++<8000){const node=pending.pop();if(!node || typeof node!=='object')continue;if(String(node.publicIdentifier || '').toLowerCase()===slug && node.firstName && node.lastName)embedded=node;for(const v of Object.values(node).slice(0,100))if(v && typeof v==='object')pending.push(v);}}catch{}}
-  const heading=document.querySelector('main h1,h1'),header=heading?.closest('section,[data-view-name*="profile-top-card"],.pv-top-card') || heading?.parentElement?.parentElement || document.querySelector('main'),name=normalizeName(text(heading) || (embedded?`${embedded.firstName} ${embedded.lastName}`:''));
+  const main=document.querySelector('main,[role="main"]');
+  const headings=[...document.querySelectorAll('main h1,[role="main"] h1,[data-view-name*="profile-top-card"] h2,main h2,[role="main"] h2,main [role="heading"],[role="main"] [role="heading"]')];
+  const heading=headings.find(el=>{const value=normalizeName(text(el));return !el.closest('aside,nav,[hidden],[aria-hidden="true"]') && value.split(/\s+/).length>=2 && value.length<130 && !/^(?:people |more profiles|similar profiles|who your viewers|about|experience|education|activity|recommendations|suggested for you)/i.test(value);}) || document.querySelector('h1');
+  // LinkedIn's redesigned profile uses h2/role=heading; metadata is only a fallback on the active profile URL.
+  const metadata=document.querySelector('meta[property="og:title"]')?.content || document.title;
+  const canonical=document.querySelector('link[rel="canonical"]')?.href;
+  const metadataBound=canonical && (()=>{try{return new URL(canonical).pathname.replace(/\/$/,'').toLowerCase()===location.pathname.replace(/\/$/,'').toLowerCase();}catch{return false;}})();
+  const metaName=metadataBound && /\bLinkedIn\b/i.test(metadata) ? metadata.replace(/^\(\d+\)\s*/,'').split(/\s*[|–—]\s*|\s+-\s+/)[0] : '';
+  const header=heading?.closest('section,[data-view-name*="profile-top-card"],.pv-top-card') || heading?.parentElement?.parentElement || main;
+  const name=normalizeName(text(heading) || (embedded?`${embedded.firstName} ${embedded.lastName}`:metaName));
   if(!name || name.split(/\s+/).length<2)throw Error('The profile header is still loading. Wait a moment, then try Get email again.');
-  const explicit=header?.querySelector('[aria-label*="Current company" i]'),companyText=explicit?.getAttribute('aria-label')?.match(/Current company\s*:?\s*(.+)/i)?.[1];
+  const explicit=(header?.querySelector('[aria-label*="Current company" i]') || main?.querySelector('[aria-label*="Current company" i]')),companyText=explicit?.getAttribute('aria-label')?.match(/Current company\s*:?\s*(.+)/i)?.[1];
   const companyLink=header?.querySelector('a[href*="/company/"]');
   let company=flat(companyText || text(explicit) || text(header?.querySelector('.pv-text-details__right-panel-item-text')) || text(companyLink) || companyLink?.getAttribute('aria-label') || companyLink?.querySelector('img')?.getAttribute('alt') || '').replace(/\s+logo$/i,'').replace(/^Current company\s*[:,.]?\s*/i,'').replace(/[.,;]\s*(?:Click(?:ing)?|Select|Go|Skip|Open|View|Press|Tap)\b.*$/i,'').replace(/\s+(?:Click(?:ing)?|Tap) (?:to|this|here)\b.*$/i,''),title=flat(text(header?.querySelector('.text-body-medium,[data-anonymize="headline"],.pv-text-details__left-panel .text-body-medium')) || embedded?.occupation || embedded?.headline);
   if(!title && heading){let next=heading.nextElementSibling || heading.parentElement?.nextElementSibling;for(let i=0;next && i<4;i++,next=next.nextElementSibling){const line=flat(text(next));if(line && line!==name && line.length<250 && !/connections|followers|contact info|^\d+/.test(line)){title=line;break;}}}
@@ -83,5 +92,5 @@ function extractLinkedInProfile() {
   return {url:`${location.origin}${location.pathname}`,profile:{personal:{fullName},links:{linkedinUrl:`${location.origin}${location.pathname}`},summary:{headline}},text};
 }
 
-globalThis.VeloceLinkedIn=Object.freeze({version:'0.11.1',extractLinkedInCompanyPeople,extractLinkedInProspect,extractLinkedInProfile});
+globalThis.VeloceLinkedIn=Object.freeze({version:'0.11.2',extractLinkedInCompanyPeople,extractLinkedInProspect,extractLinkedInProfile});
 })();
