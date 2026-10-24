@@ -58,3 +58,16 @@ test('professional credentials and pronouns do not become a name component in in
 test('LinkedIn employer accessibility instructions are trimmed before domain resolution',async t=>{
   const dom=new JSDOM('<main><section><h1>Maya Singh</h1><div class="text-body-medium">Finance Director</div><button aria-label="Current company: Deloitte. Click to skip to experience card"><img alt="Deloitte logo"></button></section></main>',{url:'https://www.linkedin.com/in/maya-singh',runScripts:'outside-only'});t.after(()=>dom.window.close());dom.window.eval(await readFile('extension/linkedin.js','utf8'));assert.equal(dom.window.VeloceLinkedIn.extractLinkedInProspect().company,'Deloitte');dom.window.document.querySelector('button').setAttribute('aria-label','Current company: Deloitte. Clicking this button will take you to experience');assert.equal(dom.window.VeloceLinkedIn.extractLinkedInProspect().company,'Deloitte');
 });
+
+
+test('download label and pairing messages follow the packaged manifest version',async()=>{
+  const {extensionVersion}=await import('../web/src/shared/extension-version.mjs');
+  const manifest=JSON.parse(await readFile('extension/manifest.json','utf8'));
+  assert.equal(extensionVersion,manifest.version);
+  const connections=await readFile('web/src/features/connections/Connections.jsx','utf8');
+  const batch=await readFile('web/src/shared/browser-batch.mjs','utf8');
+  assert.ok(connections.includes('Download Chrome extension {extensionVersion}'));
+  assert.ok(connections.includes('replace the entire extracted folder'));
+  assert.equal((batch.match(/\$\{extensionVersion\}/g)||[]).length,2);
+  assert.ok(!/extension 0\.9/.test(connections+batch));
+});

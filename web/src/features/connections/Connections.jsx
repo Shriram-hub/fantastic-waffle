@@ -2,6 +2,7 @@ import {WorkspaceAppearance} from './WorkspaceAppearance.jsx';
 import {ProviderKeys} from './ProviderKeys.jsx';
 import {AlertSettings} from './AlertSettings.jsx';
 import {MailboxChecks} from './MailboxChecks.jsx';
+import {extensionVersion} from '../../shared/extension-version.mjs';
 import {pairBrowserExtension} from '../../shared/browser-batch.mjs';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp, api, stages, split, fmt } from '../../shared/workspace.jsx';
@@ -253,10 +254,10 @@ export function Connections() {
               Download and extract the assistant. Open chrome://extensions,
               enable Developer mode, and load the veloce-ai-extension folder.
               The download includes this app’s address and a one-use installation code valid for 15 minutes. After installation, refresh Veloce and click Pair extension below if needed. No workspace password is included.
-              Tokens expire in 24 hours.
+              Tokens expire in 24 hours. To update an existing installation, replace the entire extracted folder, reload it at chrome://extensions, then refresh LinkedIn.
             </p>
             <div className="btn-row">
-              <a className="btn primary" href="/api/extension/download">Download Chrome extension 0.9</a>
+              <a className="btn primary" href="/api/extension/download">Download Chrome extension {extensionVersion}</a>
               <Button onClick={()=>perform(async()=>notify(await pairBrowserExtension()))}>Pair extension with this workspace</Button>
               <Button
                 onClick={() =>
