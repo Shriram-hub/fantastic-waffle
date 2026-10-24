@@ -1,4 +1,4 @@
-# LinkedIn email finder 0.12.0
+# LinkedIn email finder 0.13.0
 
 The previous release could miss profile navigation from LinkedIn's feed because the content script only matched profile/company URLs at document creation. Profile extraction also relied on a narrow employer selector, and returned no email to the drawer until its queued worker completed.
 
@@ -52,9 +52,26 @@ Validation includes redesigned profile fixtures, delayed rendering, Chrome injec
 - With the relevant credit controls enabled, the worker searches the exact full name plus corporate domain, then uses the Hunter named email finder, Prospeo person enrichment and GetProspect finder before generating candidates. Published literal addresses keep their source URL. Ambiguous masks and conflicting literal addresses cannot become an exact result. Provider calls retain the existing encrypted keys, durable credit reservations, cache and shared daily caps. No new API key is required. GetProspect remains optional.
 - Published address evidence is distinct from current mailbox verification. Only explicit valid mailbox results get the verified status. A direct LinkedIn/public address can be authentic source evidence and still be outdated or undeliverable. Fixed 92–100 percent accuracy claims are not displayed.
 - If no source-backed address is found, the drawer and workspace show **No exact email found**, followed by two company-pattern or three common-name candidates. Candidate addresses have separate copy controls and are excluded from Copy Found Emails. Inferred, catch-all and invalid recipients remain blocked from sending.
-- Search and finder credit switches remain off until selected. The options are expanded for an individual profile. Bulk imports do not trigger a private contact-info request per person.
+- Search and finder credit switches remain off until selected. The options are expanded for an individual profile. Explicit bulk actions can enrich missing data per profile, with bounded concurrency, caching and a page deadline; opening the drawer alone does not start the bulk reads.
 - Microsoft login account checks and Gravatar existence checks are not implemented as mailbox verification. Neither establishes current email deliverability or the claimed person's ownership. Public GitHub commit evidence elsewhere in discovery continues to remain unverified.
 
 Primary provider references checked for this change: [Hunter Email Finder](https://hunter.io/api-documentation), [Prospeo Enrich Person](https://prospeo.io/api-docs/enrich-person). Prospeo's current endpoint is `/enrich-person`, rather than the older `/email-finder`; mobile enrichment remains off. Voyager is an undocumented browser endpoint, so a denial, changed response or missing readable CSRF token leaves it unavailable and the finder continues with other evidence. Official LinkedIn member APIs do not provide general third-party contact lookup through ordinary sign-in scopes: [LinkedIn permissions](https://learn.microsoft.com/en-us/linkedin/shared/authentication/getting-access).
 
 Validation uses synthetic LinkedIn pages and contact-info/company payloads in a real isolated browser world, the actual local bearer API and persistence, with all existing tests and the production build. It does not establish live compatibility or accuracy for every signed-in profile. No live provider credits or outreach were used for QA.
+
+
+## Automatic employer resolution (0.13.0)
+
+The profile button is **Get Email** and the people-page button is **Extract Emails from Page**. Company/domain fields are optional inside a collapsed **Advanced Override**. There is no company-name gate in the background script, owner API, paired extension API, or worker. A profile can be saved with neither a company nor a domain.
+
+On a user-triggered extraction, missing profile fields are enriched from LinkedIn profile/position data and available contact info. Profile hydration is bound to that person's public identifier/URN. Active position selection follows only related position entities and excludes ended positions. Related organizations provide their website or company slug for a bounded company-website lookup; profile HTML code hydration is the fallback. Summary text can supply a source-backed email but cannot make it mailbox verified. Session authentication stays inside the browser. Access/rate rejections pause the corresponding reads, and unresolved entries continue to backend enrichment.
+
+At most three profile lookups run concurrently, under a page deadline. A shared company cache avoids repeating the same organization lookup. Each person retains an employer/domain independently, including different companies on one results page or employers sharing a mail domain. A direct address appearing on multiple profiles is held as ambiguous rather than assigned to each person.
+
+For domain-free profiles, optional provider enrichment first uses Prospeo's current `/enrich-person` API with `data.linkedin_url`, then Apollo's current `/api/v1/people/match` URL match. Mobile/personal-email reveal and Apollo waterfall options stay off. Only an explicit valid mailbox result qualifies as verified. Wrong-profile matches are rejected. Apollo remains optional and account eligibility/access failures fall through to the other configured methods. The old Prospeo `/social-url-enrichment` documentation redirects to the current API; it is not called.
+
+Optional indexed-profile search binds results to the exact LinkedIn URL, extracts an employer from that result and resolves the domain before name/domain email finding. Same-name results at another URL cannot supply an employer. Role-only search keywords are never treated as company names. An unknown person in mixed search results cannot inherit another result’s detected employer. Existing credit consent, daily budgets, request reservations and cache remain active. No new provider or infrastructure account is required.
+
+When no source/provider returns enough information, the result is saved as unresolved with no fabricated employer or email. Automatic operation removes manual data entry; it cannot guarantee that LinkedIn or an external provider exposes every contact. Native MV3 registration and a live signed-in LinkedIn session remain outside this test environment.
+
+Validation covers blank-company cards, active/past/unrelated positions, HTML hydration, mixed employers, shared-domain employer names, URL-only Prospeo/Apollo and indexed-profile fallback, the paired API through the actual worker, and optional/collapsed overrides. The isolated-browser check exercises a profile and fifty search cards with no visible company names through the real local API, without typing a company or sending an email.

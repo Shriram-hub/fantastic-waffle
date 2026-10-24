@@ -10,7 +10,19 @@ import {
 import { remoteJSON } from "../http.mjs";
 import {contactProviderError} from './errors.mjs';
 import {providerKey} from '../../services/provider-config.mjs';
+import {providerJSON} from './provider-http.mjs';
+import {normalizeProviderContact} from './normalized.mjs';
+import {companyDomain} from './company.mjs';
+import {profileURL} from '../../../shared/contact-discovery.mjs';
 async function apolloJSON(url,options,fetcher){try{return await remoteJSON(url,options,fetcher);}catch(error){throw contactProviderError('Apollo',error);}}
+export async function matchPersonByLinkedInUrl({linkedinUrl,firstName,lastName,company,domain,apiKey},fetcher=fetch){
+  const url=profileURL(linkedinUrl),key=providerKey(apiKey,'apollo');if(!url || !key)fail('Configure Apollo and use a public LinkedIn profile URL.',503);
+  const result=await providerJSON('Apollo','https://api.apollo.io/api/v1/people/match',{method:'POST',headers:{'Content-Type':'application/json','X-Api-Key':key},body:JSON.stringify({linkedin_url:url,...(firstName?{first_name:firstName}:{}),...(lastName?{last_name:lastName}:{}),...(company?{organization_name:company}:{}),...(domain?{domain}:{}),reveal_personal_emails:false,reveal_phone_number:false,run_waterfall_email:false,run_waterfall_phone:false})},fetcher,20000,[key]),p=result.person;
+  if(!p || ['none','low'].includes(result.match_confidence || p.match_confidence) || p.linkedin_url && profileURL(p.linkedin_url)!==url)return null;
+  const corporate=p.organization || {},resolved=companyDomain(corporate.primary_domain || (p.email || '').split('@')[1]);
+  const found=normalizeProviderContact({...p,company:corporate.name,linkedinUrl:url},resolved,'Apollo',{verified:p.email_status==='verified',catchAll:!!p.email_domain_catchall,reference:url});
+  return found?{...found,requiresDomainReview:!corporate.primary_domain,company:corporate.name || '',companyDomainSource:'Apollo LinkedIn URL enrichment',companyAssociation:'Provider-matched current employer'}:null;
+}
 export async function searchApollo(query, key, fetcher = fetch) {
   key=providerKey(key,'apollo');
   if (!key) fail("Set APOLLO_API_KEY on the server to search Apollo.", 503);

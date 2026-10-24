@@ -88,7 +88,7 @@ try {
   if(!url || !/(^|\.)linkedin\.com$/.test(url.hostname) || !/^\/(in\/|company\/|search\/results\/people)/.test(url.pathname))document.querySelector('#contact-tools').textContent='Open a LinkedIn profile or company People page to get company email suggestions.';
   else {
     const tools=globalThis.VeloceContactUI.create(document.querySelector('#contact-tools'),{send:message=>chrome.runtime.sendMessage({...message,tabId:tab.id}),status,kind:url.pathname.startsWith('/in/')?'profile':'people',pageUrl:()=>tab.url});
-    chrome.runtime.onMessage.addListener(message=>{if(message.type==='veloce-scan-progress' && message.tabId===tab.id)status.textContent=`Scanning DOM: ${message.count} profiles found…`;});
+    chrome.runtime.onMessage.addListener(message=>{if(message.type==='veloce-scan-progress' && message.tabId===tab.id)status.textContent=message.stage==='enrichment'?`Resolving employers and emails: ${message.count}/${message.total} profiles…`:`Scanning DOM: ${message.count} profiles found…`;});
     window.addEventListener('pagehide',()=>tools.dispose(),{once:true});
   }
 }catch(error){status.textContent=error.message;}

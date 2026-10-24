@@ -113,7 +113,7 @@ async function startBatch(taskIds) {
   await chrome.storage.session.set({batch:{ids:[...new Set(taskIds)],completed:0,total:taskIds.length,paused:false,startedAt:Date.now()}});return advanceBatch();
 }
 chrome.runtime.onMessage.addListener((message,sender,respond)=>{
-  if(!['connection-status','pull-company-recruiters','linkedin-get-email','browser-import-status','linkedin-page-context','linkedin-open-mailer','linkedin-scan-progress','workspace-pair','workspace-batch','copilot-context','copilot-fill','batch-pause','batch-resume','batch-skip','register-workspace'].includes(message.type))return;
+  if(!['connection-status','pull-company-recruiters','linkedin-get-email','browser-import-status','linkedin-page-context','linkedin-open-mailer','linkedin-scan-progress','linkedin-enrichment-progress','workspace-pair','workspace-batch','copilot-context','copilot-fill','batch-pause','batch-resume','batch-skip','register-workspace'].includes(message.type))return;
   (async()=>{
     const {base,currentTask,batch}=await chrome.storage.session.get(['base','currentTask','batch']);
     const extensionPage=sender.url?.startsWith(chrome.runtime.getURL(''));
@@ -134,9 +134,9 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
       return {ok:true};
     }
     if(!sender.tab?.id && !extensionPage)throw Error('Open a supported application page.');
-    if(message.type==='linkedin-scan-progress'){
+    if(['linkedin-scan-progress','linkedin-enrichment-progress'].includes(message.type)){
       if(!sender.tab?.id || sender.frameId!==0 || !/(^|\.)linkedin\.com$/.test(new URL(sender.url).hostname))throw Error('Use the LinkedIn main tab.');
-      const count=Math.min(100,Math.max(0,Number(message.count)||0));await chrome.runtime.sendMessage({type:'veloce-scan-progress',tabId:sender.tab.id,count}).catch(()=>{});return {ok:true};
+      const count=Math.min(100,Math.max(0,Number(message.count)||0));await chrome.runtime.sendMessage({type:'veloce-scan-progress',tabId:sender.tab.id,count,total:Math.min(100,Math.max(0,Number(message.total)||0)),stage:message.type==='linkedin-enrichment-progress'?'enrichment':'scan'}).catch(()=>{});return {ok:true};
     }
     if(['pull-company-recruiters','linkedin-get-email','browser-import-status','linkedin-page-context','linkedin-open-mailer'].includes(message.type)) {
       if(!extensionPage && sender.frameId!==0)throw Error('Open the LinkedIn page in its main tab.');
@@ -158,7 +158,7 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
         if(!parser)return {extractionError:'The LinkedIn reader could not load. Reload the extension, then refresh LinkedIn.'};
         for(let attempt=0;attempt<9;attempt++)try{
           const data=options.isProfile ? parser.extractLinkedInProspect() : await parser.extractLinkedInCompanyPeople(options);
-          return {data:await parser.enrichLinkedInContext(data,{includeContactInfo:options.isProfile && !options.contextOnly})};
+          return {data:await parser.enrichLinkedInContext(data,{includeContactInfo:!options.contextOnly,contextOnly:options.contextOnly})};
         }catch(error){
           if(!options.isProfile || attempt===8 || !/loading/i.test(error.message))return {extractionError:error.message || 'Could not read this LinkedIn page.'};
           await new Promise(resolve=>setTimeout(resolve,250));
@@ -168,13 +168,12 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
       if(result?.error)throw Error(result.error.message || String(result.error));
       if(!result?.result?.data)throw Error('LinkedIn did not return page data. Refresh this profile tab and try again.');
       const data=result.result.data,fresh=await chrome.tabs.get(tabId);if(new URL(fresh.url).pathname!==u.pathname)throw Error('The LinkedIn page changed during lookup. Retry on the new profile.');
-      if(message.company?.trim() && message.company.trim().toLowerCase()!==data.company?.toLowerCase()){
+      if(message.companyOverride===true && message.company?.trim() && message.company.trim().toLowerCase()!==data.company?.toLowerCase()){
         // A corrected employer must not reuse the previous company's domain evidence.
         delete data.verifiedCompanyDomain;delete data.domainEvidence;delete data.companyLinkedinUrl;data.domain='';data.company=message.company.trim();
       }
       if(contextOnly){const context=await request('contact-context',{company:message.company || data.company,intent:message.intent,sourceUrl:tab.url,verifiedCompanyDomain:data.verifiedCompanyDomain,companyLinkedinUrl:data.companyLinkedinUrl,domainEvidence:data.domainEvidence});return {...data,...context,domain:context.domain || data.verifiedCompanyDomain || data.domain || '',requiresDomainReview:!context.domain || context.requiresDomainReview===true,profileName:data.profiles?.[0]?.name || '',title:data.profiles?.[0]?.title || ''};}
-      if(!data.company)return {needsCompany:true,profileName:data.profiles[0]?.name,message:'Enter the current company shown on this page, then click Get email again.'};
-      return request('import-browser-profiles',{...data,domain:message.domainConfirmed && message.domain || data.verifiedCompanyDomain || message.domain || data.domain || '',domainConfirmed:message.domainConfirmed===true,allowCredits:message.allowCredits===true,allowSearch:message.allowSearch===true});
+      return request('import-browser-profiles',{...data,domain:message.domainConfirmed && message.domain || data.verifiedCompanyDomain || message.domain || data.domain || '',domainConfirmed:message.domainConfirmed===true,companyOverride:message.companyOverride===true,allowCredits:message.allowCredits===true,allowSearch:message.allowSearch===true});
     }
     if(message.type==='workspace-batch') {
       if(!sender.url || !base || new URL(sender.url).origin!==base)throw Error('Start a batch from your paired Veloce workspace.');

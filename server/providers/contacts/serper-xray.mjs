@@ -41,3 +41,19 @@ export async function searchPersonEmailEvidence(person,domain,config,{fetcher=fe
   }catch(error){warnings.push(error.status?error.message:`${provider} public email search is unavailable.`);}
   return {results:[],warnings};
 }
+
+export async function searchLinkedInEmployer(person,config,{fetcher=fetch,call=(_p,fn)=>fn()}={}){
+  const url=profileURL(person.linkedinUrl);if(!url)return {company:'',warnings:[]};
+  const name=text(person.name,150).replace(/["\\]/g,' '),slug=new URL(url).pathname.split('/')[2],q=`"${name}" site:linkedin.com/in/${slug}`,warnings=[];
+  for(const [provider,key,search] of [['Serper',config.SERPER_API_KEY,serperSearch],['Tavily',config.TAVILY_API_KEY,tavilySearch]])if(key)try{
+    const found=await call(provider,()=>search(q,key,{fetcher,limit:5}),`linkedin-employer:${url}`),matches=found.results.filter(r=>profileURL(r.link)===url);
+    for(const result of matches){
+      const title=result.title.replace(/\s*\|\s*LinkedIn\s*$/i,''),parts=title.split(/\s+[-–—]\s+/).map(s=>s.trim());
+      if(parts[0]?.toLowerCase()!==name.toLowerCase())continue;
+      const employer=(parts.length>=3?parts.at(-1):'') || `${title} ${result.snippet || ''}`.match(/\bat\s+([^|·\n]+)/i)?.[1]?.trim();
+      if(employer && employer.length>=2 && employer.length<=150 && !/^(?:financial analyst|analyst|vice president|director|manager|engineer|recruiter|investment banking associate|linkedin)$/i.test(employer))return {company:employer,reference:result.link,warnings};
+    }
+    break; // One indexed-profile query, never a broad same-name company guess.
+  }catch(error){warnings.push(error.status?error.message:`${provider} indexed-profile lookup is unavailable.`);}
+  return {company:'',warnings};
+}

@@ -3,7 +3,17 @@ import {normalizeProviderContact} from './normalized.mjs';
 import {providerKey} from '../../services/provider-config.mjs';
 import {cleanHunterDomain} from './hunter.mjs';
 import {fail} from '../../domain.mjs';
+import {profileURL} from '../../../shared/contact-discovery.mjs';
 const request=(path,body,key,fetcher)=>providerJSON('Prospeo',`https://api.prospeo.io/${path}`,{method:'POST',headers:{'X-KEY':key,'Content-Type':'application/json'},body:JSON.stringify(body)},fetcher,20000,[key]);
+// The current API accepts linkedin_url alone. social-url-enrichment is retired.
+export async function findEmailByLinkedInUrlWithProspeo({linkedinUrl,apiKey},fetcher=fetch){
+  const url=profileURL(linkedinUrl),key=providerKey(apiKey,'prospeo');if(!url || !key)fail('Configure Prospeo and use a public LinkedIn profile URL.',503);
+  const result=await request('enrich-person',{only_verified_email:true,enrich_mobile:false,data:{linkedin_url:url}},key,fetcher),p=result.person;
+  if(!p?.email?.revealed || p.linkedin_url && profileURL(p.linkedin_url)!==url)return null;
+  const email=p.email.email,corporate=result.company || {},domain=cleanHunterDomain(corporate.domain || corporate.website || (email || '').split('@')[1]);
+  const found=normalizeProviderContact({...p,email,company:corporate.name,linkedinUrl:url},domain,'Prospeo',{verified:p.email.status==='VERIFIED',reference:url});
+  return found?{...found,requiresDomainReview:!corporate.domain && !corporate.website,companyDomainSource:'Prospeo LinkedIn URL enrichment',companyAssociation:'Provider-matched current employer',company:corporate.name || ''}:null;
+}
 export async function findProspeoEmail(person,domain,key,fetcher=fetch) {
   key=providerKey(key,'prospeo');domain=cleanHunterDomain(domain);if(!key || !domain)fail('Configure Prospeo and use a corporate domain.',503);
   const result=await request('enrich-person',{only_verified_email:true,enrich_mobile:false,data:person.person_id?{person_id:person.person_id}:{full_name:person.name || person.full_name,company_website:domain,...(person.linkedinUrl?{linkedin_url:person.linkedinUrl}:{})}},key,fetcher);
