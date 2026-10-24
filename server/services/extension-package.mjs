@@ -1,7 +1,7 @@
 import {readFile} from 'node:fs/promises';
 import {crc32} from 'node:zlib';
 
-const files=['manifest.json','background.mjs','location.mjs','autofill.mjs','linkedin.mjs','confirmation.js','copilot.js','workspace-bridge.js','popup.html','popup.mjs','popup.css'];
+const files=['manifest.json','background.mjs','location.mjs','autofill.mjs','linkedin.mjs','linkedin.js','contact-ui.js','confirmation.js','copilot.js','workspace-bridge.js','popup.html','popup.mjs','popup.css'];
 export async function extensionPackage(config={}) {
   const local=[],central=[];let offset=0;
   const entries=await Promise.all(files.map(async name=>({name,bytes:await readFile(new URL(`../../extension/${name}`,import.meta.url))})));

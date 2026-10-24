@@ -25,8 +25,8 @@ async function request(path,body) {
   await autoPair();
   const {base,token}=await chrome.storage.session.get(['base','token']);
   if(!base || !token)throw Error('Pair the extension first.');
-  const response=await fetch(`${base}/api/extension/${path}`,{method:body ? 'POST' : 'GET',headers:{Authorization:`Bearer ${token}`,...(body ? {'Content-Type':'application/json'} : {})},...(body ? {body:JSON.stringify(body)} : {})});
-  const data=await response.json();if(!response.ok)throw Error(data.error || 'Veloce request failed.');return data;
+  const response=await fetch(`${base}/api/extension/${path}`,{method:body ? 'POST' : 'GET',headers:{Authorization:`Bearer ${token}`,...(body ? {'Content-Type':'application/json'} : {})},...(body ? {body:JSON.stringify(body)} : {}),signal:AbortSignal.timeout(20000)});
+  let data;try{data=await response.json();}catch{throw Error('Veloce is starting or temporarily unavailable. Wait a moment and retry Get email.');}if(response.status===401){await chrome.storage.session.remove?.('token');throw Error('Your Veloce pairing expired. Open Connections in Veloce and pair the extension again.');}if(!response.ok)throw Error(data.error || 'Veloce request failed.');return data;
 }
 async function permittedFrames(tabId) {
   const frames=await chrome.webNavigation.getAllFrames({tabId}),allowed=[];
@@ -113,7 +113,7 @@ async function startBatch(taskIds) {
   await chrome.storage.session.set({batch:{ids:[...new Set(taskIds)],completed:0,total:taskIds.length,paused:false,startedAt:Date.now()}});return advanceBatch();
 }
 chrome.runtime.onMessage.addListener((message,sender,respond)=>{
-  if(!['connection-status','pull-company-recruiters','linkedin-get-email','browser-import-status','workspace-pair','workspace-batch','copilot-context','copilot-fill','batch-pause','batch-resume','batch-skip','register-workspace'].includes(message.type))return;
+  if(!['connection-status','pull-company-recruiters','linkedin-get-email','browser-import-status','linkedin-page-context','linkedin-open-mailer','linkedin-scan-progress','workspace-pair','workspace-batch','copilot-context','copilot-fill','batch-pause','batch-resume','batch-skip','register-workspace'].includes(message.type))return;
   (async()=>{
     const {base,currentTask,batch}=await chrome.storage.session.get(['base','currentTask','batch']);
     const extensionPage=sender.url?.startsWith(chrome.runtime.getURL(''));
@@ -134,17 +134,29 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
       return {ok:true};
     }
     if(!sender.tab?.id && !extensionPage)throw Error('Open a supported application page.');
-    if(['pull-company-recruiters','linkedin-get-email','browser-import-status'].includes(message.type)) {
+    if(message.type==='linkedin-scan-progress'){
+      if(!sender.tab?.id || sender.frameId!==0 || !/(^|\.)linkedin\.com$/.test(new URL(sender.url).hostname))throw Error('Use the LinkedIn main tab.');
+      const count=Math.min(100,Math.max(0,Number(message.count)||0));await chrome.runtime.sendMessage({type:'veloce-scan-progress',tabId:sender.tab.id,count}).catch(()=>{});return {ok:true};
+    }
+    if(['pull-company-recruiters','linkedin-get-email','browser-import-status','linkedin-page-context','linkedin-open-mailer'].includes(message.type)) {
       if(!extensionPage && sender.frameId!==0)throw Error('Open the LinkedIn page in its main tab.');
       const tabId=extensionPage?message.tabId:sender.tab.id,tab=await chrome.tabs.get(tabId),u=new URL(tab.url);
       if(u.protocol!=='https:' || !/(^|\.)linkedin\.com$/.test(u.hostname) || !/^\/(in\/|company\/|jobs\/view\/|search\/results\/people\/?)/.test(u.pathname))throw Error('Open a LinkedIn profile, company People page or people search.');
+      if(message.pageUrl){const expected=new URL(message.pageUrl);if(expected.origin!==u.origin || expected.pathname!==u.pathname || expected.search!==u.search)throw Error('LinkedIn changed pages. Wait for the new profile to load and try again.');}
       if(message.type==='browser-import-status')return request('contact-result',{taskId:message.taskId});
-      const [result]=await chrome.scripting.executeScript({target:{tabId},func:message.type==='linkedin-get-email'?extractLinkedInProspect:extractLinkedInCompanyPeople,args:message.type==='linkedin-get-email'?[]:[{targetCount:Math.min(100,Number(message.targetCount)||100),duration:4000,company:message.company || ''}]});
+      if(message.type==='linkedin-open-mailer'){
+        if(!Array.isArray(message.contactIds) || !message.contactIds.length || message.contactIds.length>100 || message.contactIds.some(id=>typeof id!=='string' || !/^[a-z0-9_-]{1,100}$/i.test(id)))throw Error('Choose saved contacts before opening the mail studio.');
+        await autoPair();const {base:workspace,token}=await chrome.storage.session.get(['base','token']);if(!workspace || !token)throw Error('Pair with your Veloce workspace first.');
+        await chrome.tabs.create({url:`${workspace}/#outreach?contacts=${encodeURIComponent([...new Set(message.contactIds)].join(','))}`,active:true});return {message:'Opened selected contacts in the mass mail studio. Review and approve the exact batch before sending.'};
+      }
+      const isProfile=u.pathname.startsWith('/in/'),contextOnly=message.type==='linkedin-page-context';
+      const [result]=await chrome.scripting.executeScript({target:{tabId},func:isProfile?extractLinkedInProspect:extractLinkedInCompanyPeople,args:isProfile?[]:[{targetCount:Math.min(100,Number(message.targetCount)||100),duration:contextOnly?0:5000,contextOnly,company:message.company || ''}]});
       if(!result?.result)throw Error('The page has not loaded any supported profiles.');
-      const data=result.result;
+      const data=result.result,fresh=await chrome.tabs.get(tabId);if(new URL(fresh.url).pathname!==u.pathname)throw Error('The LinkedIn page changed during lookup. Retry on the new profile.');
+      if(contextOnly){const context=await request('contact-context',{company:message.company || data.company,intent:message.intent,sourceUrl:tab.url});return {...data,...context,domain:context.domain || data.domain || '',requiresDomainReview:!context.domain || context.requiresDomainReview===true,profileName:data.profiles?.[0]?.name || '',title:data.profiles?.[0]?.title || ''};}
       if(message.company?.trim())data.company=message.company.trim();
-      if(!data.company) return {needsCompany:true,profileName:data.profiles[0]?.name,message:'Enter the current company shown on this page, then click again. Mixed-company search results must be filtered to that company.'};
-      return request('import-browser-profiles',{...data,domain:message.domain || '',domainConfirmed:message.domainConfirmed===true,allowCredits:message.allowCredits===true});
+      if(!data.company)return {needsCompany:true,profileName:data.profiles[0]?.name,message:'Enter the current company shown on this page, then click Get email again.'};
+      return request('import-browser-profiles',{...data,domain:message.domain || data.domain || '',domainConfirmed:message.domainConfirmed===true,allowCredits:message.allowCredits===true,allowSearch:message.allowSearch===true});
     }
     if(message.type==='workspace-batch') {
       if(!sender.url || !base || new URL(sender.url).origin!==base)throw Error('Start a batch from your paired Veloce workspace.');

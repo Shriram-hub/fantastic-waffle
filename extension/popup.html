@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <title>Veloce Assistant</title>
     <link rel="stylesheet" href="popup.css" />
-    <script type="module" src="popup.mjs"></script>
+    <script src="contact-ui.js"></script><script type="module" src="popup.mjs"></script>
   </head>
   <body>
     <header><svg width="36" height="36" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="12" fill="#475569"/><path d="m9 12 8 17 14-19h-8l-6 9-3-7H9Z" fill="white"/></svg><div><h1>Veloce</h1><small>APPLICATION ASSISTANT</small></div></header>
@@ -31,7 +31,7 @@
     ><button id="refill">Fill the current application again</button
     ><button id="current">Fill this page</button>
     <button id="history">Auto-add &amp; fill all history entries</button>
-    <section class="contact-tools"><h2>LinkedIn contact finder</h2><label>Current company (if not shown)<input id="contact-company" placeholder="Company shown on this page"/></label><label>Corporate domain (optional)<input id="contact-domain" placeholder="company.com"/></label><label class="check"><input id="contact-domain-confirm" type="checkbox"/>I confirm this is the official company domain</label><label class="check"><input id="contact-credits" type="checkbox"/>Use configured email-finder / verification credits</label><button id="get-email">Get email for this LinkedIn profile</button><button id="company-contacts">Harvest 50–100 Employees from Page</button><p id="contact-results"></p><small>Uses only loaded profiles after a short scroll. MX routing and naming patterns do not verify individual mailboxes.</small></section>
+    <section class="contact-tools"><h2>LinkedIn email finder</h2><div id="contact-tools"></div><small>Get email for this LinkedIn profile, or Harvest 50–100 Employees from Page.</small></section>
     <button id="suggest">Suggest supported answers with Gemini</button>
     <details><summary>Import my LinkedIn profile</summary><label class="check"><input id="own-profile" type="checkbox"/>This is my own LinkedIn profile</label><button id="linkedin">Sync My LinkedIn Profile</button><small>Open your profile and expand the sections you want imported.</small></details>
     <p>Start up to 10 selected jobs from Veloce. Each tab waits for your review and submission.</p><button id="pause-batch">Pause batch</button><button id="resume-batch">Resume batch</button><button id="skip-batch">Skip current application</button>

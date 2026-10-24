@@ -1,3 +1,4 @@
+import {contactHandoff} from './shared/contact-handoff.mjs';
 import './workbench.css';
 import {CompanyExplorer} from './features/jobs/CompanyExplorer.jsx';
 import React, { useEffect, useState, useRef, useCallback } from 'react';
@@ -40,7 +41,7 @@ export default function App() {
     [search,setSearch] = useState(null),
     [setup,setSetup] = useState({}),
     [connected,setConnected] = useState(false),
-    [route, setRoute] = useState(location.hash.slice(1) || "jobs"),
+    [route, setRoute] = useState(location.hash.slice(1).split('?')[0] || "jobs"),
     [modal, setModal] = useState(null),
     [notice, setNotice] = useState(null),
     [busy, setBusy] = useState(false),
@@ -93,7 +94,7 @@ export default function App() {
   useEffect(() => {
     if(!session?.authenticated)return;
     reload().catch(setError);
-    const listen = () => setRoute(location.hash.slice(1) || "jobs");
+    const listen = () => setRoute(location.hash.slice(1).split('?')[0] || "jobs");
     window.addEventListener("hashchange", listen);
     listen(); // Capture a deep link changed while the session was loading.
     let refreshTimer;
@@ -123,6 +124,7 @@ export default function App() {
     const key=event=>{if(event.repeat)return;if((event.metaKey || event.ctrlKey) && event.key.toLowerCase()==='k'){event.preventDefault();if(session?.authenticated){setModal(null);setPalette(v=>!v);}}if(event.key==='Escape')setMobile(false);};
     window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);
   },[session?.authenticated]);
+  useEffect(()=>{if(!data)return;const ids=contactHandoff(location.hash,data.contacts);if(ids?.length){setMailerSelection({ids,at:Date.now()});setRoute('outreach');history.replaceState(null,'','#outreach');}},[data?.contacts]);
   useEffect(()=>applyBrand(data?.settings?.brand),[data?.settings?.brand?.name,data?.settings?.brand?.accent]);
   if(session && !session.authenticated)return <SignIn session={session} initialError={authError} onSignedIn={checkSession}/>;
   if (error && !data)return <WorkspaceError message={error.message} reference={error.reference} busy={retrying} onRetry={()=>session ? (setRetrying(true),reload().catch(setError).finally(()=>setRetrying(false))) : checkSession()}/>;

@@ -89,7 +89,7 @@ export function taskQueue(store) {
             .get(wantedId, clock)
         : db
             .prepare(
-              "SELECT * FROM tasks WHERE status='queued' AND run_at<=? ORDER BY CASE WHEN kind='alert.send' THEN 0 ELSE 1 END,run_at,created_at LIMIT 1",
+              "SELECT * FROM tasks WHERE status='queued' AND run_at<=? ORDER BY CASE WHEN kind='alert.send' THEN 0 WHEN kind='contacts.browser-import' THEN 1 ELSE 2 END,run_at,created_at LIMIT 1",
             )
             .get(clock);
       if (!row) {

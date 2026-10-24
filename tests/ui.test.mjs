@@ -126,3 +126,7 @@ test('shipped interface, extension and server sources contain no decorative Unic
     assert.ok(!/[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/u.test(source),`${root}/${name} contains a decorative emoji`);
   }
 });
+
+test('extension mail-studio handoffs accept only saved contact IDs and never approve or send a campaign',async()=>{
+  const {contactHandoff}=await import('../web/src/shared/contact-handoff.mjs');assert.deepEqual(contactHandoff('#outreach?contacts=one,unknown,one,two',[{id:'one'},{id:'two',suppressed:true}]),['one']);assert.equal(contactHandoff('#jobs?contacts=one',[{id:'one'}]),null);assert.equal(contactHandoff('#outreach'),null);
+});

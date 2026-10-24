@@ -20,3 +20,5 @@ export async function inboxActions(item,store,queue,config={}) {
   await queueAlert(kind,`${kind==='interview' ? 'Interview invitation' : 'Assessment update'}: ${job.company} · ${job.title}${item.deadline ? ` · Deadline in email: ${item.deadline}` : ''}. Review your inbox for details.`,item.messageId,store,queue);
   item.actionsQueued=now();await store.save();await activity(store,'career',`${job.company}: ${kind==='interview' ? 'interview preparation queued' : 'assessment action added'} from a uniquely matched inbox update.`,1);
 }
+
+export {recordBounceRecovery,queueBounceRecovery,recoverBounceAlternative} from './bounce-recovery.mjs';

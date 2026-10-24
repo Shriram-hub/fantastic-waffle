@@ -706,3 +706,10 @@ test('browser contact import accepts 100 profiles behind owner or extension auth
   assert.equal((await w.call('/api/contacts/import-browser-profiles',{...data,sourceUrl:'https://evil.test/people'},'POST',owner)).status,400);
   assert.equal(w.store.state.campaigns.length,0);
 });
+
+test('Get email returns saved suggestions and alternates immediately while the verification worker is still queued',async t=>{
+  const w=await workspace(t,{WORKSPACE_PASSWORD:'owner'},async input=>{assert.equal(new URL(input).hostname,'dns.google');return new Response(JSON.stringify({Status:0,Answer:[{type:15,data:'10 mx.deloitte.com.'}]}));}),owner={Authorization:'Basic '+Buffer.from('orbit:owner').toString('base64')};await w.store.replace(initialState(false));
+  const token=(await w.call('/api/extension/token',{},'POST',owner)).json.token,headers={Authorization:`Bearer ${token}`},body={company:'Deloitte',sourceUrl:'https://www.linkedin.com/in/maya-singh',profiles:[{fullName:'Maya Singh',title:'Director of Finance',profileUrl:'https://www.linkedin.com/in/maya-singh'}]};
+  const response=await w.call('/api/contacts/import-browser-profiles',body,'POST',headers);assert.equal(response.status,202);assert.equal(response.json.status,'queued');assert.equal(response.json.contacts[0].email,'maya.singh@deloitte.com');assert.ok(response.json.contacts[0].alternateEmails.includes('msingh@deloitte.com'));assert.equal(response.json.contacts[0].emailStatus,'unverified');assert.ok(response.json.contacts[0].domainVerification.hasMx);assert.equal((await w.queue.get(response.json.taskId)).status,'queued');
+  const context=await w.call('/api/extension/contact-context',{company:'Deloitte'},'POST',headers);assert.equal(context.json.domain,'deloitte.com');assert.equal(context.json.requiresDomainReview,false);assert.equal(w.store.state.campaigns.length,0);
+});

@@ -38,7 +38,7 @@ export function postgresQueue(store) {
   async function claim(wantedId, clock=Date.now()) {
     const token=randomUUID();
     const where=wantedId ? "AND id=?" : "";
-    return decode(await db.prepare(`UPDATE tasks SET status='running',attempts=attempts+1,lease_until=?,lease_token=?,updated_at=? WHERE id=(SELECT id FROM tasks WHERE status='queued' AND run_at<=? ${where} ORDER BY CASE WHEN kind='alert.send' THEN 0 ELSE 1 END,run_at,created_at LIMIT 1 FOR UPDATE SKIP LOCKED) AND status='queued' RETURNING *`).get(clock+120000,token,clock,clock,...(wantedId ? [wantedId] : []))) || null;
+    return decode(await db.prepare(`UPDATE tasks SET status='running',attempts=attempts+1,lease_until=?,lease_token=?,updated_at=? WHERE id=(SELECT id FROM tasks WHERE status='queued' AND run_at<=? ${where} ORDER BY CASE WHEN kind='alert.send' THEN 0 WHEN kind='contacts.browser-import' THEN 1 ELSE 2 END,run_at,created_at LIMIT 1 FOR UPDATE SKIP LOCKED) AND status='queued' RETURNING *`).get(clock+120000,token,clock,clock,...(wantedId ? [wantedId] : []))) || null;
   }
   async function finish(task, result, error) {
     const clock = Date.now(),

@@ -23,5 +23,6 @@ export function permuteEmails({firstName,lastName,companyDomain:domain,domainPat
   const f=letters(firstName),l=letters(lastName);
   if(!domain || !f || !l) return [];
   const pattern=/^(?:[._-]|\{(?:first|last|f|l)\})+$/.test(domainPattern || '') ? domainPattern.replace(/\{(first|last|f|l)\}/g,(_,part)=>({first:f,last:l,f:f[0],l:l[0]})[part]) : '';
-  return [...new Set([pattern,`${f}.${l}`,f,`${f[0]}${l}`,`${f}_${l}`,`${f}${l[0]}`].filter(Boolean))].map(local=>({email:`${local}@${domain}`,emailStatus:'unverified',emailInferred:true,source:pattern===local ? 'Observed domain pattern (mailbox unverified)' : 'Unverified name pattern'}));
+  const locals=[...new Set([pattern,`${f}.${l}`,f,`${f[0]}${l}`,`${f}_${l}`,`${f}${l[0]}`].filter(Boolean))],alternates=[...new Set([...locals,`${l}.${f}`])];
+  return locals.map(local=>({email:`${local}@${domain}`,alternateEmails:alternates.filter(v=>v!==local).map(v=>`${v}@${domain}`),emailStatus:'unverified',emailInferred:true,source:pattern===local ? 'Domain naming pattern (mailbox unverified)' : 'Unverified name pattern'}));
 }

@@ -6,7 +6,8 @@ import {publicCompanyPages} from './public-pages.mjs';
 import {learnEmailPattern,permuteEmails} from './permutator.mjs';
 import {cleanCompanyName} from './company.mjs';
 import {contactTargeting,prioritizeContact} from '../../services/contact-personas.mjs';
-import {serperSearch,tavilySearch} from './serper-xray.mjs';
+import {extractPatternFromSnippets} from '../../services/company-patterns.mjs';
+import {serperSearch,tavilySearch,searchEmailEvidence} from './serper-xray.mjs';
 
 export function searchHTMLResults(html,engine) {
   if(/captcha|anomaly\.js|unusual traffic|verify you are human/i.test(html))return [];
@@ -147,14 +148,17 @@ export function xrayPeople(results,company,domain,targeting=contactTargeting()) 
 export async function findPublicContacts(job,company,options={}) {
   const results=await Promise.allSettled([
     withDeadline(signal=>(options.pages || publicCompanyPages)(company.domain,{signal}),4000,options.signal),
-    withDeadline(signal=>options.searchPeople ? searchCompanyPeople(job.company,company.domain,{...options,job,fetcher:boundedFetcher(options.fetcher || fetch,signal)}) : {people:[]},options.targetCount!==undefined?42000:4000,options.signal)
+    withDeadline(signal=>options.searchPeople ? searchCompanyPeople(job.company,company.domain,{...options,job,fetcher:boundedFetcher(options.fetcher || fetch,signal)}) : {people:[]},options.targetCount!==undefined?42000:4000,options.signal),
+    withDeadline(signal=>options.targetCount!==undefined && options.allowSearch && !company.learnedPattern?.pattern && !company.pattern ? searchEmailEvidence(company.domain,options.config || {},{fetcher:boundedFetcher(options.fetcher || fetch,signal),call:options.call}) : {results:[]},4000,options.signal)
   ]);
   const pages=results[0].status==='fulfilled' ? results[0].value : [],searched=results[1].status==='fulfilled' ? results[1].value : {people:[],warnings:['Public people search reached its deadline.']};
   const contacts=[...publishedContacts(job.description,company.domain,job.url,job.company),...pages.flatMap(p=>[...publishedContacts(p.text,company.domain,p.url,job.company),...namedPublishedContacts(p.text,company.domain,p.url,job.company)])];
   const people=[...publicTeamPeople(pages,job.company,company.domain),...searched.people];
+  const snippets=results[2].status==='fulfilled'?results[2].value.results || []:[],evidence=extractPatternFromSnippets(snippets,company.domain,people);if(evidence.pattern)company.snippetPattern={...evidence,sampleCount:0};
+  for(const person of people){const source=snippets.find(r=>`${r.title || ''} ${r.snippet || ''}`.toLowerCase().includes(person.name.toLowerCase()));if(!source)continue;const addresses=extractPatternFromSnippets([source],company.domain).observedEmails.filter(e=>!/^(careers?|hr|info|support|jobs|contact|talent)@/i.test(e.email));if(addresses.length===1)Object.assign(person,{email:addresses[0].email,emailStatus:'unverified',emailInferred:false,emailObserved:true,source:'Public indexed address',verification:{provider:'Public indexed page',status:'unverified',reference:addresses[0].reference,at:now(),result:'Public snippet; review the source and verify this mailbox before sending.'}});}
   company.learnedPattern=learnEmailPattern([...contacts,...people],company.domain,company.learnedPattern) || company.learnedPattern;
   for(const person of people) {
-    const candidate=person.email ? person : person.activeHiringPoster && !person.employerSupported ? person : permuteEmails({...person,domainPattern:company.learnedPattern?.pattern || company.pattern})[0];
+    const candidate=person.email ? person : person.activeHiringPoster && !person.employerSupported ? person : permuteEmails({...person,domainPattern:company.learnedPattern?.pattern || company.pattern || company.snippetPattern?.pattern})[0];
     if(candidate)contacts.push({...person,...candidate,id:id(),suppressed:false,isDemo:false,createdAt:now(),sources:person.sources || [{url:person.linkedinUrl}],verification:person.email ? person.verification : {provider:'Public source + email pattern',status:'unverified',reference:person.linkedinUrl || person.sources?.[0]?.url,result:'Guessed address; verify the mailbox before sending',at:now()}});
   }
   if(options.warnings)options.warnings.push(...(searched.warnings || []));

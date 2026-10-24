@@ -25,7 +25,7 @@ import {githubCommitContacts} from '../providers/contacts/github-commits.mjs';
 
 const week=()=>Math.floor(Date.now()/(7*86400000));
 const retryFor=error=>error.status===429 ? Date.UTC(new Date().getUTCFullYear(),new Date().getUTCMonth(),new Date().getUTCDate()+1,0,5) : null;
-export async function findCompanyContacts(job,company,{store,config={},fetcher=fetch,pages,lookupMx,allowCredits=false,allowWarmSearch=false,limit=3,targetCount,dailyLimit=20,seedContacts=[],seedOnly=false,domainHealth,hunterSearched=false,allowPublic=true,targetPersona='all',departmentKeyword='',location=''}={}) {
+export async function findCompanyContacts(job,company,{store,config={},fetcher=fetch,pages,lookupMx,allowCredits=false,allowWarmSearch=false,limit=3,targetCount,dailyLimit=20,seedContacts=[],seedOnly=false,domainHealth,tryAlternates=false,hunterSearched=false,allowPublic=true,targetPersona='all',departmentKeyword='',location=''}={}) {
   config=await effectiveProviderConfig(store,config);
   const deep=targetCount!==undefined;limit=Math.max(1,Math.min(100,targetCount ?? limit));
   const targeting=contactTargeting(job,store.state.profile),searchDepartment=targeting.field==='general'?departmentKeyword:targeting.label,contextKey=hash([targeting.field,targeting.reporting,targetPersona,searchDepartment,location]);
@@ -93,6 +93,9 @@ export async function findCompanyContacts(job,company,{store,config={},fetcher=f
     else if(candidate.emailStatus!=='verified' && candidate.emailStatus!=='invalid' && candidate.emailStatus!=='catch-all' && allowCredits) {
       if(config.HUNTER_API_KEY && candidate.email)try {Object.assign(candidate,await call(`verify:${candidate.email}`,()=>verifyWorkEmail(candidate.email,config,fetcher,lookupMx,health)));}
       catch(error){retryAt=Math.max(retryAt || 0,retryFor(error) || 0) || null;warnings.push(error.status ? error.message : 'Verification was unavailable. The address stays unverified.');}
+      if(tryAlternates && config.HUNTER_API_KEY && candidate.emailStatus==='invalid')for(const alternative of (candidate.alternateEmails || []).filter(e=>e.endsWith(`@${company.domain}`)).slice(0,4)){
+        try{const result=await call(`verify:${alternative}`,()=>verifyWorkEmail(alternative,config,fetcher,lookupMx,health));if(result.emailStatus==='verified'){const rejected=candidate.email;Object.assign(candidate,result,{email:alternative,alternateEmails:(candidate.alternateEmails || []).filter(e=>e!==alternative && e!==rejected),rejectedEmails:[...(candidate.rejectedEmails || []),rejected],emailInferred:false,confidence:100});break;}if(result.emailStatus!=='invalid')break;}catch(error){warnings.push(error.status?error.message:'Alternate mailbox verification is unavailable.');break;}
+      }
       if(candidate.emailStatus!=='verified' && candidate.name?.trim().includes(' ') && !/hiring team|company contact/i.test(candidate.name))for(const [provider,key,finder] of [['Prospeo',config.PROSPEO_API_KEY,findProspeoEmail],['GetProspect',config.GETPROSPECT_API_KEY,findGetProspectEmail]]) {
         if(!key)continue;
         try{const found=await creditCall(provider,`person:${hash(candidate.name.toLowerCase())}`,()=>finder(candidate,company.domain,key,fetcher));if(found){const originalId=candidate.id;Object.assign(candidate,found,{id:originalId});}}catch(error){warnings.push(error.status?error.message:`${provider} finder is unavailable.`);}

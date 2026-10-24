@@ -26,3 +26,9 @@ export async function serperPeopleSearch(query,key,{targetCount=50,fetcher=fetch
   }
   return {results:[...found.values()].slice(0,targetCount),pages};
 }
+
+export async function searchEmailEvidence(domain,config,{fetcher=fetch,call=(_p,fn)=>fn()}={}) {
+  const q=`("@${domain}" OR "email format") "${domain}"`;
+  for(const [provider,key,search] of [['Serper',config.SERPER_API_KEY,serperSearch],['Tavily',config.TAVILY_API_KEY,tavilySearch]])if(key)try{return await call(provider,()=>search(q,key,{fetcher,limit:10}),`email-evidence:${domain}`);}catch{}
+  return {results:[]};
+}

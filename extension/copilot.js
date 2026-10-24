@@ -1,5 +1,5 @@
 (()=>{
-  if(window.top!==window || globalThis.__orbitCopilotInstalled)return;globalThis.__orbitCopilotInstalled=true;
+  if(window.top!==window || globalThis.__veloceCopilotVersion==='0.11.0')return;globalThis.__orbitCopilotInstalled=true;globalThis.__veloceCopilotVersion='0.11.0';
   const host=document.createElement('div');host.id='orbit-career-copilot';host.style.cssText='all:initial!important;position:fixed!important;right:20px!important;bottom:20px!important;left:auto!important;top:auto!important;z-index:2147483647!important;display:block!important;';
   const root=host.attachShadow({mode:'open'}),style=document.createElement('style');
   style.textContent=`
@@ -18,40 +18,18 @@
   const status=document.createElement('p');status.setAttribute('role','status');
   const content=document.createElement('div');
   const button=(label,type,primary=false)=>{const b=document.createElement('button');b.className=`action ${primary ? 'primary' : ''}`;b.textContent=label;b.addEventListener('click',async event=>{if(!event.isTrusted)return;b.disabled=true;try{const r=await chrome.runtime.sendMessage({type});status.textContent=r.error || r.message || 'Ready for review.';if(!r.error)await refresh();}catch{status.textContent='Pair or reconnect your extension in its popup.';}finally{b.disabled=false;}});return b;};
+  let contactTools=null;const usedIntents=new Set();
   function peopleTools(){
-    content.replaceChildren();title.textContent=location.pathname.startsWith('/in/')?'LinkedIn email finder':'People harvester';
-    status.textContent='Read profiles visible in this tab. Email patterns and MX routing are labeled separately from verified mailboxes.';
-    const field=(label,placeholder)=>{const box=document.createElement('label'),input=document.createElement('input');box.textContent=label;input.placeholder=placeholder;input.style.cssText='display:block;width:100%;background:#090d16;color:#edf2fc;border:1px solid #ffffff20;border-radius:7px;padding:9px;margin:5px 0 12px;font:inherit';box.append(input);content.append(box);return input;};
-    const company=field('Current company / company search filter','Use the company shown on this page'),domain=field('Corporate domain (optional)','company.com');
-    const confirm=document.createElement('input');confirm.type='checkbox';const label=document.createElement('label');label.append(confirm,document.createTextNode(' I confirm this is the official company domain'));content.append(label);
-    const credit=document.createElement('input');credit.type='checkbox';const creditLabel=document.createElement('label');creditLabel.style.display='block';creditLabel.append(credit,document.createTextNode(' Use configured email-finder / verification credits'));content.append(creditLabel);
-    const b=document.createElement('button');b.className='action primary';b.textContent=location.pathname.startsWith('/in/')?'Get email':'Harvest 50–100 Employees from Page';content.append(b);
-    const results=document.createElement('div');content.append(results);
-    b.addEventListener('click',async event=>{
-      if(!event.isTrusted)return;b.disabled=true;const page=location.href;
-      try{
-        status.textContent=location.pathname.startsWith('/in/')?'Reading this profile…':'Collecting loaded profiles while scrolling for up to 4 seconds…';
-        let r=await chrome.runtime.sendMessage({type:location.pathname.startsWith('/in/')?'linkedin-get-email':'pull-company-recruiters',targetCount:100,company:company.value,domain:domain.value,domainConfirmed:confirm.checked,allowCredits:credit.checked});
-        if(r.error)throw Error(r.error);status.textContent=r.message;
-        if(r.needsCompany){company.focus();return;}
-        for(let i=0;r.taskId && !['completed','failed','cancelled'].includes(r.status) && i<18;i++){
-          await new Promise(resolve=>setTimeout(resolve,1000));if(location.href!==page)return;
-          r=await chrome.runtime.sendMessage({type:'browser-import-status',taskId:r.taskId});if(r.error)throw Error(r.error);status.textContent=r.message;
-        }
-        results.replaceChildren();
-        for(const contact of (r.contacts || []).slice(0,10)){
-          const p=document.createElement('p'),name=document.createElement('strong'),email=document.createElement('p'),note=document.createElement('small');name.textContent=contact.name;email.textContent=contact.email || 'No supported corporate address found';
-          note.textContent=contact.emailStatus==='verified'?`Verified mailbox · ${contact.verification?.provider || 'provider'}`:contact.domainVerification?.status==='invalid'?'Invalid company mail domain':`${contact.emailInferred?'Pattern Match · ':''}${contact.domainVerification?.hasMx?'MX Verified (domain routing) · ':''}Mailbox unverified${contact.requiresDomainReview?' · confirm company domain in Veloce':''}`;
-          p.append(name,email,note);if(contact.email){const copy=document.createElement('button');copy.className='action';copy.textContent='Copy email';copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(contact.email);status.textContent='Email copied.';}catch{status.textContent='Select the displayed address to copy it.';}});p.append(copy);}results.append(p);
-        }
-        if(r.taskId && !['completed','failed','cancelled'].includes(r.status))status.textContent='Lookup is still running. Results will appear in Veloce Contacts.';
-      }catch(error){status.textContent=error.message;}finally{b.disabled=false;}
-    });
-    const note=document.createElement('small');note.textContent='Search results must be filtered to the company you enter. No connection request or email is sent by this action.';content.append(note);
+    contactTools?.dispose();content.replaceChildren();title.textContent=location.pathname.startsWith('/in/')?'LinkedIn email finder':'People harvester';
+    if(!globalThis.VeloceContactUI){status.textContent='Refresh this LinkedIn tab after loading the updated Veloce extension.';return;}
+    const params=new URLSearchParams(location.hash.slice(1)),intent=params.get('veloce_intent') || '',company=params.get('company') || '',page=location.href;
+    contactTools=globalThis.VeloceContactUI.create(content,{send:message=>chrome.runtime.sendMessage(message),status,kind:location.pathname.startsWith('/in/')?'profile':'people',pageUrl:()=>location.href,intent,initialCompany:company});
+    const tools=contactTools;
+    if(intent && !usedIntents.has(intent)){usedIntents.add(intent);void tools.ready.then(ctx=>{if(ctx?.autoAuthorized && location.href===page && contactTools===tools){panel.hidden=false;launch.hidden=true;return tools.run({targetCount:ctx.targetCount,allowCredits:false,allowSearch:false});}});}
   }
   async function refresh(){
     if(/(^|\.)linkedin\.com$/.test(location.hostname) && /^\/(?:in\/|company\/|search\/results\/people)/.test(location.pathname)){peopleTools();return;}
-    title.textContent='Application assistant';
+    contactTools?.dispose();contactTools=null;title.textContent='Application assistant';
     const companyPage=/(^|\.)linkedin\.com$/.test(location.hostname) && /^\/(?:company\/|jobs\/view\/)/.test(location.pathname);
     if(companyPage){content.replaceChildren(button('Pull company recruiters to Veloce','pull-company-recruiters',true));status.textContent='Import names, roles and public profile links already visible on this page. Email suggestions require mailbox verification.';if(location.pathname.startsWith('/company/'))return;}
     try {const data=await chrome.runtime.sendMessage({type:'copilot-context'});content.replaceChildren();
@@ -70,10 +48,27 @@
       if(data.batch?.remaining){const p=document.createElement('p');p.textContent=`Batch: ${data.batch.completed}/${data.batch.total} confirmed · ${data.batch.paused ? 'paused' : 'waiting for your submission'}`;content.append(p,button(data.batch.paused ? 'Resume batch' : 'Pause batch',data.batch.paused ? 'batch-resume' : 'batch-pause'),button('Skip this application','batch-skip'));}
     }catch{status.textContent='Pair the Veloce extension to use your saved profile.';}
   }
-  launch.addEventListener('click',event=>{if(!event.isTrusted)return;panel.hidden=false;launch.hidden=true;launch.setAttribute('aria-expanded','true');refresh();});
+  launch.addEventListener('click',event=>{if(!event.isTrusted)return;panel.hidden=false;launch.hidden=true;launch.setAttribute('aria-expanded','true');if(!contactTools)refresh();});
   const hide=()=>{panel.hidden=true;launch.hidden=false;launch.setAttribute('aria-expanded','false');launch.focus();};close.addEventListener('click',hide);panel.addEventListener('keydown',event=>{if(event.key==='Escape'){event.stopPropagation();hide();}});
-  let lastURL=location.href;
-  const updateLabel=()=>{launch.textContent=/(^|\.)linkedin\.com$/.test(location.hostname) && location.pathname.startsWith('/in/')?'Veloce · Get email':'Veloce Application assistant';};updateLabel();
-  setInterval(()=>{if(lastURL!==location.href){lastURL=location.href;updateLabel();if(!panel.hidden)refresh();}if(!host.isConnected)document.documentElement.append(host);},1000);
-  panel.append(close,title,status,content);root.append(style,launch,panel);document.documentElement.append(host);
+  let lastURL=location.href,inlineHost=null;
+  function openContacts(){panel.hidden=false;launch.hidden=true;launch.setAttribute('aria-expanded','true');if(!contactTools)peopleTools();return contactTools;}
+  function inlineAction(){
+    const linkedin=/(^|\.)linkedin\.com$/.test(location.hostname),profile=linkedin && location.pathname.startsWith('/in/'),supported=linkedin && /^\/(?:in\/|company\/|search\/results\/people)/.test(location.pathname);
+    if(linkedin && !supported && !location.pathname.startsWith('/jobs/')){host.style.setProperty('display','none','important');}else host.style.setProperty('display','block','important');
+    if(!profile){inlineHost?.remove();inlineHost=null;return;}
+    if(inlineHost?.isConnected)return;
+    const heading=document.querySelector('main h1,h1');if(!heading)return;
+    const header=heading.closest('section,[data-view-name*="profile-top-card"],.pv-top-card') || heading.parentElement,actions=header?.querySelector('.pv-top-card-v2-ctas,.pvs-profile-actions,button[aria-label*="Message" i],button[aria-label*="Connect" i]');
+    inlineHost=document.createElement('span');inlineHost.id='veloce-inline-email';inlineHost.style.cssText='display:inline-block!important;margin:8px!important;position:relative!important;z-index:10!important;';
+    const shadow=inlineHost.attachShadow({mode:'open'}),css=document.createElement('style');css.textContent=':host{all:initial}button{font:600 12px/1.5 Inter,system-ui,sans-serif;background:#4f46e5;color:white;border:1px solid #8b83ff;border-radius:24px;padding:9px 15px;cursor:pointer}button:focus-visible{outline:2px solid #06b6d4;outline-offset:2px}';
+    const button=document.createElement('button');button.textContent='Get Email (Veloce)';button.addEventListener('click',event=>{if(event.isTrusted)void openContacts()?.run();});shadow.append(css,button);(actions?.parentElement || header || heading.parentElement).append(inlineHost);
+  }
+  const update=()=>{
+    const changed=lastURL!==location.href;if(changed){lastURL=location.href;contactTools?.dispose();contactTools=null;content.replaceChildren();inlineHost?.remove();inlineHost=null;if(!panel.hidden)refresh();}
+    launch.textContent=/(^|\.)linkedin\.com$/.test(location.hostname) && location.pathname.startsWith('/in/')?'Veloce · Get email':'Veloce Application assistant';
+    inlineAction();if(!host.isConnected)document.documentElement.append(host);
+    if(location.hash.includes('veloce_harvest=') && !contactTools && /^\/search\/results\/people/.test(location.pathname))openContacts();
+  };
+  window.addEventListener('popstate',update);setInterval(update,1000);
+  panel.append(close,title,status,content);root.append(style,launch,panel);document.documentElement.append(host);update();
 })();

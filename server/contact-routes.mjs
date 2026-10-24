@@ -1,8 +1,10 @@
+import {queueBounceRecovery} from './services/bounce-recovery.mjs';
+import {linkedinLaunch} from './services/linkedin-launch.mjs';
 import {effectiveProviderConfig} from './services/provider-config.mjs';
 import {fail,hash} from './domain.mjs';
 import {startContactDiscovery,contactDiscoveryStatus} from './services/contact-discovery.mjs';
 import {checkContactProviders} from './services/contact-provider-checks.mjs';
-import {queueBrowserContacts,browserImportResult} from './services/browser-contacts.mjs';
+import {queueBrowserContacts,browserImportResult,browserContactContext} from './services/browser-contacts.mjs';
 import {companyDomain} from './providers/contacts/company.mjs';
 import {startBulkHarvest,SECTOR_PRESETS} from './services/bulk-harvest.mjs';
 
@@ -10,6 +12,8 @@ const csvCell=value=>`"${String(value ?? '').replace(/^[=+@\-\t\r]/,"'$&").repla
 export function contactRoutes(store,queue,config,fetcher=fetch) {
   return async(req,res,url,{json,bodyJSON})=>{
     const path=url.pathname;
+    if(path==='/api/contacts/recover-bounce' && req.method==='POST'){json(res,202,await queueBounceRecovery(await bodyJSON(req),store,queue));return true;}
+    if(path==='/api/contacts/linkedin-launch' && req.method==='POST'){json(res,200,linkedinLaunch(await bodyJSON(req),config));return true;}
     if(path==='/api/contacts/bulk-harvest' && req.method==='POST'){json(res,202,await startBulkHarvest(await bodyJSON(req),store,queue,config));return true;}
     if(path==='/api/contacts/sector-presets' && req.method==='GET'){json(res,200,{presets:SECTOR_PRESETS});return true;}
     if(path==='/api/contacts/company-domain/confirm' && req.method==='POST') {
@@ -21,7 +25,8 @@ export function contactRoutes(store,queue,config,fetcher=fetch) {
       for(const contact of store.state.contacts)if(contact.companyDomain===domain && contact.company.toLowerCase()===data.company.toLowerCase())contact.requiresDomainReview=false;
       await store.save();json(res,200,{ok:true});return true;
     }
-    if(path==='/api/contacts/import-browser-profiles' && req.method==='POST'){json(res,202,await queueBrowserContacts(await bodyJSON(req),store,queue));return true;}
+    if(path==='/api/contacts/import-browser-profiles' && req.method==='POST'){json(res,202,await queueBrowserContacts(await bodyJSON(req),store,queue,{prepareInline:true,config,fetcher}));return true;}
+    if(path==='/api/contacts/browser-context' && req.method==='POST'){const data=await bodyJSON(req);json(res,200,await browserContactContext(data.company,store,config,fetcher));return true;}
     if(path==='/api/contacts/browser-import-result' && req.method==='POST'){const data=await bodyJSON(req);json(res,200,await browserImportResult(data.taskId,store,queue));return true;}
     if(path==='/api/contacts/providers/check' && req.method==='POST'){await bodyJSON(req);json(res,200,await checkContactProviders(store,config,fetcher));return true;}
     if(path==='/api/contacts/discovery' && req.method==='GET'){json(res,200,await contactDiscoveryStatus(store,config));return true;}
